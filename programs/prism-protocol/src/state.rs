@@ -35,7 +35,7 @@ pub struct CohortV0 {
     pub merkle_root: [u8; 32],
 
     /// The amount of `mint` tokens to be distributed per single unit of entitlement.
-    pub reward_per_entitlement: u64,
+    pub amount_per_entitlement: u64,
 
     /// List of SPL token account pubkeys that serve as vaults for this cohort.
     /// The size of this Vec is determined at initialization and capped by MAX_VAULTS_PER_COHORT.

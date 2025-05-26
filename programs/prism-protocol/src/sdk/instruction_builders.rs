@@ -34,3 +34,39 @@ pub fn build_initialize_campaign_ix(
 
     Ok((ix, ix_accounts, ix_data))
 }
+
+pub fn build_initialize_cohort_ix(
+    admin: Pubkey,
+    campaign: Pubkey,
+    campaign_fingerprint: [u8; 32],
+    cohort: Pubkey,
+    merkle_root: [u8; 32],
+    amount_per_entitlement: u64,
+    vaults: Vec<Pubkey>,
+) -> Result<(
+    Instruction,
+    crate::accounts::InitializeCohortV0,
+    crate::instruction::InitializeCohortV0,
+)> {
+    let ix_accounts = crate::accounts::InitializeCohortV0 {
+        admin,
+        campaign,
+        cohort,
+        system_program: SYSTEM_PROGRAM_ID,
+    };
+
+    let ix_data = crate::instruction::InitializeCohortV0 {
+        campaign_fingerprint,
+        merkle_root,
+        amount_per_entitlement,
+        vaults,
+    };
+
+    let ix = Instruction {
+        program_id: PRISM_PROGRAM_ID,
+        accounts: ix_accounts.to_account_metas(None),
+        data: ix_data.data(),
+    };
+
+    Ok((ix, ix_accounts, ix_data))
+}
