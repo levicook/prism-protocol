@@ -147,3 +147,23 @@ The core on-chain program will manage distributions.
 - **Batch Claims:** For users eligible in multiple small distributions, explore ways to batch claims.
 - **Fee-payer abstraction (e.g., sponsored transactions).**
 - **NFT Airdrops:** Adapt the leaf structure and claim logic to support SPL Non-Fungible Tokens.
+
+## 4. License
+
+Prism Protocol is licensed under the GNU General Public License v3.0.
+
+Copyright (C) 2025 team@tokamai.com
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+The full license text can be found in the `LICENSE` file in the root directory of this source tree.
