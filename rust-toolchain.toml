@@ -1,0 +1,6 @@
+[toolchain]
+channel = "1.82.0"
+# channel = "stable"
+components = ["rustfmt", "rust-analyzer"]
+profile = "minimal"
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"]

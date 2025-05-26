@@ -1,0 +1,17 @@
+[package]
+name = "prism-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "prism"
+path = "src/main.rs"
+
+[dependencies]
+prism_protocol = { path = "../../programs/prism-protocol", features = [
+    "no-entrypoint",
+] }
+
+borsh = { workspace = true }
+borsh-derive = "1.5.7"
+solana-sdk = { workspace = true }
