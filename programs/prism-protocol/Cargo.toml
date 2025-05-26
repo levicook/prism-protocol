@@ -17,12 +17,25 @@ no-entrypoint = []
 no-idl = []
 no-log-ix-name = []
 sdk = ["no-entrypoint"]
-test-sbf = []
+testing = [
+    "sdk",
+    "test-sbf",
+    "dep:mollusk-svm",
+    "dep:mollusk-svm-programs-token",
+    "dep:solana-sdk",
+]
+test-sbf = ["testing"]
 
 [dependencies]
 anchor-lang = { workspace = true, features = ["init-if-needed"] }
 anchor-spl = { workspace = true }
 
+# Test dependencies - only available when testing feature is enabled
+mollusk-svm = { workspace = true, optional = true }
+mollusk-svm-programs-token = { workspace = true, optional = true }
+solana-sdk = { workspace = true, optional = true }
+
 [dev-dependencies]
 mollusk-svm = { workspace = true }
+mollusk-svm-programs-token = { workspace = true }
 solana-sdk = { workspace = true }

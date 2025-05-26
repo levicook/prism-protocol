@@ -7,7 +7,7 @@ use anchor_lang::prelude::*;
 #[instruction(
     campaign_fingerprint: [u8; 32],
     merkle_root: [u8; 32],
-    reward_per_entitlement: u64,
+    amount_per_entitlement: u64,
     vaults_for_cohort: Vec<Pubkey>
 )]
 pub struct InitializeCohortV0<'info> {
@@ -17,6 +17,7 @@ pub struct InitializeCohortV0<'info> {
     #[account(
         seeds = [
             CAMPAIGN_V0_SEED_PREFIX,
+            admin.key().as_ref(),
             campaign_fingerprint.as_ref()
         ],
         bump = campaign.bump,
@@ -45,24 +46,22 @@ pub fn handle_initialize_cohort_v0(
     ctx: Context<InitializeCohortV0>,
     _campaign_fingerprint: [u8; 32], // consumed in account constraints
     merkle_root: [u8; 32],
-    reward_per_entitlement: u64,
+    amount_per_entitlement: u64,
     vaults: Vec<Pubkey>,
 ) -> Result<()> {
     require!(!vaults.is_empty(), ErrorCode::NoVaultsProvided);
 
     require!(
-        // is this really required?
+        // is this really necessary?
         vaults.len() <= crate::state::MAX_VAULTS_PER_COHORT,
         ErrorCode::TooManyVaults
     );
 
-    // TODO use set_inner:
     let cohort = &mut ctx.accounts.cohort;
-
     cohort.set_inner(CohortV0 {
         campaign: ctx.accounts.campaign.key(),
         merkle_root,
-        reward_per_entitlement,
+        amount_per_entitlement,
         vaults,
         bump: ctx.bumps.cohort,
     });

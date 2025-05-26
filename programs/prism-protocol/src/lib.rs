@@ -7,7 +7,7 @@ pub mod state;
 #[cfg(feature = "sdk")]
 pub mod sdk;
 
-#[cfg(feature = "test-sbf")]
+#[cfg(feature = "testing")]
 pub mod test_utils;
 
 use anchor_lang::prelude::*;
@@ -37,15 +37,15 @@ pub mod prism_protocol {
         ctx: Context<InitializeCohortV0>,
         campaign_fingerprint: [u8; 32],
         merkle_root: [u8; 32],
-        reward_per_entitlement: u64,
-        vaults_for_cohort: Vec<Pubkey>,
+        amount_per_entitlement: u64,
+        vaults: Vec<Pubkey>,
     ) -> Result<()> {
         instructions::handle_initialize_cohort_v0(
             ctx,
             campaign_fingerprint,
             merkle_root,
-            reward_per_entitlement,
-            vaults_for_cohort,
+            amount_per_entitlement,
+            vaults,
         )
     }
 
