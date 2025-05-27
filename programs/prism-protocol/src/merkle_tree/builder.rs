@@ -1,5 +1,5 @@
 use crate::merkle_leaf::{hash_claim_leaf, ClaimLeaf};
-use crate::merkle_tree::hasher::SplHasher;
+use crate::merkle_tree::hasher::PrismHasher;
 use anchor_lang::prelude::*;
 use rs_merkle::MerkleTree;
 use std::collections::HashMap;
@@ -8,7 +8,7 @@ use std::collections::HashMap;
 #[derive(Clone)]
 pub struct ClaimMerkleTree {
     /// The underlying merkle tree
-    pub tree: MerkleTree<SplHasher>,
+    pub tree: MerkleTree<PrismHasher>,
     /// Mapping from claimant pubkey to their leaf index in the tree
     pub claimant_to_index: HashMap<Pubkey, usize>,
     /// The original leaves used to build the tree
@@ -32,7 +32,7 @@ impl ClaimMerkleTree {
         let leaf_hashes: Vec<[u8; 32]> = leaves.iter().map(|leaf| hash_claim_leaf(leaf)).collect();
 
         // Build the merkle tree
-        let tree = MerkleTree::<SplHasher>::from_leaves(&leaf_hashes);
+        let tree = MerkleTree::<PrismHasher>::from_leaves(&leaf_hashes);
 
         Ok(ClaimMerkleTree {
             tree,
@@ -96,7 +96,7 @@ impl ClaimMerkleTree {
         let leaf = self.leaf_for_claimant(claimant)?;
         let leaf_hash = hash_claim_leaf(leaf);
 
-        let merkle_proof = rs_merkle::MerkleProof::<SplHasher>::new(proof.to_vec());
+        let merkle_proof = rs_merkle::MerkleProof::<PrismHasher>::new(proof.to_vec());
 
         Ok(merkle_proof.verify(root, &[*index], &[leaf_hash], self.leaves.len()))
     }

@@ -23,7 +23,7 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
     *   [ ] `handle_reclaim_tokens` - *Design & To Do* (See section 3)
 *   **Merkle Logic:**
     *   [x] `ClaimLeaf` struct and `hash_claim_leaf` function (`merkle_leaf.rs`) - Implemented & Tested
-    *   [x] `verify_spl_merkle_proof` function (in `claim_tokens.rs`, for V0) - Implemented
+    *   [x] `verify_merkle_proof` function (in `claim_tokens.rs`, for V0) - Implemented
     *   [ ] Modified Merkle verification for `claim_tokens_v1` (if using trunks) - *Design & To Do*
 *   **Program Entrypoint (`lib.rs`):**
     *   [x] Declare program ID
@@ -42,7 +42,7 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
     *   [ ] Campaign configuration file parsing (`campaign_config.yaml` or similar)
     *   [ ] Claimant list processing (CSV, JSON, etc.)
     *   [ ] `ClaimLeaf` data generation (claimant, assigned_vault, entitlements)
-    *   [ ] SPL-compatible Merkle tree generation for each cohort -> `merkle_root` (for `CohortV0`)
+    *   [ ] Merkle tree generation for each cohort -> `merkle_root` (for `CohortV0`)
     *   [ ] (If applicable) Merkle tree and trunk hash generation for `CohortV1`
     *   [ ] `campaign_fingerprint` calculation (from sorted cohort `merkle_root`s)
     *   [ ] Individual Merkle proof generation for each claimant (for `V0` and `V1` paths)
@@ -73,7 +73,7 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
     *   **Decision Needed:** Granular vault-by-vault withdrawal (see `DESIGN_NOTES.md`, section 3.4, item 6) vs. a single `reclaim_tokens` instruction targeting a full cohort or campaign (as per `lib.rs` `ReclaimTokens` struct arguments).
     *   **Considerations:** Authority model, flexibility, atomicity.
 *   **[ ] `CohortV1` Design ("Primary Trunks") Details:**
-    *   **Action:** Design how "primary trunks" are stored in `CohortV1` and how `verify_spl_merkle_proof` is adapted for `claim_tokens_v1`.
+    *   **Action:** Design how "primary trunks" are stored in `CohortV1` and how `verify_merkle_proof` is adapted for `claim_tokens_v1`.
     *   **Trigger:** Proceed after initial benchmarking of `V0` shows potential for significant gains.
 
 ## 4. Benchmarking Plan (using Mollusk)

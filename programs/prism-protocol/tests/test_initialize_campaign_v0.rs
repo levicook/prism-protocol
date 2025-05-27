@@ -2,12 +2,7 @@
 
 use {
     anchor_lang::{prelude::AccountDeserialize as _, Space as _},
-    prism_protocol::{
-        self,
-        state::CampaignV0,
-        test_utils::TestFixture,
-        ID as PRISM_PROGRAM_ID,
-    },
+    prism_protocol::{self, state::CampaignV0, test_utils::TestFixture, ID as PRISM_PROGRAM_ID},
 };
 
 #[test]
@@ -18,13 +13,11 @@ fn test_initialize_campaign_success() {
 
     // 2. Validate campaign account properties
     let campaign_account = &campaign_result.campaign_account;
-    
+
     assert_eq!(
-        campaign_account.owner,
-        PRISM_PROGRAM_ID,
+        campaign_account.owner, PRISM_PROGRAM_ID,
         "owner mismatch: expected: {:?}, actual: {:?}",
-        PRISM_PROGRAM_ID,
-        campaign_account.owner
+        PRISM_PROGRAM_ID, campaign_account.owner
     );
 
     assert_eq!(

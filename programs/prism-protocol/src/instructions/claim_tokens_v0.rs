@@ -125,8 +125,8 @@ pub fn handle_claim_tokens_v0(
     };
     let leaf_hash = hash_claim_leaf(&leaf);
 
-    // 3. Verify the Merkle proof using SPL standard (SHA256)
-    if !verify_spl_merkle_proof(&merkle_proof, &cohort.merkle_root, &leaf_hash) {
+    // 3. Verify the Merkle proof using our hashing scheme (SHA256)
+    if !verify_merkle_proof(&merkle_proof, &cohort.merkle_root, &leaf_hash) {
         return err!(ErrorCode::InvalidMerkleProof);
     }
     msg!("Merkle proof verified successfully.");
@@ -181,17 +181,24 @@ pub fn handle_claim_tokens_v0(
     Ok(())
 }
 
-/// Verifies a Merkle proof using SPL standard (SHA256 hashing).
+/// Verifies a Merkle proof using our hashing scheme (SHA256 hashing).
+///
+/// ## Security: Domain Separation
+/// This function enforces the same prefix-based domain separation as our off-chain
+/// merkle tree generation to prevent second preimage attacks:
 /// - Leaf nodes are hashed as: SHA256(0x00 || borsh_serialized_leaf_data)
 /// - Internal nodes are hashed as: SHA256(0x01 || H(LeftChild) || H(RightChild))
-///   Child hashes are typically ordered lexicographically before concatenation.
-fn verify_spl_merkle_proof(proof: &[[u8; 32]], root: &[u8; 32], leaf: &[u8; 32]) -> bool {
+/// - Child hashes are ordered lexicographically before concatenation.
+///
+/// The prefix bytes ensure that leaf hashes can never equal internal node hashes,
+/// preventing attackers from forging proofs by substituting node types.
+fn verify_merkle_proof(proof: &[[u8; 32]], root: &[u8; 32], leaf: &[u8; 32]) -> bool {
     let mut computed_hash = *leaf;
     for p_elem in proof.iter() {
         let mut hasher = SolanaHasher::default(); // Uses SHA256 by default
-        hasher.hash(&[0x01]); // Node prefix
+        hasher.hash(&[0x01]); // Internal node prefix - provides domain separation from leaf nodes (0x00)
                               // Correctly order H(L) and H(R) before hashing for the parent node.
-                              // This order must match the tree generation logic (e.g., rs-merkle sorts hashes lexicographically).
+                              // This order must match the tree generation logic (lexicographic ordering).
         if computed_hash.as_ref() <= p_elem.as_ref() {
             hasher.hash(&computed_hash);
             hasher.hash(p_elem);

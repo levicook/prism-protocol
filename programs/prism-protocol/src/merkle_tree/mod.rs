@@ -5,7 +5,7 @@ pub mod hasher;
 pub mod proof;
 
 pub use builder::ClaimMerkleTree;
-pub use hasher::SplHasher;
+pub use hasher::PrismHasher;
 pub use proof::{
     batch_verify_proofs, extract_root_from_proof, generate_proof_for_leaf, verify_claim_proof,
 };
