@@ -3,7 +3,7 @@ use anchor_lang::solana_program::hash::Hasher;
 
 /// Represents the data that is hashed to form a leaf in the Merkle tree.
 /// Each leaf corresponds to a unique claimant's entitlement within a specific cohort.
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, PartialEq)]
 pub struct ClaimLeaf {
     /// The public key of the recipient.
     pub claimant: Pubkey,
@@ -15,11 +15,11 @@ pub struct ClaimLeaf {
 }
 
 /// Hashes a `ClaimLeaf` to produce a 32-byte hash suitable for Merkle tree construction.
-/// This follows the SPL Merkle tree standard: SHA256(0x00 || borsh_serialized_leaf_data).
+/// This follows our merkle tree hashing scheme: SHA256(0x00 || borsh_serialized_leaf_data).
 pub fn hash_claim_leaf(leaf_data: &ClaimLeaf) -> [u8; 32] {
     let mut hasher = Hasher::default();
 
-    // Prepend 0x00 for a leaf node, standard for SPL Merkle trees
+    // Prepend 0x00 for a leaf node, following common Solana merkle tree patterns
     hasher.hash(&[0x00]);
 
     // Serialize the leaf data using Borsh
@@ -85,7 +85,7 @@ mod tests {
         let serialized_leaf = leaf.try_to_vec().unwrap();
 
         // Hash with 0x00 prefix (as done by hash_claim_leaf)
-        let spl_style_hash_bytes = hash_claim_leaf(&leaf);
+        let prefixed_hash_bytes = hash_claim_leaf(&leaf);
 
         // Manual hash without 0x00 prefix
         let mut direct_hasher = Hasher::default();
@@ -93,19 +93,19 @@ mod tests {
         let direct_hash_bytes = direct_hasher.result().to_bytes();
 
         assert_ne!(
-            spl_style_hash_bytes, direct_hash_bytes,
-            "SPL-style hash (with 0x00 prefix) should differ from direct hash of serialized data."
+            prefixed_hash_bytes, direct_hash_bytes,
+            "Prefixed hash (with 0x00 prefix) should differ from direct hash of serialized data."
         );
 
         // Manual hash with 0x00 prefix to confirm logic
-        let mut manual_spl_hasher = Hasher::default();
-        manual_spl_hasher.hash(&[0x00]);
-        manual_spl_hasher.hash(&serialized_leaf);
-        let manual_spl_hash_bytes = manual_spl_hasher.result().to_bytes();
+        let mut manual_prefixed_hasher = Hasher::default();
+        manual_prefixed_hasher.hash(&[0x00]);
+        manual_prefixed_hasher.hash(&serialized_leaf);
+        let manual_prefixed_hash_bytes = manual_prefixed_hasher.result().to_bytes();
 
         assert_eq!(
-            spl_style_hash_bytes, manual_spl_hash_bytes,
-            "hash_claim_leaf should match manual SPL-style hashing."
+            prefixed_hash_bytes, manual_prefixed_hash_bytes,
+            "hash_claim_leaf should match manual prefixed hashing."
         );
     }
 }

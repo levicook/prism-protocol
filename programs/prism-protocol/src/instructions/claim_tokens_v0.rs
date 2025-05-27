@@ -97,7 +97,7 @@ pub struct ClaimTokensV0<'info> {
 // Renamed from handler_with_proper_proof_verification
 pub fn handle_claim_tokens_v0(
     ctx: Context<ClaimTokensV0>,
-    campaign_fingerprint: [u8; 32], // Consumed by Accounts macro for seed derivation
+    _campaign_fingerprint: [u8; 32], // Consumed by Accounts macro for seed derivation
     _cohort_merkle_root_arg: [u8; 32], // Consumed by Accounts macro for seed derivation, also checked in constraint
     merkle_proof: Vec<[u8; 32]>,
     assigned_vault: Pubkey,
@@ -125,8 +125,8 @@ pub fn handle_claim_tokens_v0(
     };
     let leaf_hash = hash_claim_leaf(&leaf);
 
-    // 3. Verify the Merkle proof using SPL standard (SHA256)
-    if !verify_spl_merkle_proof(&merkle_proof, &cohort.merkle_root, &leaf_hash) {
+    // 3. Verify the Merkle proof using our hashing scheme (SHA256)
+    if !verify_merkle_proof(&merkle_proof, &cohort.merkle_root, &leaf_hash) {
         return err!(ErrorCode::InvalidMerkleProof);
     }
     msg!("Merkle proof verified successfully.");
@@ -144,17 +144,19 @@ pub fn handle_claim_tokens_v0(
     let transfer_accounts = Transfer {
         from: ctx.accounts.token_vault.to_account_info(),
         to: ctx.accounts.claimant_token_account.to_account_info(),
-        authority: ctx.accounts.campaign.to_account_info(),
+        authority: ctx.accounts.cohort.to_account_info(),
     };
 
-    // Use campaign_fingerprint for campaign PDA signer seeds
-    let campaign_seeds = &[
-        CAMPAIGN_V0_SEED_PREFIX,
-        campaign_fingerprint.as_ref(), // Use the arg passed to instruction
-        &[ctx.accounts.campaign.bump],
+    // Use cohort PDA signer seeds (cohort owns the token vaults)
+    let campaign_key = ctx.accounts.campaign.key();
+    let cohort_seeds = &[
+        COHORT_V0_SEED_PREFIX,
+        campaign_key.as_ref(),
+        _cohort_merkle_root_arg.as_ref(),
+        &[ctx.accounts.cohort.bump],
     ];
 
-    let signer_seeds = &[&campaign_seeds[..]];
+    let signer_seeds = &[&cohort_seeds[..]];
 
     token::transfer(
         CpiContext::new_with_signer(
@@ -179,17 +181,24 @@ pub fn handle_claim_tokens_v0(
     Ok(())
 }
 
-/// Verifies a Merkle proof using SPL standard (SHA256 hashing).
+/// Verifies a Merkle proof using our hashing scheme (SHA256 hashing).
+///
+/// ## Security: Domain Separation
+/// This function enforces the same prefix-based domain separation as our off-chain
+/// merkle tree generation to prevent second preimage attacks:
 /// - Leaf nodes are hashed as: SHA256(0x00 || borsh_serialized_leaf_data)
 /// - Internal nodes are hashed as: SHA256(0x01 || H(LeftChild) || H(RightChild))
-///   Child hashes are typically ordered lexicographically before concatenation.
-fn verify_spl_merkle_proof(proof: &[[u8; 32]], root: &[u8; 32], leaf: &[u8; 32]) -> bool {
+/// - Child hashes are ordered lexicographically before concatenation.
+///
+/// The prefix bytes ensure that leaf hashes can never equal internal node hashes,
+/// preventing attackers from forging proofs by substituting node types.
+fn verify_merkle_proof(proof: &[[u8; 32]], root: &[u8; 32], leaf: &[u8; 32]) -> bool {
     let mut computed_hash = *leaf;
     for p_elem in proof.iter() {
         let mut hasher = SolanaHasher::default(); // Uses SHA256 by default
-        hasher.hash(&[0x01]); // Node prefix
+        hasher.hash(&[0x01]); // Internal node prefix - provides domain separation from leaf nodes (0x00)
                               // Correctly order H(L) and H(R) before hashing for the parent node.
-                              // This order must match the tree generation logic (e.g., rs-merkle sorts hashes lexicographically).
+                              // This order must match the tree generation logic (lexicographic ordering).
         if computed_hash.as_ref() <= p_elem.as_ref() {
             hasher.hash(&computed_hash);
             hasher.hash(p_elem);
