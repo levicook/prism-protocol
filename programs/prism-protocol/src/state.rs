@@ -1,8 +1,6 @@
 use anchor_lang::prelude::*;
 
-/// Maximum number of vaults that can be associated with a single cohort.
-/// This helps in account sizing. Adjust as per expected sharding needs.
-pub const MAX_VAULTS_PER_COHORT: usize = 16; // Example: allows up to 16 vaults per cohort
+use crate::MAX_VAULTS_PER_COHORT;
 
 #[account] // seed [CAMPAIGN_V0_SEED_PREFIX, fingerprint]
 #[derive(InitSpace)]

@@ -2,7 +2,7 @@
 
 use {
     crate::{
-        merkle_tree::{create_test_merkle_tree, ClaimMerkleTree},
+        merkle_tree::{create_merkle_tree, ClaimMerkleTree},
         sdk::{
             address_finders::{find_campaign_address, find_cohort_v0_address},
             instruction_builders::{build_initialize_campaign_ix, build_initialize_cohort_ix},
@@ -12,6 +12,7 @@ use {
     },
     anchor_lang::Space,
     mollusk_svm::{program::keyed_account_for_system_program, result::Check, Mollusk},
+    mollusk_svm_programs_token,
     solana_sdk::{
         account::Account as SolanaAccount,
         pubkey::Pubkey,
@@ -145,9 +146,15 @@ impl TestFixture {
         vaults: &[Pubkey],
         amount_per_entitlement: u64,
     ) -> InitializedCohort {
-        // Create a real merkle tree
-        let merkle_tree = create_test_merkle_tree(claimants, vaults, amount_per_entitlement)
-            .expect("Failed to create test merkle tree");
+        // Create claimant entitlements pairs
+        let claimant_entitlements: Vec<(Pubkey, u64)> = claimants
+            .iter()
+            .map(|&claimant| (claimant, amount_per_entitlement))
+            .collect();
+
+        // Create a real merkle tree using production function
+        let merkle_tree = create_merkle_tree(&claimant_entitlements, vaults)
+            .expect("Failed to create merkle tree");
 
         let merkle_root = merkle_tree.root().expect("Failed to get merkle root");
 
