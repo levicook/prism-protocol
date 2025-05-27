@@ -3,7 +3,7 @@ use anchor_lang::solana_program::hash::Hasher;
 
 /// Represents the data that is hashed to form a leaf in the Merkle tree.
 /// Each leaf corresponds to a unique claimant's entitlement within a specific cohort.
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, PartialEq)]
 pub struct ClaimLeaf {
     /// The public key of the recipient.
     pub claimant: Pubkey,

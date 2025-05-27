@@ -13,12 +13,14 @@ anchor-debug = []
 cpi = ["no-entrypoint"]
 default = []
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+merkle-tree = ["dep:rs_merkle"]
 no-entrypoint = []
 no-idl = []
 no-log-ix-name = []
 sdk = ["no-entrypoint"]
 testing = [
     "sdk",
+    "merkle-tree",
     "test-sbf",
     "dep:mollusk-svm",
     "dep:mollusk-svm-programs-token",
@@ -30,12 +32,21 @@ test-sbf = ["testing"]
 anchor-lang = { workspace = true, features = ["init-if-needed"] }
 anchor-spl = { workspace = true }
 
+# Merkle tree dependencies - only available when merkle-tree feature is enabled
+rs_merkle = { workspace = true, optional = true }
+
 # Test dependencies - only available when testing feature is enabled
 mollusk-svm = { workspace = true, optional = true }
-mollusk-svm-programs-token = { workspace = true, optional = true }
+mollusk-svm-programs-token = { workspace = true, optional = true, features = [
+    "associated-token",
+    "token",
+] }
 solana-sdk = { workspace = true, optional = true }
 
 [dev-dependencies]
 mollusk-svm = { workspace = true }
-mollusk-svm-programs-token = { workspace = true }
+mollusk-svm-programs-token = { workspace = true, features = [
+    "associated-token",
+    "token",
+] }
 solana-sdk = { workspace = true }

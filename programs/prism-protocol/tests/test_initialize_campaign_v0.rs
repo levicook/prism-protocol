@@ -30,7 +30,9 @@ fn test_initialize_campaign_success() {
     assert_eq!(
         campaign_account.data.len(),
         CampaignV0::INIT_SPACE + 8,
-        "account size mismatch"
+        "account size mismatch: expected: {}, actual: {}",
+        CampaignV0::INIT_SPACE + 8,
+        campaign_account.data.len()
     );
 
     // 3. Validate campaign state

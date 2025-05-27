@@ -2,6 +2,10 @@ pub mod constants;
 pub mod error;
 pub mod instructions;
 pub mod merkle_leaf;
+
+#[cfg(feature = "merkle-tree")]
+pub mod merkle_tree;
+
 pub mod state;
 
 #[cfg(feature = "sdk")]

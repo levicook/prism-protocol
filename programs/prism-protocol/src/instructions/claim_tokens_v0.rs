@@ -97,7 +97,7 @@ pub struct ClaimTokensV0<'info> {
 // Renamed from handler_with_proper_proof_verification
 pub fn handle_claim_tokens_v0(
     ctx: Context<ClaimTokensV0>,
-    campaign_fingerprint: [u8; 32], // Consumed by Accounts macro for seed derivation
+    _campaign_fingerprint: [u8; 32], // Consumed by Accounts macro for seed derivation
     _cohort_merkle_root_arg: [u8; 32], // Consumed by Accounts macro for seed derivation, also checked in constraint
     merkle_proof: Vec<[u8; 32]>,
     assigned_vault: Pubkey,
@@ -144,17 +144,19 @@ pub fn handle_claim_tokens_v0(
     let transfer_accounts = Transfer {
         from: ctx.accounts.token_vault.to_account_info(),
         to: ctx.accounts.claimant_token_account.to_account_info(),
-        authority: ctx.accounts.campaign.to_account_info(),
+        authority: ctx.accounts.cohort.to_account_info(),
     };
 
-    // Use campaign_fingerprint for campaign PDA signer seeds
-    let campaign_seeds = &[
-        CAMPAIGN_V0_SEED_PREFIX,
-        campaign_fingerprint.as_ref(), // Use the arg passed to instruction
-        &[ctx.accounts.campaign.bump],
+    // Use cohort PDA signer seeds (cohort owns the token vaults)
+    let campaign_key = ctx.accounts.campaign.key();
+    let cohort_seeds = &[
+        COHORT_V0_SEED_PREFIX,
+        campaign_key.as_ref(),
+        _cohort_merkle_root_arg.as_ref(),
+        &[ctx.accounts.cohort.bump],
     ];
 
-    let signer_seeds = &[&campaign_seeds[..]];
+    let signer_seeds = &[&cohort_seeds[..]];
 
     token::transfer(
         CpiContext::new_with_signer(
