@@ -48,6 +48,25 @@ The Prism Protocol is designed with modularity and security in mind, facilitatin
     -   Output all parameters needed for on-chain `Campaign` and `Cohort` initialization.
     -   Generate Merkle proofs for each claimant for frontend/dApp use.
 
+### Modular Crate Architecture
+
+Prism Protocol is organized into separate, focused crates for better maintainability and reusability:
+
+**Core Crates:**
+- **`prism-protocol`** - The minimal on-chain program containing only essential smart contract logic
+- **`prism-protocol-sdk`** - Client-side utilities for building transactions and deriving addresses
+- **`prism-protocol-merkle`** - Off-chain Merkle tree construction, proof generation, and verification utilities
+- **`prism-protocol-testing`** - Shared testing utilities and fixtures for comprehensive test coverage
+
+**Applications:**
+- **`prism-cli`** - Command-line tool for campaign operators (planned implementation)
+
+This modular design ensures:
+- **Clean separation of concerns** between on-chain and off-chain functionality
+- **Minimal on-chain program size** for efficient deployment and execution
+- **Reusable components** that can be integrated into various client applications
+- **Comprehensive testing infrastructure** shared across all components
+
 **Key Processes:**
 
 1.  **Setup & Funding (Operator using `prism-cli`):**

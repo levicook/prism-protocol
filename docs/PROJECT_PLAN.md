@@ -9,109 +9,141 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 ### On-Chain Program (`programs/prism-protocol/src/`)
 
 *   **State Accounts (`state.rs`):**
-    *   [x] `Campaign` struct defined
-    *   [x] `CohortV0` struct defined (Baseline Cohort)
-    *   [ ] `CohortV1` struct defined (e.g., with "Primary Trunks" for optimization) - *Design & To Do*
-    *   [x] `ClaimReceipt` struct defined
+    *   [x] `CampaignV0` struct defined ✅
+    *   [x] `CohortV0` struct defined ✅
+    *   [x] `ClaimReceiptV0` struct defined ✅
+    *   [ ] Future enhanced cohort versions (e.g., with optimizations) - *Future Design*
 *   **Instructions (`instructions/` & `lib.rs`):**
-    *   [ ] `handle_initialize_campaign` - *To Do*
-    *   [ ] `handle_initialize_cohort_v0` - *To Do*
-    *   [ ] `handle_initialize_cohort_v1` - *Design & To Do*
-    *   [x] `handle_claim_tokens_v0` - Implemented (based on current `claim_tokens.rs`)
-    *   [ ] `handle_claim_tokens_v1` - *Design & To Do*
-    *   [ ] `handle_set_campaign_active_status` - *To Do*
-    *   [ ] `handle_reclaim_tokens` - *Design & To Do* (See section 3)
+    *   [x] `handle_initialize_campaign_v0` ✅
+    *   [x] `handle_initialize_cohort_v0` ✅
+    *   [x] `handle_claim_tokens_v0` ✅
+    *   [x] `handle_set_campaign_active_status` ✅
+    *   [x] `handle_reclaim_tokens` ✅
+    *   [ ] Future enhanced instruction versions - *Future Design*
 *   **Merkle Logic:**
-    *   [x] `ClaimLeaf` struct and `hash_claim_leaf` function (`merkle_leaf.rs`) - Implemented & Tested
-    *   [x] `verify_merkle_proof` function (in `claim_tokens.rs`, for V0) - Implemented
-    *   [ ] Modified Merkle verification for `claim_tokens_v1` (if using trunks) - *Design & To Do*
+    *   [x] `ClaimLeaf` struct and `hash_claim_leaf` function (`merkle_leaf.rs`) ✅
+    *   [x] `verify_merkle_proof` function (in `claim_tokens_v0.rs`) ✅
+    *   [x] Domain separation with 0x00/0x01 prefixes for security ✅
 *   **Program Entrypoint (`lib.rs`):**
-    *   [x] Declare program ID
-    *   [x] Define `claim_tokens_v0` public instruction (renaming current `claim_tokens`)
-    *   [ ] Define `claim_tokens_v1` public instruction - *Design & To Do*
-    *   [ ] Define `initialize_campaign` public instruction - *To Do*
-    *   [ ] Define `initialize_cohort_v0` public instruction - *To Do*
-    *   [ ] Define `initialize_cohort_v1` public instruction - *Design & To Do*
-    *   [ ] Define `set_campaign_active_status` public instruction - *To Do*
-    *   [ ] Define `reclaim_tokens` public instruction - *To Do*
+    *   [x] Declare program ID ✅
+    *   [x] Define `initialize_campaign_v0` public instruction ✅
+    *   [x] Define `initialize_cohort_v0` public instruction ✅
+    *   [x] Define `claim_tokens_v0` public instruction ✅
+    *   [x] Define `set_campaign_active_status` public instruction ✅
+    *   [x] Define `reclaim_tokens` public instruction ✅
 
-### Off-Chain CLI (`prism-cli`)
+### Crate Structure (Completed Refactoring)
+
+*   **Core Program (`prism-protocol`):**
+    *   [x] Minimal on-chain program with core functionality ✅
+    *   [x] Clean separation from off-chain utilities ✅
+*   **SDK Crate (`prism-protocol-sdk`):**
+    *   [x] Address finders for PDA derivation ✅
+    *   [x] Instruction builders for transaction construction ✅
+    *   [x] Client-side utilities ✅
+*   **Merkle Tree Crate (`prism-protocol-merkle`):**
+    *   [x] Off-chain merkle tree construction ✅
+    *   [x] Proof generation and verification utilities ✅
+    *   [x] Consistent hashing for vault assignment ✅
+    *   [x] Custom hasher with domain separation ✅
+*   **Testing Utilities (`prism-protocol-testing`):**
+    *   [x] Shared test fixtures and utilities ✅
+    *   [x] Mollusk SVM integration helpers ✅
+
+### Off-Chain CLI (`apps/prism-cli`)
 
 *   **Status:** *To Be Designed & Implemented*
 *   **Core Functionality Checklist:**
-    *   [ ] Campaign configuration file parsing (`campaign_config.yaml` or similar)
+    *   [ ] Campaign configuration file parsing
     *   [ ] Claimant list processing (CSV, JSON, etc.)
     *   [ ] `ClaimLeaf` data generation (claimant, assigned_vault, entitlements)
-    *   [ ] Merkle tree generation for each cohort -> `merkle_root` (for `CohortV0`)
-    *   [ ] (If applicable) Merkle tree and trunk hash generation for `CohortV1`
-    *   [ ] `campaign_fingerprint` calculation (from sorted cohort `merkle_root`s)
-    *   [ ] Individual Merkle proof generation for each claimant (for `V0` and `V1` paths)
-    *   [ ] Output: Parameters for on-chain `initialize_campaign` & `initialize_cohort_v0`/`v1`
+    *   [ ] Merkle tree generation for each cohort
+    *   [ ] `campaign_fingerprint` calculation (from sorted cohort merkle roots)
+    *   [ ] Individual Merkle proof generation for each claimant
+    *   [ ] Output: Parameters for on-chain instructions
     *   [ ] Output: Vault funding requirements report
     *   [ ] Output: Claimant lookup files (proofs, assigned_vaults, entitlements, etc.)
 
-### Testing (using Mollusk)
+### Testing (using Mollusk SVM)
 
 *   **Unit Tests (On-Chain):**
-    *   [x] `merkle_leaf.rs` tests for `hash_claim_leaf`
-    *   [ ] Tests for PDA derivation logic
-    *   [ ] Tests for other critical utility functions
-*   **Integration Tests (Anchor `tests/` using Mollusk):**
-    *   [ ] Full `initialize_campaign` instruction test
-    *   [ ] Full `initialize_cohort_v0` instruction test
-    *   [ ] Full `initialize_cohort_v1` instruction test (once designed)
-    *   [ ] Full `claim_tokens_v0` instruction test (various scenarios)
-    *   [ ] Full `claim_tokens_v1` instruction test (once designed, various scenarios)
-    *   [ ] Full `set_campaign_active_status` instruction test
-    *   [ ] Full `reclaim_tokens` instruction test (once design is finalized)
-    *   [ ] End-to-end test (V0 path): CLI generates data -> on-chain setup -> successful claim -> reclaim.
-    *   [ ] End-to-end test (V1 path, once designed): CLI generates data -> on-chain setup -> successful claim -> reclaim.
+    *   [x] `merkle_leaf.rs` tests for `hash_claim_leaf` ✅
+    *   [x] Merkle tree construction and proof generation tests ✅
+    *   [x] Consistent hashing tests ✅
+*   **Integration Tests (using Mollusk SVM):**
+    *   [x] Full `initialize_campaign_v0` instruction test ✅
+    *   [x] Full `initialize_cohort_v0` instruction test ✅
+    *   [x] Full `claim_tokens_v0` instruction test (various scenarios) ✅
+    *   [x] Full `set_campaign_active_status` instruction test ✅
+    *   [x] Full `reclaim_tokens` instruction test ✅
+    *   [x] End-to-end test: Campaign setup → cohort setup → successful claim ✅
+    *   [x] Merkle proof generation and verification tests ✅
+    *   [x] Instruction building tests ✅
 
-## 3. Key Design Decisions & Open Questions
+## 3. Key Design Decisions & Implementation Notes
 
-*   **[ ] `reclaim_tokens` Strategy:**
-    *   **Decision Needed:** Granular vault-by-vault withdrawal (see `DESIGN_NOTES.md`, section 3.4, item 6) vs. a single `reclaim_tokens` instruction targeting a full cohort or campaign (as per `lib.rs` `ReclaimTokens` struct arguments).
-    *   **Considerations:** Authority model, flexibility, atomicity.
-*   **[ ] `CohortV1` Design ("Primary Trunks") Details:**
-    *   **Action:** Design how "primary trunks" are stored in `CohortV1` and how `verify_merkle_proof` is adapted for `claim_tokens_v1`.
-    *   **Trigger:** Proceed after initial benchmarking of `V0` shows potential for significant gains.
+*   **✅ Campaign Fingerprint System:**
+    *   Campaigns are identified by a cryptographic fingerprint derived from constituent cohort merkle roots
+    *   Ensures immutability and verifiability of campaign definitions
+*   **✅ Merkle Tree Security:**
+    *   Domain separation using 0x00 prefix for leaves, 0x01 for internal nodes
+    *   Prevents second preimage attacks and ensures proof integrity
+*   **✅ Vault Assignment:**
+    *   Consistent hashing distributes claimants across multiple vaults
+    *   Reduces write contention while maintaining deterministic assignment
+*   **✅ Modular Architecture:**
+    *   Clean separation between on-chain program and off-chain utilities
+    *   Reusable SDK and testing components
 
-## 4. Benchmarking Plan (using Mollusk)
+## 4. Benchmarking Plan (using Mollusk SVM)
 
-*   **Objective:** Quantitatively validate performance, scalability, and resource consumption of `V0` and `V1` protocol versions. Inform optimization decisions.
-*   **Methodology:** Develop standardized test scripts using Mollusk for on-chain benchmarks and separate scripts for `prism-cli` performance if needed.
+*   **Objective:** Quantitatively validate performance, scalability, and resource consumption.
 *   **On-Chain Benchmarking Areas:**
-    *   **`claim_tokens_v0` vs `claim_tokens_v1` Instruction:**
-        *   [ ] **CU Consumption vs. Proof Length/Trunk Usage:**
-            *   Measure CUs for cohorts of varying sizes (e.g., 100, 1k, 10k, 100k, 1M, 5M claimants) for both V0 and V1.
-        *   [ ] **CU Consumption Breakdown (for both V0 & V1):**
-            *   Isolate CU cost of: PDA derivations, Merkle verification, `token::transfer` CPI, `ClaimReceipt` initialization.
-        *   [ ] **Transaction Size (for both V0 & V1):**
-            *   Measure serialized transaction size. Determine max proof length for V0 and effective size for V1.
-        *   [ ] **Maximum Practical Cohort Size (for both V0 & V1):**
-            *   Determine if mechanisms hit CU or transaction size limits for very large cohorts.
-    *   **Account Sizes & Rent:**
-        *   [ ] Document rent cost for `Campaign`, `ClaimReceipt` PDAs.
-        *   [ ] Document and compare rent cost for `CohortV0` vs `CohortV1` (due to trunk storage).
-    *   **Initialization Instructions (`initialize_campaign`, `initialize_cohort_v0`, `initialize_cohort_v1`):**
-        *   [ ] CU consumption for each.
-        *   [ ] Transaction sizes for each.
-*   **`prism-cli` Benchmarking Areas (if performance becomes a concern for very large datasets):**
-    *   [ ] Time to generate Merkle roots/trunks for large claimant lists (V0 vs V1 data generation).
-    *   [ ] Time to generate proofs for all claimants (V0 vs V1 proofs).
-    *   [ ] Memory usage during processing.
+    *   [ ] **`claim_tokens_v0` Performance:**
+        *   CU consumption vs. proof length for various cohort sizes
+        *   Transaction size analysis
+        *   Maximum practical cohort size determination
+    *   [ ] **Account Sizes & Rent:**
+        *   Document rent costs for `CampaignV0`, `CohortV0`, `ClaimReceiptV0` PDAs
+        *   Compare costs across different vault configurations
+    *   [ ] **Initialization Instructions:**
+        *   CU consumption for each instruction type
+        *   Transaction size analysis
+*   **Off-Chain Benchmarking Areas:**
+    *   [ ] Merkle tree generation time for large claimant lists
+    *   [ ] Proof generation time and memory usage
+    *   [ ] Consistent hashing performance
 
 ## 5. Documentation Checklist
 
-*   [ ] `README.md`: Review and update as features are finalized and `prism-cli` is built.
-*   [ ] `DESIGN_NOTES.md`: Sync instruction arguments, account fields, and operational flows with final on-chain implementation, including V0/V1 distinctions.
-*   [ ] `CAMPAIGN_SETUP_GUIDE.md`: Review and update to accurately reflect `prism-cli` commands and outputs, including V0/V1 options if exposed to users.
-*   [ ] `PROJECT_PLAN.md` (This document): Keep updated with progress.
-*   [ ] **API/SDK Documentation (Future):** Plan if a client-side SDK is developed.
+*   [x] `PROJECT_PLAN.md`: Updated to reflect current implementation ✅
+*   [ ] `DESIGN_NOTES.md`: Update to match actual implementation
+*   [ ] `CAMPAIGN_SETUP_GUIDE.md`: Update for future CLI implementation
+*   [ ] `README.md`: Update with new crate structure information
+*   [ ] **API Documentation:** Document the SDK crate public interfaces
 
-## 6. Future Milestones (Post-MVP & Benchmarking)
+## 6. Future Milestones (Post-MVP)
 
-*   [ ] Client-side SDK (JavaScript/TypeScript) development.
-*   [ ] Advanced `prism-cli` features (e.g., campaign management, interactive modes).
-*   [ ] Preparation for Security Audit.
-*   [ ] Decision on preferred Cohort/Claim version (V0, V1, or support both) based on benchmarks. 
+*   [ ] Complete CLI tool implementation
+*   [ ] Performance benchmarking and optimization
+*   [ ] Enhanced cohort versions with additional optimizations
+*   [ ] Client-side SDK (JavaScript/TypeScript) development
+*   [ ] Security audit preparation
+*   [ ] Advanced CLI features (campaign management, interactive modes)
+
+## 7. Current Status Summary
+
+**✅ Completed:**
+- Core on-chain program with all essential instructions
+- Complete crate separation and modular architecture
+- Comprehensive test suite with Mollusk SVM integration
+- Merkle tree utilities with security best practices
+- SDK for client-side transaction building
+
+**🚧 In Progress:**
+- Documentation updates to match implementation
+
+**📋 Next Phase:**
+- CLI tool development
+- Performance benchmarking
+- Enhanced features and optimizations 
