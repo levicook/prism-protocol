@@ -67,6 +67,77 @@ This modular design ensures:
 - **Reusable components** that can be integrated into various client applications
 - **Comprehensive testing infrastructure** shared across all components
 
+### CLI Tool (`prism-protocol-cli`)
+
+The Prism Protocol CLI provides campaign operators with powerful tools for managing token distributions at scale.
+
+#### Installation & Usage
+
+```bash
+# Build the CLI
+cargo build --release -p prism-protocol-cli
+
+# Run commands
+cargo run -p prism-protocol-cli -- <COMMAND>
+```
+
+#### Available Commands
+
+**Generate Test Fixtures (Phase 0 - Available Now)**
+```bash
+# Generate 1,000 test claimants with realistic distribution
+cargo run -p prism-protocol-cli -- generate-fixtures \
+  --count 1000 \
+  --distribution realistic \
+  --output test-claimants.csv
+
+# Generate 1M claimants for benchmarking (deterministic, no real keypairs)
+cargo run -p prism-protocol-cli -- generate-fixtures \
+  --count 1000000 \
+  --seed 42 \
+  --distribution exponential \
+  --min-entitlements 1 \
+  --max-entitlements 1000 \
+  --output million-claimants.csv
+
+# Generate 10M claimants for stress testing
+cargo run -p prism-protocol-cli -- generate-fixtures \
+  --count 10000000 \
+  --distribution uniform \
+  --output ten-million-claimants.csv
+```
+
+**Campaign Management (Planned - Phase 1+)**
+```bash
+# Generate campaign data from configuration
+prism-protocol generate-campaign campaign-config.yaml --output-dir ./output
+
+# Deploy campaign on-chain
+prism-protocol deploy-campaign --config campaign-config.yaml --keypair admin.json
+
+# Deploy individual cohorts
+prism-protocol deploy-cohort --campaign <fingerprint> --merkle-root <root> --keypair admin.json
+
+# Administrative operations
+prism-protocol pause-campaign <campaign-fingerprint> --keypair admin.json
+prism-protocol resume-campaign <campaign-fingerprint> --keypair admin.json
+prism-protocol reclaim-tokens <campaign> <cohort> --keypair admin.json
+
+# Status monitoring
+prism-protocol campaign-status <campaign-fingerprint>
+```
+
+#### Fixture Generation Features
+
+- **Deterministic Generation**: Same seed produces identical results for reproducible benchmarks
+- **Multiple Distributions**: 
+  - `uniform` - Even distribution across entitlement range
+  - `realistic` - Weighted towards lower values (more realistic user behavior)
+  - `exponential` - Exponential decay distribution
+- **Scalable**: Efficiently generates millions of test claimants without real keypairs
+- **Progress Tracking**: Built-in progress indicators for large datasets
+- **CSV Output**: Standard format compatible with campaign generation tools
+
 **Key Processes:**
 
 1.  **Setup & Funding (Operator using `prism-cli`):**
