@@ -1,5 +1,5 @@
 [workspace]
-members = ["apps/prism-cli", "programs/*"]
+members = ["apps/prism-cli", "crates/*", "programs/*"]
 resolver = "2"
 
 [profile.release]

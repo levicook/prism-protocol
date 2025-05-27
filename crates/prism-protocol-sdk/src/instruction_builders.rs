@@ -2,8 +2,7 @@ use anchor_lang::solana_program::{
     instruction::Instruction, system_program::ID as SYSTEM_PROGRAM_ID, sysvar,
 };
 use anchor_lang::{prelude::*, InstructionData as _};
-
-use crate::ID as PRISM_PROGRAM_ID;
+use prism_protocol::ID as PRISM_PROGRAM_ID;
 
 pub fn build_initialize_campaign_ix(
     admin: Pubkey,
@@ -12,16 +11,16 @@ pub fn build_initialize_campaign_ix(
     mint: Pubkey,
 ) -> Result<(
     Instruction,
-    crate::accounts::InitializeCampaignV0,
-    crate::instruction::InitializeCampaignV0,
+    prism_protocol::accounts::InitializeCampaignV0,
+    prism_protocol::instruction::InitializeCampaignV0,
 )> {
-    let ix_accounts = crate::accounts::InitializeCampaignV0 {
+    let ix_accounts = prism_protocol::accounts::InitializeCampaignV0 {
         admin,
         campaign,
         system_program: SYSTEM_PROGRAM_ID,
     };
 
-    let ix_data = crate::instruction::InitializeCampaignV0 {
+    let ix_data = prism_protocol::instruction::InitializeCampaignV0 {
         campaign_fingerprint,
         mint,
     };
@@ -45,17 +44,17 @@ pub fn build_initialize_cohort_ix(
     vaults: Vec<Pubkey>,
 ) -> Result<(
     Instruction,
-    crate::accounts::InitializeCohortV0,
-    crate::instruction::InitializeCohortV0,
+    prism_protocol::accounts::InitializeCohortV0,
+    prism_protocol::instruction::InitializeCohortV0,
 )> {
-    let ix_accounts = crate::accounts::InitializeCohortV0 {
+    let ix_accounts = prism_protocol::accounts::InitializeCohortV0 {
         admin,
         campaign,
         cohort,
         system_program: SYSTEM_PROGRAM_ID,
     };
 
-    let ix_data = crate::instruction::InitializeCohortV0 {
+    let ix_data = prism_protocol::instruction::InitializeCohortV0 {
         campaign_fingerprint,
         merkle_root,
         amount_per_entitlement,
@@ -87,10 +86,10 @@ pub fn build_claim_tokens_ix(
     entitlements_from_leaf: u64,
 ) -> Result<(
     Instruction,
-    crate::accounts::ClaimTokensV0,
-    crate::instruction::ClaimTokensV0,
+    prism_protocol::accounts::ClaimTokensV0,
+    prism_protocol::instruction::ClaimTokensV0,
 )> {
-    let ix_accounts = crate::accounts::ClaimTokensV0 {
+    let ix_accounts = prism_protocol::accounts::ClaimTokensV0 {
         admin,
         claimant,
         campaign,
@@ -105,7 +104,7 @@ pub fn build_claim_tokens_ix(
         rent: sysvar::rent::ID,
     };
 
-    let ix_data = crate::instruction::ClaimTokensV0 {
+    let ix_data = prism_protocol::instruction::ClaimTokensV0 {
         campaign_fingerprint,
         cohort_merkle_root_arg,
         merkle_proof,

@@ -75,9 +75,9 @@ impl Hasher for PrismHasher {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::merkle_leaf::{hash_claim_leaf, ClaimLeaf};
-    use anchor_lang::{prelude::Pubkey, AnchorSerialize as _};
+    use crate::{hash_claim_leaf, ClaimLeaf, PrismHasher};
+    use anchor_lang::{prelude::*, solana_program::hash::Hasher as SolanaHasher};
+    use rs_merkle::Hasher as _;
 
     #[test]
     fn test_prism_hasher_leaf_consistency() {

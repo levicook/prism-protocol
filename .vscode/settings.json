@@ -1,3 +1,3 @@
 {
-  "rust-analyzer.cargo.features": ["test-sbf", "merkle-tree"]
+  "rust-analyzer.cargo.features": ["test-sbf"]
 }

@@ -1,18 +1,12 @@
-#![cfg(all(feature = "testing"))]
-
 use {
-    crate::{
-        merkle_tree::{create_merkle_tree, ClaimMerkleTree},
-        sdk::{
-            address_finders::{find_campaign_address, find_cohort_v0_address},
-            instruction_builders::{build_initialize_campaign_ix, build_initialize_cohort_ix},
-        },
-        state::CampaignV0,
-        ID as PRISM_PROGRAM_ID,
-    },
     anchor_lang::Space,
     mollusk_svm::{program::keyed_account_for_system_program, result::Check, Mollusk},
-    mollusk_svm_programs_token,
+    prism_protocol::{state::CampaignV0, ID as PRISM_PROGRAM_ID},
+    prism_protocol_merkle::{create_merkle_tree, ClaimMerkleTree},
+    prism_protocol_sdk::{
+        address_finders::{find_campaign_address, find_cohort_v0_address},
+        instruction_builders::{build_initialize_campaign_ix, build_initialize_cohort_ix},
+    },
     solana_sdk::{
         account::Account as SolanaAccount,
         pubkey::Pubkey,

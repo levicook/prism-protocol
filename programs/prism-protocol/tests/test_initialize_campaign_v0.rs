@@ -1,8 +1,9 @@
-#![cfg(all(feature = "testing"))]
+#![cfg(all(feature = "test-sbf"))]
 
 use {
     anchor_lang::{prelude::AccountDeserialize as _, Space as _},
-    prism_protocol::{self, state::CampaignV0, test_utils::TestFixture, ID as PRISM_PROGRAM_ID},
+    prism_protocol::{self, state::CampaignV0, ID as PRISM_PROGRAM_ID},
+    prism_protocol_testing::TestFixture,
 };
 
 #[test]

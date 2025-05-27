@@ -1,9 +1,9 @@
-use crate::merkle_leaf::{hash_claim_leaf, ClaimLeaf};
-use crate::merkle_tree::hasher::PrismHasher;
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::hash::Hasher as SolanaHasher;
 use rs_merkle::MerkleTree;
 use std::collections::HashMap;
+
+use crate::{hash_claim_leaf, ClaimLeaf, PrismHasher};
 
 /// Result of building a merkle tree from claim leaves
 #[derive(Clone)]

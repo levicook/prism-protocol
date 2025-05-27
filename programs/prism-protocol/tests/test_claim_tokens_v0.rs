@@ -1,21 +1,17 @@
-#![cfg(all(feature = "testing"))]
+#![cfg(all(feature = "test-sbf"))]
 
 use {
+    anchor_lang::prelude::Pubkey,
     anchor_spl::{
         associated_token::get_associated_token_address,
         token::{spl_token, Mint, TokenAccount, ID as TOKEN_PROGRAM_ID},
     },
     mollusk_svm::{program::keyed_account_for_system_program, result::Check, sysvar::Sysvars},
-    prism_protocol::{
-        sdk::{
-            address_finders::find_claim_receipt_v0_address,
-            instruction_builders::build_claim_tokens_ix,
-        },
-        test_utils::{generate_test_vaults, TestFixture, TEST_AMOUNT_PER_ENTITLEMENT},
+    prism_protocol_sdk::{
+        address_finders::find_claim_receipt_v0_address, instruction_builders::build_claim_tokens_ix,
     },
-    solana_sdk::{
-        account::Account as SolanaAccount, pubkey::Pubkey, system_program::ID as SYSTEM_PROGRAM_ID,
-    },
+    prism_protocol_testing::{generate_test_vaults, TestFixture, TEST_AMOUNT_PER_ENTITLEMENT},
+    solana_sdk::{account::Account as SolanaAccount, system_program::ID as SYSTEM_PROGRAM_ID},
 };
 
 #[test]

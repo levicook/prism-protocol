@@ -1,20 +1,14 @@
-#![cfg(all(feature = "testing"))]
+#![cfg(all(feature = "test-sbf"))]
 
 use {
     anchor_lang::{prelude::AccountDeserialize, Space as _},
     mollusk_svm::{program::keyed_account_for_system_program, result::Check},
-    prism_protocol::{
-        self,
-        sdk::{
-            address_finders::find_cohort_v0_address,
-            instruction_builders::build_initialize_cohort_ix,
-        },
-        state::CohortV0,
-        test_utils::{
-            generate_test_merkle_root, generate_test_vaults, TestFixture,
-            TEST_AMOUNT_PER_ENTITLEMENT,
-        },
-        ID as PRISM_PROGRAM_ID,
+    prism_protocol::{self, state::CohortV0, ID as PRISM_PROGRAM_ID},
+    prism_protocol_sdk::{
+        address_finders::find_cohort_v0_address, instruction_builders::build_initialize_cohort_ix,
+    },
+    prism_protocol_testing::{
+        generate_test_merkle_root, generate_test_vaults, TestFixture, TEST_AMOUNT_PER_ENTITLEMENT,
     },
     solana_sdk::{account::Account as SolanaAccount, system_program::ID as SYSTEM_PROGRAM_ID},
 };
