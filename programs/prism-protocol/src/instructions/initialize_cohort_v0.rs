@@ -1,6 +1,6 @@
 use crate::error::ErrorCode;
 use crate::state::{CampaignV0, CohortV0};
-use crate::{CAMPAIGN_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX};
+use crate::{CAMPAIGN_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX, MAX_VAULTS_PER_COHORT};
 use anchor_lang::prelude::*;
 
 #[derive(Accounts)]
@@ -53,7 +53,7 @@ pub fn handle_initialize_cohort_v0(
 
     require!(
         // is this really necessary?
-        vaults.len() <= crate::state::MAX_VAULTS_PER_COHORT,
+        vaults.len() <= MAX_VAULTS_PER_COHORT,
         ErrorCode::TooManyVaults
     );
 

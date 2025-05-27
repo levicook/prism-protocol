@@ -2107,6 +2107,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "prism-protocol-merkle"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "prism_protocol",
+ "rs_merkle",
+]
+
+[[package]]
+name = "prism-protocol-sdk"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+ "prism_protocol",
+]
+
+[[package]]
+name = "prism-protocol-testing"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "mollusk-svm",
+ "mollusk-svm-programs-token",
+ "prism-protocol-merkle",
+ "prism-protocol-sdk",
+ "prism_protocol",
+ "solana-sdk",
+]
+
+[[package]]
 name = "prism_protocol"
 version = "0.1.0"
 dependencies = [
@@ -2114,6 +2145,9 @@ dependencies = [
  "anchor-spl",
  "mollusk-svm",
  "mollusk-svm-programs-token",
+ "prism-protocol-merkle",
+ "prism-protocol-sdk",
+ "prism-protocol-testing",
  "solana-sdk",
 ]
 
@@ -2326,6 +2360,15 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "rs_merkle"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb09b49230ba22e8c676e7b75dfe2887dea8121f18b530ae0ba519ce442d2b21"
+dependencies = [
+ "sha2 0.10.9",
 ]
 
 [[package]]

@@ -1,5 +1,7 @@
 # Prism Protocol: Campaign Setup Guide for Operators (Highly Automated)
 
+> **📋 IMPLEMENTATION STATUS:** This guide describes the planned `prism-cli` tool which has **NOT YET BEEN IMPLEMENTED**. The core on-chain program is complete and functional, but the CLI automation described here is part of future development. For now, campaign setup must be done manually using the SDK utilities in `prism-protocol-sdk`.
+
 This guide walks you through the highly automated process of setting up and launching a token distribution campaign using the Prism Protocol. The `prism-cli` handles most of the heavy lifting.
 
 **Core Principle: On-Chain Immutability via Merkle Identifiers**

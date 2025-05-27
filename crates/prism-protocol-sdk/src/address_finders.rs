@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::{
+use prism_protocol::{
     CAMPAIGN_V0_SEED_PREFIX, CLAIM_RECEIPT_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX,
     ID as PRISM_PROGRAM_ID,
 };

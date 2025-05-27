@@ -4,17 +4,12 @@ pub mod instructions;
 pub mod merkle_leaf;
 pub mod state;
 
-#[cfg(feature = "sdk")]
-pub mod sdk;
-
-#[cfg(feature = "testing")]
-pub mod test_utils;
-
-use anchor_lang::prelude::*;
-
 pub use constants::*;
 pub use instructions::*;
+pub use merkle_leaf::*;
 pub use state::*;
+
+use anchor_lang::prelude::*;
 
 declare_id!("3hLSRKWiLGPgfvJJWe6WP9kCNQB5FVZu3Y4Awp1sMEbJ");
 

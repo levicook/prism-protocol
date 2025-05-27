@@ -1,0 +1,18 @@
+[package]
+name = "prism-protocol-testing"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anchor-lang = { workspace = true }
+mollusk-svm = { workspace = true }
+mollusk-svm-programs-token = { workspace = true, features = [
+    "associated-token",
+    "token",
+] }
+prism_protocol = { path = "../../programs/prism-protocol", features = [
+    "no-entrypoint",
+] }
+prism-protocol-merkle = { path = "../prism-protocol-merkle" }
+prism-protocol-sdk = { path = "../prism-protocol-sdk" }
+solana-sdk = { workspace = true }
