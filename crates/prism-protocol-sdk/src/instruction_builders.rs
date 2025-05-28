@@ -170,10 +170,7 @@ pub fn build_set_campaign_active_status_ix(
     prism_protocol::accounts::SetCampaignActiveStatus,
     prism_protocol::instruction::SetCampaignActiveStatus,
 )> {
-    let ix_accounts = prism_protocol::accounts::SetCampaignActiveStatus {
-        admin,
-        campaign,
-    };
+    let ix_accounts = prism_protocol::accounts::SetCampaignActiveStatus { admin, campaign };
 
     let ix_data = prism_protocol::instruction::SetCampaignActiveStatus {
         campaign_fingerprint,

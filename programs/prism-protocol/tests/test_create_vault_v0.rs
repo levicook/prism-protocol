@@ -9,12 +9,12 @@ use {
 #[test]
 fn test_create_vault_v0_success() {
     let mut fixture = TestFixture::new();
-    
+
     // Create a test mint
     let mint_keypair = Keypair::new();
     let mint_account = fixture.create_mint(&mint_keypair, 9);
     let mint = mint_keypair.pubkey();
-    
+
     let campaign = fixture.initialize_campaign(mint);
 
     // Setup test data
@@ -31,12 +31,8 @@ fn test_create_vault_v0_success() {
 
     // Create a vault at index 0
     let vault_index = 0;
-    let (vault_address, vault_account) = fixture.create_vault(
-        &campaign,
-        &mut cohort,
-        vault_index,
-        &mint_account,
-    );
+    let (vault_address, vault_account) =
+        fixture.create_vault(&campaign, &mut cohort, vault_index, &mint_account);
 
     // Verify the vault was created
     assert_eq!(vault_account.owner, anchor_spl::token::ID);
@@ -50,12 +46,12 @@ fn test_create_vault_v0_success() {
 #[test]
 fn test_create_vault_v0_duplicate_error() {
     let mut fixture = TestFixture::new();
-    
+
     // Create a test mint
     let mint_keypair = Keypair::new();
     let mint_account = fixture.create_mint(&mint_keypair, 9);
     let mint = mint_keypair.pubkey();
-    
+
     let campaign = fixture.initialize_campaign(mint);
 
     // Setup test data
@@ -72,12 +68,8 @@ fn test_create_vault_v0_duplicate_error() {
 
     // Create a vault at index 0
     let vault_index = 0;
-    let (_vault_address, _vault_account) = fixture.create_vault(
-        &campaign,
-        &mut cohort,
-        vault_index,
-        &mint_account,
-    );
+    let (_vault_address, _vault_account) =
+        fixture.create_vault(&campaign, &mut cohort, vault_index, &mint_account);
 
     // Try to create the same vault again - this should work in our current implementation
     // since we're not checking for duplicates in the test fixture

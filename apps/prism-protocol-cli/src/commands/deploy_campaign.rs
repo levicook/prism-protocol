@@ -346,23 +346,18 @@ fn read_vault_requirements(db_path: &PathBuf) -> CliResult<Vec<VaultData>> {
         "SELECT cohort_name, vault_index, required_tokens 
          FROM vaults ORDER BY cohort_name, vault_index",
     )?;
-    
+
     let vault_rows = stmt.query_map([], |row| {
         let cohort_name: String = row.get(0)?;
         let vault_index: i64 = row.get(1)?;
         let required_tokens: u64 = row.get(2)?;
 
-        Ok((
-            cohort_name,
-            vault_index,
-            required_tokens,
-        ))
+        Ok((cohort_name, vault_index, required_tokens))
     })?;
 
     let mut vault_requirements = Vec::new();
     for row in vault_rows {
-        let (cohort_name, vault_index, required_tokens) =
-            row?;
+        let (cohort_name, vault_index, required_tokens) = row?;
 
         vault_requirements.push(VaultData {
             cohort_name,
@@ -567,130 +562,243 @@ fn deploy_and_fund_cohort_vaults(
     // Get vault requirements from database for this cohort
     let vault_requirements = read_vault_requirements_for_cohort(db_path, &cohort_data.name)?;
 
-    // Create and fund each vault sequentially
+    // Process each vault: create first, then fund
     for vault_req in vault_requirements {
         let vault_index = vault_req.vault_index as u8;
         let (vault_address, _) = find_vault_v0_address(&cohort_address, vault_index);
 
         println!(
-            "        🏗️  Creating vault {} at {}",
+            "        🏗️  Processing vault {} at {}",
             vault_index, vault_address
         );
 
-        // Check if vault already exists
-        let vault_exists = if let Ok(account) = rpc_client.get_account(&vault_address) {
-            account.lamports > 0
-        } else {
-            false
-        };
+        // Step 1: Create vault if it doesn't exist
+        let creation_signature = create_vault_if_needed(
+            rpc_client,
+            admin_keypair,
+            campaign_data,
+            cohort_data,
+            &vault_address,
+            vault_index,
+            db_path,
+        )?;
 
-        if vault_exists {
-            println!(
-                "        ⚠️  Vault {} already exists, checking funding...",
-                vault_index
-            );
-
-            // Check if vault needs funding
-            if vault_req.required_tokens > 0 {
-                let current_balance = get_vault_token_balance(rpc_client, &vault_address)?;
-                if current_balance < vault_req.required_tokens {
-                    println!(
-                        "        💰 Vault {} needs additional funding: {} tokens",
-                        vault_index,
-                        vault_req.required_tokens - current_balance
-                    );
-                    fund_vault(
-                        rpc_client,
-                        admin_keypair,
-                        &campaign_data.mint,
-                        &vault_address,
-                        vault_req.required_tokens - current_balance,
-                    )?;
-                } else {
-                    println!(
-                        "        ✅ Vault {} already sufficiently funded",
-                        vault_index
-                    );
-                }
-            }
-            continue;
+        if !creation_signature.is_empty() {
+            vault_signatures.push(creation_signature.clone());
         }
 
-        // Build create vault instruction
-        let (create_vault_ix, _, _) = build_create_vault_ix(
-            campaign_data.admin,
-            campaign_address,
-            cohort_address,
-            campaign_data.mint,
-            vault_address,
-            campaign_data.fingerprint,
-            cohort_data.merkle_root,
-            vault_index,
-        )
-        .map_err(|e| {
-            CliError::InvalidConfig(format!("Failed to build create vault instruction: {}", e))
-        })?;
-
-        // Create and send transaction
-        let recent_blockhash = rpc_client
-            .get_latest_blockhash()
-            .map_err(|e| CliError::InvalidConfig(format!("Failed to get blockhash: {}", e)))?;
-
-        let transaction = Transaction::new_signed_with_payer(
-            &[create_vault_ix],
-            Some(&admin_keypair.pubkey()),
-            &[admin_keypair],
-            recent_blockhash,
-        );
-
-        println!("        📤 Sending create vault transaction...");
-
-        let config = RpcSendTransactionConfig {
-            skip_preflight: false,
-            preflight_commitment: Some(CommitmentLevel::Confirmed),
-            encoding: None,
-            max_retries: Some(5),
-            min_context_slot: None,
-        };
-
-        let signature = rpc_client
-            .send_and_confirm_transaction_with_spinner_and_config(
-                &transaction,
-                CommitmentConfig::confirmed(),
-                config,
-            )
-            .map_err(|e| {
-                CliError::InvalidConfig(format!("Failed to create vault {}: {}", vault_index, e))
-            })?;
-
-        println!(
-            "        ✅ Vault {} created! Signature: {}",
-            vault_index, signature
-        );
-        vault_signatures.push(signature.to_string());
-
-        // Fund the vault if needed
+        // Step 2: Fund vault if it needs tokens
         if vault_req.required_tokens > 0 {
-            fund_vault(
+            fund_vault_if_needed(
                 rpc_client,
                 admin_keypair,
                 &campaign_data.mint,
                 &vault_address,
                 vault_req.required_tokens,
+                db_path,
+                &cohort_data.name,
+                vault_req.vault_index,
             )?;
         }
-
-        // Update database with vault creation and funding status
-        update_vault_deployment_status(
-            db_path,
-            &cohort_data.name,
-            vault_req.vault_index,
-            &vault_address,
-            &signature.to_string(),
-        )?;
     }
 
     Ok(vault_signatures)
+}
+
+fn create_vault_if_needed(
+    rpc_client: &RpcClient,
+    admin_keypair: &dyn Signer,
+    campaign_data: &CampaignData,
+    cohort_data: &CohortData,
+    vault_address: &Pubkey,
+    vault_index: u8,
+    db_path: &PathBuf,
+) -> CliResult<String> {
+    // Check if vault already exists
+    let vault_exists = if let Ok(account) = rpc_client.get_account(vault_address) {
+        account.lamports > 0
+    } else {
+        false
+    };
+
+    if vault_exists {
+        println!(
+            "        ⚠️  Vault {} already exists, skipping creation...",
+            vault_index
+        );
+        return Ok(String::new());
+    }
+
+    println!("        📤 Creating vault {}...", vault_index);
+
+    let (campaign_address, _) =
+        find_campaign_address(&campaign_data.admin, &campaign_data.fingerprint);
+    let (cohort_address, _) = find_cohort_v0_address(&campaign_address, &cohort_data.merkle_root);
+
+    // Build create vault instruction
+    let (create_vault_ix, _, _) = build_create_vault_ix(
+        campaign_data.admin,
+        campaign_address,
+        cohort_address,
+        campaign_data.mint,
+        *vault_address,
+        campaign_data.fingerprint,
+        cohort_data.merkle_root,
+        vault_index,
+    )
+    .map_err(|e| {
+        CliError::InvalidConfig(format!("Failed to build create vault instruction: {}", e))
+    })?;
+
+    // Create and send transaction
+    let recent_blockhash = rpc_client
+        .get_latest_blockhash()
+        .map_err(|e| CliError::InvalidConfig(format!("Failed to get blockhash: {}", e)))?;
+
+    let transaction = Transaction::new_signed_with_payer(
+        &[create_vault_ix],
+        Some(&admin_keypair.pubkey()),
+        &[admin_keypair],
+        recent_blockhash,
+    );
+
+    let config = RpcSendTransactionConfig {
+        skip_preflight: false,
+        preflight_commitment: Some(CommitmentLevel::Confirmed),
+        encoding: None,
+        max_retries: Some(5),
+        min_context_slot: None,
+    };
+
+    let signature = rpc_client
+        .send_and_confirm_transaction_with_spinner_and_config(
+            &transaction,
+            CommitmentConfig::confirmed(),
+            config,
+        )
+        .map_err(|e| {
+            CliError::InvalidConfig(format!("Failed to create vault {}: {}", vault_index, e))
+        })?;
+
+    println!(
+        "        ✅ Vault {} created! Signature: {}",
+        vault_index, signature
+    );
+
+    // Update database with vault creation status
+    update_vault_creation_status(
+        db_path,
+        &cohort_data.name,
+        vault_index as usize,
+        vault_address,
+        &signature.to_string(),
+    )?;
+
+    Ok(signature.to_string())
+}
+
+fn fund_vault_if_needed(
+    rpc_client: &RpcClient,
+    admin_keypair: &dyn Signer,
+    mint: &Pubkey,
+    vault_address: &Pubkey,
+    required_tokens: u64,
+    db_path: &PathBuf,
+    cohort_name: &str,
+    vault_index: usize,
+) -> CliResult<()> {
+    // Check current vault balance
+    let current_balance = get_vault_token_balance(rpc_client, vault_address)?;
+
+    if current_balance >= required_tokens {
+        println!(
+            "        ✅ Vault {} already sufficiently funded ({} tokens)",
+            vault_index, current_balance
+        );
+        return Ok(());
+    }
+
+    let tokens_needed = required_tokens - current_balance;
+    println!(
+        "        💰 Funding vault {} with {} tokens (current: {}, needed: {})...",
+        vault_index, tokens_needed, current_balance, required_tokens
+    );
+
+    // Transfer tokens from admin's token account to vault
+    let admin_token_account = get_associated_token_address(&admin_keypair.pubkey(), mint);
+
+    let transfer_ix = spl_token::instruction::transfer(
+        &spl_token::ID,
+        &admin_token_account,
+        vault_address,
+        &admin_keypair.pubkey(),
+        &[],
+        tokens_needed,
+    )?;
+
+    let recent_blockhash = rpc_client.get_latest_blockhash()?;
+    let transaction = Transaction::new_signed_with_payer(
+        &[transfer_ix],
+        Some(&admin_keypair.pubkey()),
+        &[admin_keypair],
+        recent_blockhash,
+    );
+
+    let signature = rpc_client.send_and_confirm_transaction_with_spinner(&transaction)?;
+    println!(
+        "        ✅ Vault {} funded with {} tokens! Signature: {}",
+        vault_index, tokens_needed, signature
+    );
+
+    // Update database with vault funding status
+    update_vault_funding_status(db_path, cohort_name, vault_index, &signature.to_string())?;
+
+    Ok(())
+}
+
+fn update_vault_creation_status(
+    db_path: &PathBuf,
+    cohort_name: &str,
+    vault_index: usize,
+    vault_address: &Pubkey,
+    signature: &str,
+) -> CliResult<()> {
+    let conn = Connection::open(db_path)?;
+    let now = chrono::Utc::now().timestamp();
+
+    // Update vault with creation details
+    conn.execute(
+        "UPDATE vaults SET vault_pubkey = ?, created_at = ?, created_by_tx = ? 
+         WHERE cohort_name = ? AND vault_index = ?",
+        (
+            vault_address.to_string(),
+            now,
+            signature,
+            cohort_name,
+            vault_index,
+        ),
+    )?;
+
+    Ok(())
+}
+
+fn update_vault_funding_status(
+    db_path: &PathBuf,
+    cohort_name: &str,
+    vault_index: usize,
+    signature: &str,
+) -> CliResult<()> {
+    let conn = Connection::open(db_path)?;
+    let now = chrono::Utc::now().timestamp();
+
+    // Update vault with funding details
+    conn.execute(
+        "UPDATE vaults SET funded_at = ?, funded_by_tx = ? 
+         WHERE cohort_name = ? AND vault_index = ?",
+        (now, signature, cohort_name, vault_index),
+    )?;
+
+    Ok(())
 }
 
 fn perform_preflight_checks(
@@ -786,23 +894,18 @@ fn read_vault_requirements_for_cohort(
         "SELECT cohort_name, vault_index, required_tokens 
          FROM vaults WHERE cohort_name = ? ORDER BY vault_index",
     )?;
-    
+
     let vault_rows = stmt.query_map([cohort_name], |row| {
         let cohort_name: String = row.get(0)?;
         let vault_index: i64 = row.get(1)?;
         let required_tokens: u64 = row.get(2)?;
 
-        Ok((
-            cohort_name,
-            vault_index,
-            required_tokens,
-        ))
+        Ok((cohort_name, vault_index, required_tokens))
     })?;
 
     let mut vault_requirements = Vec::new();
     for row in vault_rows {
-        let (cohort_name, vault_index, required_tokens) =
-            row?;
+        let (cohort_name, vault_index, required_tokens) = row?;
 
         vault_requirements.push(VaultData {
             cohort_name,
@@ -831,70 +934,6 @@ fn get_vault_token_balance(rpc_client: &RpcClient, vault_address: &Pubkey) -> Cl
     }
 }
 
-fn fund_vault(
-    rpc_client: &RpcClient,
-    admin_keypair: &dyn Signer,
-    mint: &Pubkey,
-    vault_address: &Pubkey,
-    amount: u64,
-) -> CliResult<()> {
-    println!("        💰 Funding vault with {} tokens...", amount);
-
-    // Transfer tokens from admin's token account to vault
-    let admin_token_account = get_associated_token_address(&admin_keypair.pubkey(), mint);
-
-    let transfer_ix = spl_token::instruction::transfer(
-        &spl_token::ID,
-        &admin_token_account,
-        vault_address,
-        &admin_keypair.pubkey(),
-        &[],
-        amount,
-    )?;
-
-    let recent_blockhash = rpc_client.get_latest_blockhash()?;
-    let transaction = Transaction::new_signed_with_payer(
-        &[transfer_ix],
-        Some(&admin_keypair.pubkey()),
-        &[admin_keypair],
-        recent_blockhash,
-    );
-
-    let signature = rpc_client.send_and_confirm_transaction_with_spinner(&transaction)?;
-    println!(
-        "        ✅ Vault funded with tokens! Signature: {}",
-        signature
-    );
-
-    Ok(())
-}
-
-fn update_vault_deployment_status(
-    db_path: &PathBuf,
-    cohort_name: &str,
-    vault_index: usize,
-    vault_address: &Pubkey,
-    signature: &str,
-) -> CliResult<()> {
-    let conn = Connection::open(db_path)?;
-    let now = chrono::Utc::now().timestamp();
-
-    conn.execute(
-        "UPDATE vaults SET vault_pubkey = ?, created_at = ?, creation_signature = ?, funded_at = ? 
-         WHERE cohort_name = ? AND vault_index = ?",
-        (
-            vault_address.to_string(),
-            now,
-            signature,
-            now, // funded_at same as created_at for new vaults
-            cohort_name,
-            vault_index,
-        ),
-    )?;
-
-    Ok(())
-}
-
 fn activate_campaign(
     rpc_client: &RpcClient,
     admin_keypair: &dyn Signer,
@@ -903,12 +942,12 @@ fn activate_campaign(
 ) -> CliResult<()> {
     let (campaign_address, _) =
         find_campaign_address(&campaign_data.admin, &campaign_data.fingerprint);
-    
+
     // Check if campaign exists
     match rpc_client.get_account(&campaign_address) {
         Ok(_account) => {
             println!("  🎯 Campaign PDA found, activating campaign...");
-            
+
             // Build activation instruction
             let (activate_ix, _, _) = build_set_campaign_active_status_ix(
                 campaign_data.admin,
@@ -916,8 +955,10 @@ fn activate_campaign(
                 campaign_data.fingerprint,
                 true, // Set to active
             )
-            .map_err(|e| CliError::InvalidConfig(format!("Failed to build activation instruction: {}", e)))?;
-            
+            .map_err(|e| {
+                CliError::InvalidConfig(format!("Failed to build activation instruction: {}", e))
+            })?;
+
             // Send activation transaction
             let recent_blockhash = rpc_client
                 .get_latest_blockhash()
@@ -944,10 +985,12 @@ fn activate_campaign(
                     CommitmentConfig::confirmed(),
                     config,
                 )
-                .map_err(|e| CliError::InvalidConfig(format!("Failed to activate campaign: {}", e)))?;
+                .map_err(|e| {
+                    CliError::InvalidConfig(format!("Failed to activate campaign: {}", e))
+                })?;
 
             println!("  ✅ Campaign activated! Signature: {}", signature);
-            
+
             // Update database with activation status
             update_campaign_activation_status(db_path, &signature.to_string())?;
         }
@@ -957,7 +1000,7 @@ fn activate_campaign(
             ));
         }
     }
-    
+
     Ok(())
 }
 
@@ -1050,8 +1093,8 @@ fn update_campaign_activation_status(db_path: &PathBuf, signature: &str) -> CliR
     let now = chrono::Utc::now().timestamp();
 
     conn.execute(
-        "UPDATE campaign SET activated_at = ?, activation_signature = ?", 
-        [now.to_string(), signature.to_string()]
+        "UPDATE campaign SET activated_at = ?, activation_signature = ?",
+        [now.to_string(), signature.to_string()],
     )?;
 
     Ok(())

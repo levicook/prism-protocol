@@ -13,7 +13,7 @@ cluster = "localnet"
 wallet = "secrets/decrypted-keypairs/localnet-deployer.json" # run ./scripts/decrypt-secrets to create this file
 
 [scripts]
-test = "cargo test-sbf"
+test = " cargo test-sbf"
 
 [toolchain]
 anchor_version = "0.31.1"  # `anchor-cli` version to use(requires `avm`)

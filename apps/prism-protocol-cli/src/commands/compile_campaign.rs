@@ -347,7 +347,9 @@ fn create_campaign_database(
             admin TEXT NOT NULL,
             created_at INTEGER NOT NULL,
             deployed_at INTEGER,
-            deployed_signature TEXT -- transaction signature for campaign deployment
+            deployed_signature TEXT, -- transaction signature for campaign deployment
+            activated_at INTEGER, -- timestamp when campaign was activated
+            activation_signature TEXT -- transaction signature for campaign activation
         );
 
         CREATE TABLE cohorts (
@@ -380,7 +382,10 @@ fn create_campaign_database(
             vault_keypair_path TEXT, -- optional: path to keypair file if generated
             required_tokens INTEGER NOT NULL,
             assigned_claimants INTEGER NOT NULL,
-            funded_at INTEGER,
+            created_at INTEGER, -- timestamp when vault PDA was created on-chain
+            created_by_tx TEXT, -- transaction signature for vault creation
+            funded_at INTEGER, -- timestamp when vault was funded with tokens
+            funded_by_tx TEXT, -- transaction signature for vault funding
             PRIMARY KEY (cohort_name, vault_index),
             FOREIGN KEY (cohort_name) REFERENCES cohorts(cohort_name)
         );
