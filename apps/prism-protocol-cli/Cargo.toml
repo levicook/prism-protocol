@@ -1,0 +1,39 @@
+[package]
+name = "prism-protocol-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "prism-protocol"
+path = "src/main.rs"
+
+[dependencies]
+prism_protocol = { path = "../../programs/prism-protocol", features = [
+    "no-entrypoint",
+] }
+prism-protocol-merkle = { path = "../../crates/prism-protocol-merkle" }
+prism-protocol-sdk = { path = "../../crates/prism-protocol-sdk" }
+
+# CLI framework
+clap = { workspace = true, features = ["derive"] }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_yaml = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Database & time
+chrono = { workspace = true }
+rusqlite = { workspace = true }
+
+# Solana
+solana-sdk = { workspace = true }
+
+# Utilities
+csv = { workspace = true }
+
+[dev-dependencies]
+# prism-protocol-testing = { path = "../../crates/prism-protocol-testing" }

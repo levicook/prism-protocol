@@ -67,6 +67,105 @@ This modular design ensures:
 - **Reusable components** that can be integrated into various client applications
 - **Comprehensive testing infrastructure** shared across all components
 
+### CLI Tool (`prism-protocol-cli`)
+
+The Prism Protocol CLI provides campaign operators with powerful tools for managing token distributions at scale.
+
+#### Installation & Usage
+
+```bash
+# Build the CLI
+cargo build --release -p prism-protocol-cli
+
+# Run commands
+cargo run -p prism-protocol-cli -- <COMMAND>
+```
+
+#### Available Commands
+
+**Generate Test Fixtures (Phase 0 - Available Now)**
+```bash
+# Generate 1,000 test claimants with realistic distribution across 3 cohorts
+cargo run -p prism-protocol-cli -- generate-fixtures \
+  --count 1000 \
+  --distribution realistic \
+  --cohort-count 3 \
+  --campaign-csv-out campaign.csv \
+  --cohorts-csv-out cohorts.csv
+
+# Generate 1M claimants for benchmarking (deterministic, no real keypairs)
+cargo run -p prism-protocol-cli -- generate-fixtures \
+  --count 1000000 \
+  --seed 42 \
+  --distribution exponential \
+  --min-entitlements 1 \
+  --max-entitlements 1000 \
+  --cohort-count 5 \
+  --campaign-csv-out million-campaign.csv \
+  --cohorts-csv-out million-cohorts.csv
+
+# Generate 10M claimants for stress testing
+cargo run -p prism-protocol-cli -- generate-fixtures \
+  --count 10000000 \
+  --distribution uniform \
+  --cohort-count 10 \
+  --campaign-csv-out stress-campaign.csv \
+  --cohorts-csv-out stress-cohorts.csv
+```
+
+**Campaign Generation (Phase 1 - Available Now)**
+```bash
+# Generate campaign database from CSV files
+cargo run -p prism-protocol-cli -- generate-campaign \
+  --campaign-csv-in campaign.csv \
+  --cohorts-csv-in cohorts.csv \
+  --mint So11111111111111111111111111111111111111112 \
+  --admin-keypair admin.json \
+  --claimants-per-vault 200000 \
+  --campaign-db-out campaign.db
+```
+
+**Campaign Management (Planned - Phase 2+)**
+```bash
+# Deploy campaign on-chain
+prism-protocol deploy-campaign --config campaign-config.yaml --admin-keypair admin.json
+
+# Deploy individual cohorts
+prism-protocol deploy-cohort --campaign <fingerprint> --merkle-root <root> --admin-keypair admin.json
+
+# Administrative operations
+prism-protocol pause-campaign <campaign-fingerprint> --admin-keypair admin.json
+prism-protocol resume-campaign <campaign-fingerprint> --admin-keypair admin.json
+prism-protocol reclaim-tokens <campaign> <cohort> --admin-keypair admin.json
+
+# Status monitoring
+prism-protocol campaign-status <campaign-fingerprint>
+```
+
+#### Fixture Generation Features
+
+- **Deterministic Generation**: Same seed produces identical results for reproducible benchmarks
+- **Multiple Distributions**: 
+  - `uniform` - Even distribution across entitlement range
+  - `realistic` - Weighted towards lower values (more realistic user behavior)
+  - `exponential` - Exponential decay distribution
+- **Multi-Cohort Support**: Generates both campaign.csv and cohorts.csv files with configurable cohort counts
+- **Scalable**: Efficiently generates millions of test claimants without real keypairs
+- **Progress Tracking**: Built-in progress indicators for large datasets
+- **CSV Output**: Standard format compatible with campaign generation tools
+
+#### Campaign Generation Features
+
+- **CSV Input Processing**: Reads campaign claimants and cohort configuration from CSV files
+- **Keypair Validation**: Uses Solana SDK to properly read and validate admin keypairs
+- **SQLite Database Output**: Creates comprehensive campaign database with:
+  - Campaign metadata (fingerprint, mint, admin, timestamps)
+  - Cohort details (merkle roots, token requirements, vault counts)
+  - Claimant records (entitlements, vault assignments, merkle proofs)
+  - Vault funding requirements and claimant distribution
+- **Vault Count Calculation**: Automatically determines optimal vault distribution based on claimant counts
+- **Data Integrity**: Validates cohort consistency between input files
+
 **Key Processes:**
 
 1.  **Setup & Funding (Operator using `prism-cli`):**
