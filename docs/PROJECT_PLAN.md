@@ -77,7 +77,7 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 
 - **Purpose:** Process campaign configs and generate all necessary data
 - **Commands:**
-  - `cargo run -p prism-protocol-cli -- generate-campaign --campaign-csv <file> --cohorts-csv <file> --mint <pubkey> --admin-keypair <file>`
+  - `cargo run -p prism-protocol-cli -- compile-campaign --campaign-csv <file> --cohorts-csv <file> --mint <pubkey> --admin-keypair <file>`
 - **Input:** Two CSV files (campaign claimants and cohort configuration)
 - **Output:**
   - ✅ SQLite database with complete campaign structure

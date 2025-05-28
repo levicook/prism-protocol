@@ -19,21 +19,21 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Generate test fixtures for benchmarking
+    /// Generate test fixtures for benchmarking and development
     GenerateFixtures {
         /// Number of claimants to generate
-        #[arg(long)]
+        #[arg(long, default_value = "1000")]
         count: u64,
 
         /// Seed for deterministic generation
         #[arg(long, default_value = "42")]
         seed: u64,
 
-        /// Output campaign CSV file path
+        /// Output campaign CSV file path (cohort,claimant,entitlements)
         #[arg(long, default_value = "campaign.csv")]
         campaign_csv_out: PathBuf,
 
-        /// Output cohorts CSV file path
+        /// Output cohorts CSV file path (cohort,amount_per_entitlement)
         #[arg(long, default_value = "cohorts.csv")]
         cohorts_csv_out: PathBuf,
 
@@ -62,30 +62,30 @@ enum Commands {
         max_amount_per_entitlement: u64,
     },
 
-    /// Generate campaign data from configuration
-    GenerateCampaign {
-        /// Input campaign claimants file (cohort,claimant,entitlements)
+    /// Compile campaign from CSV files into deployment-ready database
+    CompileCampaign {
+        /// Input campaign CSV file path (cohort,claimant,entitlements)
         #[arg(long)]
         campaign_csv_in: PathBuf,
 
-        /// Input cohort configuration file (cohort,amount_per_entitlement)
+        /// Input cohorts CSV file path (cohort,amount_per_entitlement)
         #[arg(long)]
         cohorts_csv_in: PathBuf,
 
-        /// SPL token mint to distribute
-        #[arg(short, long)]
+        /// SPL token mint that will be distributed
+        #[arg(long)]
         mint: Pubkey,
 
-        /// Admin keypair file
+        /// Path to admin keypair file
         #[arg(long)]
         admin_keypair: PathBuf,
 
-        /// Target claimants per vault (for vault count calculation)
+        /// Maximum claimants per vault (affects rent costs, can be reclaimed)
         #[arg(long, default_value = "200000")]
         claimants_per_vault: usize,
 
-        /// Output SQLite database file
-        #[arg(long, default_value = "campaign.db")]
+        /// Output path for campaign database
+        #[arg(long)]
         campaign_db_out: PathBuf,
     },
 
@@ -207,14 +207,14 @@ fn main() -> CliResult<()> {
             max_amount_per_entitlement,
         ),
 
-        Commands::GenerateCampaign {
+        Commands::CompileCampaign {
             campaign_csv_in,
             cohorts_csv_in,
             mint,
             admin_keypair,
             claimants_per_vault,
             campaign_db_out,
-        } => commands::generate_campaign::execute(
+        } => commands::compile_campaign::execute(
             campaign_csv_in,
             cohorts_csv_in,
             mint,

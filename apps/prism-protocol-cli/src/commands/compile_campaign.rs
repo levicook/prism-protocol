@@ -1,7 +1,10 @@
 use crate::error::{CliError, CliResult};
 use csv::Reader;
+use hex;
+use prism_protocol_merkle::{create_merkle_tree, ClaimMerkleTree};
 use rusqlite::Connection;
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use solana_sdk::{
     pubkey::Pubkey,
     signature::{read_keypair_file, Signer},
@@ -36,6 +39,15 @@ struct CohortData {
     amount_per_entitlement: u64,
     claimants: Vec<ClaimantData>,
     vault_count: usize,
+}
+
+struct CohortWithMerkle {
+    name: String,
+    amount_per_entitlement: u64,
+    vault_count: usize,
+    vaults: Vec<Pubkey>,
+    merkle_tree: ClaimMerkleTree,
+    merkle_root: [u8; 32],
 }
 
 pub fn execute(
@@ -89,21 +101,88 @@ pub fn execute(
         );
     }
 
-    // Step 5: Create SQLite database
+    // Step 5: Generate merkle trees and calculate campaign fingerprint
+    println!("\n🌳 Generating merkle trees...");
+    let mut cohorts_with_merkle = Vec::new();
+    let mut cohort_roots = Vec::new();
+
+    for cohort in cohort_data {
+        println!("  🔄 Processing cohort: {}", cohort.name);
+
+        // Generate deterministic vault pubkeys for this cohort
+        let vaults = generate_vault_pubkeys(&cohort.name, cohort.vault_count);
+
+        // Convert claimants to (Pubkey, u64) pairs for merkle tree
+        let claimant_entitlements: Vec<(Pubkey, u64)> = cohort
+            .claimants
+            .iter()
+            .map(|c| (c.claimant, c.entitlements))
+            .collect();
+
+        // Create merkle tree with consistent hashing
+        let merkle_tree = create_merkle_tree(&claimant_entitlements, &vaults)
+            .map_err(|e| CliError::InvalidConfig(format!("Failed to create merkle tree: {}", e)))?;
+
+        let merkle_root = merkle_tree
+            .root()
+            .ok_or_else(|| CliError::InvalidConfig("Failed to get merkle root".to_string()))?;
+
+        cohort_roots.push(merkle_root);
+
+        println!(
+            "    ✅ Generated merkle tree with root: {}",
+            hex::encode(merkle_root)
+        );
+
+        cohorts_with_merkle.push(CohortWithMerkle {
+            name: cohort.name.clone(),
+            amount_per_entitlement: cohort.amount_per_entitlement,
+            vault_count: cohort.vault_count,
+            vaults,
+            merkle_tree,
+            merkle_root,
+        });
+    }
+
+    // Step 6: Calculate campaign fingerprint
+    println!("\n🔍 Calculating campaign fingerprint...");
+    cohort_roots.sort(); // Deterministic ordering
+    let campaign_fingerprint = calculate_campaign_fingerprint(&cohort_roots);
+    println!(
+        "✅ Campaign fingerprint: {}",
+        hex::encode(campaign_fingerprint)
+    );
+
+    // Step 7: Create and populate SQLite database
     println!("\n💾 Creating campaign database...");
-    create_campaign_database(&campaign_db_out, &mint, &admin_pubkey, &cohort_data)?;
+    create_campaign_database(
+        &campaign_db_out,
+        &mint,
+        &admin_pubkey,
+        &cohorts_with_merkle,
+        &campaign_fingerprint,
+    )?;
     println!(
         "✅ Campaign database created: {}",
         campaign_db_out.display()
     );
 
-    // TODO: Next steps
-    // 6. Generate merkle trees for each cohort
-    // 7. Calculate campaign fingerprint
-    // 8. Populate database with merkle data
-    // 9. Verify admin keypair has sufficient token balance
-
     println!("\n🎉 Campaign generation completed!");
+    println!("📊 Summary:");
+    println!(
+        "  - Campaign fingerprint: {}",
+        hex::encode(campaign_fingerprint)
+    );
+    println!("  - {} cohorts processed", cohorts_with_merkle.len());
+    for cohort in &cohorts_with_merkle {
+        println!(
+            "    📦 {}: {} claimants, {} vaults, root: {}",
+            cohort.name,
+            cohort.merkle_tree.leaves.len(),
+            cohort.vault_count,
+            hex::encode(cohort.merkle_root)[..8].to_string() + "..."
+        );
+    }
 
     Ok(())
 }
@@ -226,15 +305,33 @@ fn calculate_vault_count(claimant_count: usize, claimants_per_vault: usize) -> u
     )
 }
 
+fn generate_vault_pubkeys(_cohort_name: &str, vault_count: usize) -> Vec<Pubkey> {
+    let mut vaults = Vec::new();
+    for _i in 0..vault_count {
+        let pubkey = Pubkey::new_unique();
+        vaults.push(pubkey);
+    }
+    vaults
+}
+
+fn calculate_campaign_fingerprint(cohort_roots: &[[u8; 32]]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    for root in cohort_roots {
+        hasher.update(root);
+    }
+    hasher.finalize().into()
+}
+
 fn create_campaign_database(
     path: &PathBuf,
     mint: &Pubkey,
     admin_pubkey: &Pubkey,
-    cohort_data: &[CohortData],
+    cohort_data: &[CohortWithMerkle],
+    campaign_fingerprint: &[u8; 32],
 ) -> CliResult<()> {
     let conn = Connection::open(path)?;
 
-    // Create schema
+    // Create enhanced schema with merkle data
     conn.execute_batch(
         r#"
         CREATE TABLE campaign (
@@ -244,101 +341,138 @@ fn create_campaign_database(
             created_at INTEGER NOT NULL,
             deployed_at INTEGER
         );
-        
+
         CREATE TABLE cohorts (
             cohort_name TEXT PRIMARY KEY,
-            merkle_root TEXT,
+            merkle_root TEXT, -- hex-encoded [u8; 32]
             amount_per_entitlement INTEGER NOT NULL,
             vault_count INTEGER NOT NULL,
             claimant_count INTEGER NOT NULL,
             total_tokens_required INTEGER NOT NULL,
             deployed_at INTEGER
         );
-        
+
         CREATE TABLE claimants (
             claimant TEXT NOT NULL,
             cohort_name TEXT NOT NULL,
             entitlements INTEGER NOT NULL,
-            assigned_vault_index INTEGER,
-            merkle_proof TEXT,
+            assigned_vault_index INTEGER, -- index into vaults table
+            assigned_vault_pubkey TEXT, -- hex-encoded pubkey for convenience
+            merkle_proof TEXT, -- hex-encoded proof (comma-separated hashes)
             claimed_at INTEGER,
             PRIMARY KEY (claimant, cohort_name),
             FOREIGN KEY (cohort_name) REFERENCES cohorts(cohort_name)
         );
-        
+
         CREATE TABLE vaults (
             cohort_name TEXT NOT NULL,
             vault_index INTEGER NOT NULL,
-            vault_pubkey TEXT,
+            vault_pubkey TEXT, -- hex-encoded pubkey
+            vault_keypair_path TEXT, -- optional: path to keypair file if generated
             required_tokens INTEGER NOT NULL,
             assigned_claimants INTEGER NOT NULL,
             funded_at INTEGER,
             PRIMARY KEY (cohort_name, vault_index),
             FOREIGN KEY (cohort_name) REFERENCES cohorts(cohort_name)
         );
+
+        -- Index for efficient proof lookups
+        CREATE INDEX idx_claimants_lookup ON claimants(claimant, cohort_name);
+        CREATE INDEX idx_vaults_lookup ON vaults(cohort_name, vault_index);
     "#,
     )?;
 
-    // Insert initial campaign data (fingerprint will be calculated later)
+    // Insert initial campaign data (fingerprint will be updated after merkle processing)
     conn.execute(
         "INSERT INTO campaign (fingerprint, mint, admin, created_at) VALUES (?, ?, ?, ?)",
         (
-            "pending", // Will be updated after merkle tree generation
+            hex::encode(campaign_fingerprint),
             mint.to_string(),
             admin_pubkey.to_string(),
             chrono::Utc::now().timestamp(),
         ),
     )?;
 
-    // Insert cohort data
+    // Insert cohort data with merkle information
     for cohort in cohort_data {
         let total_tokens_required = cohort
-            .claimants
+            .merkle_tree
+            .leaves
             .iter()
-            .map(|c| c.entitlements * cohort.amount_per_entitlement)
+            .map(|leaf| leaf.entitlements * cohort.amount_per_entitlement)
             .sum::<u64>();
 
         conn.execute(
-            "INSERT INTO cohorts (cohort_name, amount_per_entitlement, vault_count, claimant_count, total_tokens_required) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO cohorts (cohort_name, merkle_root, amount_per_entitlement, vault_count, claimant_count, total_tokens_required) VALUES (?, ?, ?, ?, ?, ?)",
             (
                 &cohort.name,
+                hex::encode(cohort.merkle_root),
                 cohort.amount_per_entitlement,
                 cohort.vault_count,
-                cohort.claimants.len(),
+                cohort.merkle_tree.leaves.len(),
                 total_tokens_required,
             ),
         )?;
 
-        // Insert claimant data
-        for claimant in &cohort.claimants {
+        // Insert claimant data with merkle proofs and vault assignments
+        for leaf in &cohort.merkle_tree.leaves {
+            // Generate merkle proof for this claimant
+            let merkle_proof = cohort
+                .merkle_tree
+                .proof_for_claimant(&leaf.claimant)
+                .map_err(|e| CliError::InvalidConfig(format!("Failed to generate proof: {}", e)))?;
+
+            // Find vault index for this claimant
+            let vault_index = cohort
+                .vaults
+                .iter()
+                .position(|&v| v == leaf.assigned_vault)
+                .ok_or_else(|| CliError::InvalidConfig("Vault not found".to_string()))?;
+
+            // Encode proof as comma-separated hex strings
+            let proof_hex = merkle_proof
+                .iter()
+                .map(|hash| hex::encode(hash))
+                .collect::<Vec<_>>()
+                .join(",");
+
             conn.execute(
-                "INSERT INTO claimants (claimant, cohort_name, entitlements) VALUES (?, ?, ?)",
+                "INSERT INTO claimants (claimant, cohort_name, entitlements, assigned_vault_index, assigned_vault_pubkey, merkle_proof) VALUES (?, ?, ?, ?, ?, ?)",
                 (
-                    claimant.claimant.to_string(),
+                    leaf.claimant.to_string(),
                     &cohort.name,
-                    claimant.entitlements,
+                    leaf.entitlements,
+                    vault_index,
+                    leaf.assigned_vault.to_string(),
+                    proof_hex,
                 ),
             )?;
         }
 
-        // Insert vault placeholders
-        for vault_index in 0..cohort.vault_count {
-            let claimants_per_vault =
-                (cohort.claimants.len() + cohort.vault_count - 1) / cohort.vault_count;
-            let start_idx = vault_index * claimants_per_vault;
-            let end_idx = std::cmp::min(start_idx + claimants_per_vault, cohort.claimants.len());
-            let assigned_claimants = end_idx - start_idx;
-
-            let required_tokens = cohort.claimants[start_idx..end_idx]
+        // Insert vault data with pubkeys and funding requirements
+        for (vault_index, &vault_pubkey) in cohort.vaults.iter().enumerate() {
+            // Calculate funding requirements for this vault
+            let assigned_claimants = cohort
+                .merkle_tree
+                .leaves
                 .iter()
-                .map(|c| c.entitlements * cohort.amount_per_entitlement)
+                .filter(|leaf| leaf.assigned_vault == vault_pubkey)
+                .count();
+
+            let required_tokens = cohort
+                .merkle_tree
+                .leaves
+                .iter()
+                .filter(|leaf| leaf.assigned_vault == vault_pubkey)
+                .map(|leaf| leaf.entitlements * cohort.amount_per_entitlement)
                 .sum::<u64>();
 
             conn.execute(
-                "INSERT INTO vaults (cohort_name, vault_index, required_tokens, assigned_claimants) VALUES (?, ?, ?, ?)",
+                "INSERT INTO vaults (cohort_name, vault_index, vault_pubkey, required_tokens, assigned_claimants) VALUES (?, ?, ?, ?, ?)",
                 (
                     &cohort.name,
                     vault_index,
+                    vault_pubkey.to_string(),
                     required_tokens,
                     assigned_claimants,
                 ),

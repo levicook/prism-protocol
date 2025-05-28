@@ -113,15 +113,14 @@ cargo run -p prism-protocol-cli -- generate-fixtures \
   --cohorts-csv-out stress-cohorts.csv
 ```
 
-**Campaign Generation (Phase 1 - Available Now)**
+**Compile Campaign from CSV Files (Phase 1 - Available Now)**
 ```bash
-# Generate campaign database from CSV files
-cargo run -p prism-protocol-cli -- generate-campaign \
+# Compile campaign from CSV files
+cargo run -p prism-protocol-cli -- compile-campaign \
   --campaign-csv-in campaign.csv \
   --cohorts-csv-in cohorts.csv \
-  --mint So11111111111111111111111111111111111111112 \
-  --admin-keypair admin.json \
-  --claimants-per-vault 200000 \
+  --mint EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v \
+  --admin-keypair ~/.config/solana/id.json \
   --campaign-db-out campaign.db
 ```
 
@@ -166,6 +165,116 @@ prism-protocol campaign-status <campaign-fingerprint>
 - **Vault Count Calculation**: Automatically determines optimal vault distribution based on claimant counts
 - **Data Integrity**: Validates cohort consistency between input files
 
+## Testing & Development
+
+Prism Protocol includes a comprehensive test automation system for reliable development and validation.
+
+### Test Automation System
+
+The project uses a multi-layered testing approach with automated test orchestration:
+
+```bash
+# Quick development feedback
+make smoke-test     # Fast smoke tests (30 seconds)
+make dev-test       # Clean + CLI tests (1 minute)
+
+# Comprehensive testing
+make test-unit      # All unit tests across workspace
+make test-cli       # CLI integration tests with real command execution
+make test-anchor    # Anchor on-chain program tests
+make test-integration # Full integration tests with Mollusk SVM
+make test-all       # Everything (unit + CLI + anchor + integration)
+
+# Performance analysis
+make test-performance # Benchmarks with 1K-100K datasets
+
+# Utilities
+make clean-test     # Clean all test artifacts
+make help          # Show all available test commands
+```
+
+### CLI Integration Testing
+
+The CLI test suite (`scripts/test-cli.sh`) provides comprehensive validation:
+
+**Features:**
+- ✅ **Real CLI execution** - Actually runs `cargo run -p prism-protocol-cli` commands
+- ✅ **Comprehensive assertions** - File existence, content validation, database checks
+- ✅ **Error handling tests** - Ensures commands fail appropriately with bad inputs
+- ✅ **Deterministic behavior** - Validates same seed produces identical results
+- ✅ **Database validation** - Uses `sqlite3` to verify database structure and content
+- ✅ **Automatic cleanup** - No test artifacts left behind
+
+**Test Coverage:**
+```bash
+# Tests all these scenarios:
+- CLI help commands work correctly
+- Fixture generation (multiple distributions, sizes, cohorts)
+- Campaign compilation (CSV → SQLite database with merkle trees)
+- Error handling (missing files, invalid inputs)
+- Deterministic behavior (same seed = same output)
+- Database content validation (table structure, record counts, merkle data)
+```
+
+### Performance Testing
+
+The performance test suite (`scripts/test-performance.sh`) provides benchmarking:
+
+- **Fixture generation**: 1K → 100K claimants with throughput measurements
+- **Campaign compilation**: 1K → 10K claimants with timing and memory usage
+- **Database size analysis**: Tracks storage requirements as datasets scale
+- **Memory profiling**: Uses GNU `time` for detailed memory usage analysis
+- **Performance reports**: Generates detailed reports with optimization recommendations
+
+### Test Artifacts Management
+
+All test files are automatically organized and cleaned up:
+
+```
+test-artifacts/
+├── cli-tests/           # CLI integration test artifacts
+│   ├── test-admin.json  # Test keypair for CLI tests
+│   ├── *.csv           # Generated fixture files
+│   ├── *.db            # Compiled campaign databases
+│   └── test-*.csv      # Test-specific fixture files
+└── performance-tests/   # Performance benchmark artifacts
+    ├── test-admin.json  # Test keypair for performance tests
+    ├── perf-*.csv      # Performance test fixtures
+    ├── perf-*.db       # Performance test databases
+    └── performance-report.txt # Performance analysis reports
+```
+
+**Automatic Management:**
+- **Created by**: Test scripts automatically create subdirectories as needed
+- **Cleaned by**: `make clean-test` removes the entire directory
+- **Git ignored**: All contents are ignored by git (see `.gitignore`)
+
+### Development Workflow
+
+**Quick Development Cycle:**
+```bash
+# Make changes to CLI code
+make smoke-test     # Quick validation (30s)
+make dev-test       # Full CLI test cycle (1-2 min)
+```
+
+**Pre-commit Validation:**
+```bash
+make test-all       # Complete test suite
+```
+
+**Performance Baseline:**
+```bash
+make test-performance  # Establish performance benchmarks
+```
+
+### Test Dependencies
+
+The test system automatically handles dependencies but requires:
+- **Solana CLI** - For keypair generation and validation
+- **SQLite3** - For database content validation (optional, tests skip if unavailable)
+- **bc** - For performance calculations (auto-installed on supported systems)
+
 **Key Processes:**
 
 1.  **Setup & Funding (Operator using `prism-cli`):**
@@ -185,103 +294,4 @@ prism-protocol campaign-status <campaign-fingerprint>
         -   Derives and verifies the `Campaign` PDA using `campaign_fingerprint`.
         -   Derives and verifies the `Cohort` PDA using the `Campaign` key and `cohort_merkle_root`.
         -   Verifies the Merkle proof against the `Cohort`'s `merkle_root`.
-        -   Initializes a `ClaimReceipt` PDA to prevent replays.
-        -   If valid, transfers tokens from the `assigned_vault` (owned by the `Campaign` PDA) to the claimant.
-
-**Handling Common Operational Scenarios:**
-
-Due to the immutable nature of on-chain `Campaign` instances:
-
--   **Adding a new distribution/cohort to a logical campaign (e.g., "Wave 2")?**
-    -   You define this new cohort. The `prism-cli` generates its Merkle root. This changes the overall set of cohort roots, so the CLI calculates a *new* `campaign_fingerprint`. A new `Campaign` PDA must be initialized on-chain. Users will interact with this new `Campaign` PDA for claims from this new cohort.
--   **Modifying an existing cohort (e.g., correcting amounts, adding users)?**
-    -   This requires generating a new Merkle root for that cohort. This, too, results in a new `campaign_fingerprint` and requires initializing a new `Campaign` PDA instance.
-
-**Administrative Operations:**
-
--   **Pausing/Unpausing a Campaign Instance:** The campaign authority can call an instruction (`set_campaign_active_status`) to toggle the `is_active` flag on a specific `Campaign` PDA (identified by its `campaign_fingerprint`), effectively pausing or unpausing claims for all its cohorts.
--   **Withdrawing Unclaimed Funds:** After a distribution period, the campaign authority can initiate withdrawal of remaining tokens from the vaults associated with a campaign instance. (Specific instruction TBD, e.g., `withdraw_from_vault`).
-
-**Security Considerations:**
-
-- **Proof Verification:** Robust Merkle proof verification is central to the system.
-- **Replay Prevention:** The contract must ensure that each valid leaf in a Merkle tree can only be claimed once.
-- **Ownership & Access Control:**
-  - Only authorized administrators (e.g., the Distributor) can register new Merkle roots or manage campaign parameters.
-  - Mechanisms for pausing/unpausing claims, or for recovering unclaimed tokens after a distribution period ends, will be access-controlled.
-- **Data Availability:** While proofs are verified on-chain, the full Merkle tree data (and individual proofs) must be made available off-chain by the Distributor. The integrity of this off-chain data is crucial.
-
-## 3. General Implementation
-
-This section outlines the proposed technical implementation details for the Prism Protocol.
-
-**Technology Stack (Illustrative - e.g., Solana Ecosystem):**
-
-- **Blockchain:** Solana (chosen for its high throughput and low transaction fees, ideal for minimizing contention).
-- **Smart Contract Language:** Rust (using the Anchor framework for rapid development and security).
-- **Off-Chain Services:** Node.js/TypeScript or Python for Merkle tree generation, proof serving API, and potentially a reference UI.
-- **Client-Side Libraries:** JavaScript/TypeScript for easy integration into dApp frontends.
-
-**On-Chain Program (Prism Protocol):**
-
-The core on-chain program will manage distributions.
-
-- **Key Accounts & State (Simplified Overview):**
-  - `Campaign` Account (PDA seeded by `[b"campaign", campaign_fingerprint.as_ref()]`):
-    - `authority`: Pubkey of the campaign administrator.
-    - `mint`: Pubkey of the SPL token being distributed.
-    - `campaign_fingerprint`: The `[u8; 32]` hash derived from all its cohort roots.
-    - `is_active`: Boolean flag to pause/unpause claims for this entire campaign instance.
-    - `bump`: PDA bump seed.
-  - `Cohort` Account (PDA seeded by `[b"cohort", campaign_pda.key().as_ref(), cohort_merkle_root.as_ref()]`):
-    - `campaign`: Pubkey of the parent `Campaign` PDA.
-    - `merkle_root`: The `[u8; 32]` Merkle root for this specific cohort's distribution.
-    - `reward_per_entitlement`: u64 amount per entitlement.
-    - `vaults`: `Vec<Pubkey>` of SPL Token Accounts holding tokens for this cohort, delegated to the `Campaign` PDA.
-    - `bump`: PDA bump seed.
-  - `ClaimReceipt` Account (PDA seeded by `[b"claim_receipt", cohort_pda.key().as_ref(), claimant.key().as_ref()]`):
-    - Stores details of a claim to prevent replays.
-
-- **Key Instructions (Functions - Simplified Overview):**
-  - `initialize_campaign(ctx, campaign_fingerprint, mint)`: Creates `Campaign` PDA. Admin only.
-  - `initialize_cohort(ctx, campaign_fingerprint, cohort_merkle_root, reward_per_entitlement, vaults)`: Creates `Cohort` PDA. Admin only.
-  - `claim_reward(ctx, campaign_fingerprint, cohort_merkle_root, merkle_proof, assigned_vault, entitlements)`: Allows users to claim tokens.
-  - `set_campaign_active_status(ctx, campaign_fingerprint, is_active)`: Admin toggles campaign activity.
-  - *(Future)* `withdraw_unclaimed_funds(...)`: Admin recovers funds.
-
-**Developer Tutorials & SDK:**
-
-- **Tutorials:**
-  - Setting up a new distribution campaign instance (using `prism-cli` to generate cohort roots, the `campaign_fingerprint`, funding vaults, deploying on-chain).
-- **Client SDK (JavaScript/TypeScript):**
-  - `getClaimantInfo(apiUrl, campaignId, claimantAddress)`: Fetches amount and proof from the Distributor's hosted service.
-  - `buildClaimTransaction(program, distributionConfigPubkey, claimantPubkey, amount, proof)`: Constructs the Solana transaction for the `claim_tokens` instruction.
-  - Helper functions for Merkle tree generation and verification (can be used by Distributors or for testing).
-
-**Future Considerations:**
-
-- **Vesting:** Integrate with existing Solana vesting contracts or add vesting logic directly.
-- **Multi-Token Vaults:** Allow a single `DistributionConfig` to pull from different vaults if needed (adds complexity).
-- **Batch Claims:** For users eligible in multiple small distributions, explore ways to batch claims.
-- **Fee-payer abstraction (e.g., sponsored transactions).**
-- **NFT Airdrops:** Adapt the leaf structure and claim logic to support SPL Non-Fungible Tokens.
-
-## 4. License
-
-Prism Protocol is licensed under the GNU General Public License v3.0.
-
-Copyright (C) 2025 team@tokamai.com
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
-The full license text can be found in the `LICENSE` file in the root directory of this source tree.
+        -   Initializes a `ClaimReceipt` PDA for the claimant.

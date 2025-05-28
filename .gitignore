@@ -7,3 +7,10 @@
 node_modules
 target
 test-ledger
+
+# Test artifacts and temporary files
+test-artifacts/
+perf-test-artifacts/
+*.tmp
+test-*.csv
+test-*.db
