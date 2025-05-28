@@ -1,8 +1,12 @@
 # Prism Protocol: Campaign Setup Guide for Operators (Highly Automated)
 
-> **📋 IMPLEMENTATION STATUS:** This guide describes the planned `prism-cli` tool which has **NOT YET BEEN IMPLEMENTED**. The core on-chain program is complete and functional, but the CLI automation described here is part of future development. For now, campaign setup must be done manually using the SDK utilities in `prism-protocol-sdk`.
+> **📋 IMPLEMENTATION STATUS:**
+>
+> - **✅ Phase 1 (Campaign Compilation): COMPLETED** - The `compile-campaign` command is fully implemented with complete merkle tree integration, campaign fingerprint calculation, and SQLite database output.
+> - **🚧 Phase 2 (On-Chain Deployment): IN PROGRESS** - Transaction building and deployment commands are planned for future development.
+> - **📋 Phase 3+ (Campaign Management): PLANNED** - Administrative operations for live campaigns.
 
-This guide walks you through the highly automated process of setting up and launching a token distribution campaign using the Prism Protocol. The `prism-cli` handles most of the heavy lifting.
+This guide walks you through the process of setting up and launching a token distribution campaign using the Prism Protocol. The CLI tool handles campaign compilation and will eventually support full deployment automation.
 
 **Core Principle: On-Chain Immutability via Merkle Identifiers**
 
@@ -12,7 +16,7 @@ Prism Protocol enforces strong immutability for its on-chain records. A Campaign
 
 - **Campaign Immutability (`campaign_fingerprint`):** A `Campaign` PDA is uniquely identified on-chain by a `campaign_fingerprint`. This identifier is a cryptographic hash derived from the Merkle roots of _all_ its constituent Cohorts. This means a `Campaign` PDA inherently represents a specific, immutable collection of Cohort distributions.
 
-  - **Generation:** The `prism-cli` will first calculate the `merkle_root` for every cohort you define. Then, it will deterministically combine these cohort Merkle roots (e.g., by sorting them, concatenating, and hashing) to produce the single `campaign_fingerprint`.
+  - **Generation:** The `prism-protocol-cli` will first calculate the `merkle_root` for every cohort you define. Then, it will deterministically combine these cohort Merkle roots (e.g., by sorting them, concatenating, and hashing) to produce the single `campaign_fingerprint`.
   - This `campaign_fingerprint` is then used as a seed to create the unique `Campaign` PDA.
 
 - **Handling Changes/Updates/New Waves:**
@@ -22,101 +26,136 @@ Prism Protocol enforces strong immutability for its on-chain records. A Campaign
 
 This model ensures maximum transparency and verifiability. The primary on-chain control after launch is the `is_active` flag on a `Campaign` PDA (acting as an on/off switch for all its cohorts) and the eventual ability to withdraw unclaimed funds.
 
-## Phase 1: Campaign & Cohort Definition (Off-Chain)
+## Phase 1: Campaign & Cohort Definition (CSV Files)
 
-Your main focus is defining the campaign's overall parameters, the token to be distributed, and the recipient lists for each distinct cohort.
+Your main focus is defining the campaign's claimants and cohort parameters using CSV files that the CLI can process.
 
-1.  **Define Overall Campaign Parameters (Conceptual):**
+1.  **Prepare Campaign Claimants CSV:**
 
-    - **Campaign Name (for CLI & organization, e.g., `campaign_name_metadata`):** A human-readable name for your overall distribution effort (e.g., "PROJECT_ALPHA_Q1_REWARDS"). This is for your reference and for naming CLI output files. It is **not** stored directly on the `Campaign` PDA as its primary identifier.
-    - **Token Mint (`mint`):** The Pubkey of the single SPL token you will be distributing. This is a **required** top-level parameter for the `prism-cli` and will be stored on the `Campaign` PDA.
-    - **Authority Keypair:** The keypair that will pay for transactions and be set as the `authority` on the `Campaign` PDA (allowing actions like toggling `is_active`).
-    - **(Optional) Claim Deadline (`claim_deadline_timestamp`):** A global deadline.
-    - **(Optional) Max Claimants Per Vault (`max_claimants_per_vault`):** A hint for vault calculation.
+    - Create a CSV file with claimant information:
+      - `cohort`: The cohort name this claimant belongs to
+      - `claimant`: The Solana public key of each claimant
+      - `entitlements`: Number of entitlements this claimant can claim
 
-2.  **Define Individual Cohorts & Compile Claimant Lists:**
+2.  **Prepare Cohorts Configuration CSV:**
 
-    - For each distinct distribution group (cohort) you want within this campaign instance:
-      - **Cohort Name (for CLI & organization, e.g., `cohort_name_metadata`):** A human-readable name for this specific cohort (e.g., "EarlyContributors", "NFT Holders Tier1"). This is for your reference and for CLI output. It is **not** stored on the `Cohort` PDA.
-      - **Reward Amount (`reward_per_entitlement`):** The fixed amount of the `mint` tokens per entitlement.
-      - **Claimant List File:** As previously described (CSV with pubkeys, or pubkeys + entitlement counts).
+    - Create a CSV file defining each cohort:
+      - `cohort`: Unique cohort identifier (matches campaign CSV)
+      - `amount_per_entitlement`: Token amount per entitlement (in base units)
 
-3.  **Prepare the Campaign Configuration File (`campaign_config.yaml`):**
+3.  **Prepare Admin Keypair:**
+    - Ensure you have the authority keypair that will control the campaign
+    - This keypair will pay for transactions and be set as the campaign authority
 
-    - This file instructs the `prism-cli`.
-    - **Example `campaign_config.yaml` structure:**
+## Phase 2: Execute CLI Campaign Compilation – Generate Merkle Trees, Campaign Fingerprint, & Database
 
-    ```yaml
-    campaign_name_metadata: "PROJECT_ALPHA_Q1_REWARDS" # For your reference & CLI output
-    mint: "YourSplTokenMintPubkey..." # Required
-    authority_keypair_path: "/path/to/your_authority_keypair.json" # Path to the authority keypair
-    # claim_deadline_timestamp: "2025-03-31T23:59:59Z" # Optional
-    # max_claimants_per_vault: 10000 # Optional global override
+The `compile-campaign` command processes your campaign configuration and generates all necessary data structures for deployment.
 
-    cohort_definitions:
-      - cohort_name_metadata: "CORE_CONTRIBUTORS"
-        reward_per_entitlement: 1000000000
-        claimants_file: "./claimants/core_contributors.csv"
-        # number_of_vaults_to_use: 5 # Optional
+1.  **Prepare Your Input Files:**
 
-      - cohort_name_metadata: "COMMUNITY_MVPS"
-        reward_per_entitlement: 250000000
-        claimants_file: "./claimants/community_mvps.csv"
+    - **Campaign CSV (`campaign.csv`):** Contains claimant information with columns:
+
+      ```csv
+      cohort,claimant,entitlements
+      early_contributors,7BgBvyjrZX8YKHGoW9Y8929nsq6TsQANzvsGVEpVLUD8,5
+      community_mvps,9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM,2
+      ```
+
+    - **Cohorts CSV (`cohorts.csv`):** Defines cohort parameters:
+      ```csv
+      cohort,amount_per_entitlement
+      early_contributors,1000000000
+      community_mvps,250000000
+      ```
+
+2.  **Run Campaign Compilation:**
+
+    ```bash
+    cargo run -p prism-protocol-cli -- compile-campaign \
+        --campaign-csv campaign.csv \
+        --cohorts-csv cohorts.csv \
+        --mint YourSplTokenMintPubkey... \
+        --admin-keypair /path/to/your_authority_keypair.json
     ```
 
-## Phase 2: Execute `prism-cli` – Generate Merkle Trees, Campaign Identifier, & Action Plan
+3.  **CLI Actions (Fully Automated):**
 
-The `prism-cli` performs several critical steps:
+    - Validates input CSV files and admin keypair
+    - **For each cohort:**
+      - Processes claimant lists and calculates entitlements
+      - Assigns claimants to vaults using consistent hashing
+      - Generates merkle tree and calculates `merkle_root`
+      - Generates individual merkle proofs for all claimants
+      - Calculates exact token funding requirements
+    - **Calculates `campaign_fingerprint`:**
+      - Collects all cohort `merkle_root`s
+      - Sorts roots deterministically
+      - Hashes sorted roots to produce unique campaign identifier
+    - **Generates SQLite Database:** Contains complete campaign structure with:
+      - Campaign metadata and fingerprint
+      - Cohort definitions with merkle roots
+      - Claimant records with proofs and vault assignments
+      - Vault funding requirements
 
-1.  **Run `prism-cli`:**
+4.  **Review CLI Output:**
+    - **Database File:** `campaign_<fingerprint>.db` with complete campaign data
+    - **Campaign Fingerprint:** Unique identifier for on-chain deployment
+    - **Funding Summary:** Exact token amounts needed per vault
+    - **Validation Results:** Confirmation of data integrity and consistency
 
-    - `prism-cli process-campaign campaign_config.yaml`
+## Phase 3: On-Chain Deployment (Future Implementation)
 
-2.  **CLI Actions (Fully Automated):**
+> **🚧 IN PROGRESS:** The following deployment commands are planned but not yet implemented. For now, use the generated database and SDK utilities for manual deployment.
 
-    - Parses `campaign_config.yaml`.
-    - **For each cohort defined in `cohort_definitions`:**
-      - Processes the claimant list file, determines `count_of_entitlements`.
-      - Calculates necessary vaults and assigns claimants consistently.
-      - Generates the Merkle tree, yielding a unique `merkle_root` for this cohort.
-      - Calculates token funding needs for this cohort.
-      - Generates Merkle proofs for each claimant in this cohort.
-    - **Calculate `campaign_fingerprint`:**
-      - Collects all individual cohort `merkle_root`s generated above.
-      - Sorts these roots (e.g., lexicographically).
-      - Concatenates the sorted roots.
-      - Hashes the concatenated string (e.g., SHA256) to produce the single, unique `campaign_fingerprint` ([u8; 32]). This identifier represents this entire, specific set of cohort distributions.
+1.  **Fund Vaults & Delegate Authority:**
 
-3.  **Review `prism-cli` Output (The "Action Plan & Report"):**
-    - The CLI provides:
-      - **`campaign_fingerprint`**: The calculated [u8; 32] hash. This is crucial for on-chain initialization.
-      - **On-Chain Initialization Parameters:**
-        - For `initialize_campaign`: The `campaign_fingerprint`, `mint`.
-        - For each `initialize_cohort`: The `campaign_fingerprint` (to find parent Campaign PDA), its specific cohort `merkle_root`, `reward_per_entitlement`, `vault_pubkeys`.
-      - **Vault Operations Report, SPL Token Commands, Lookup Files:** (Similar to before, but lookup files might be organized under a directory named after `campaign_name_metadata` or the `campaign_fingerprint` stringified).
+    - Use the funding requirements from the database to fund token vaults
+    - Delegate authority to the campaign admin keypair
 
-## Phase 3: Fund Vaults, Delegate Authority, & Initialize On-Chain
+2.  **Deploy Campaign & Cohorts On-Chain:**
+    - **Planned Commands:**
 
-1.  **Fund Vaults & Delegate Authority:** (As before, guided by CLI output).
+      ```bash
+      # Deploy campaign
+      cargo run -p prism-protocol-cli -- deploy-campaign \
+          --database campaign_<fingerprint>.db \
+          --admin-keypair /path/to/admin.json
 
-2.  **Initialize Campaign & Cohorts On-Chain:**
-    - **Understanding On-Chain Identifiers:**
-      - The `Campaign` PDA will be uniquely identified on-chain by the `campaign_fingerprint` (and program ID). This is the `seeds = [b"campaign", campaign_fingerprint.as_ref()]`.
-      - Each `Cohort` PDA will be uniquely identified by its parent `Campaign` PDA's key and its own specific `merkle_root`. (`seeds = [b"cohort", campaign_pda.key().as_ref(), cohort_merkle_root.as_ref()]`).
-    - **Execution (Manual or CLI-assisted):**
-      - Call `initialize_campaign` with the `campaign_fingerprint` and `mint` (signed by authority).
-      - For each cohort: Call `initialize_cohort` with the `campaign_fingerprint`, its cohort `merkle_root`, `reward_per_entitlement`, and `vaults` (signed by authority).
+      # Deploy individual cohorts
+      cargo run -p prism-protocol-cli -- deploy-cohort \
+          --database campaign_<fingerprint>.db \
+          --cohort early_contributors \
+          --admin-keypair /path/to/admin.json
+      ```
+
+    - **On-Chain Operations:**
+      - Initialize `Campaign` PDA with fingerprint and mint
+      - Initialize each `Cohort` PDA with merkle root and parameters
+      - Validate vault funding and authority delegation
 
 ## Phase 4: Distribute Lookup Information & Go Live
 
-1.  **Host Lookup Files:** (As before).
+1.  **Host Lookup Database:**
+
+    - The generated SQLite database contains all necessary claimant information
+    - Host the database or create an API that queries it for claimant data
+    - Database contains: campaign fingerprint, cohort merkle roots, claimant proofs, vault assignments
+
 2.  **Integrate Lookup Mechanism into dApp:**
-    - The dApp needs the `campaign_fingerprint` of the target campaign instance.
-    - For a user, the dApp queries lookup data. For each eligible cohort, it retrieves: cohort `merkle_root`, Merkle proof, `assigned_vault_pubkey`, `count_of_entitlements`.
-    - The dApp constructs `claim_reward` transaction with: `campaign_fingerprint`, cohort `merkle_root`, proof, vault, entitlements.
+    - The dApp needs the `campaign_fingerprint` of the target campaign
+    - For a user, the dApp queries the database for:
+      - Eligible cohorts and entitlements
+      - Merkle proofs for each cohort
+      - Assigned vault public keys
+    - The dApp constructs `claim_tokens_v0` transactions with the retrieved data
 
-## Phase 5: Post-Campaign Management (Optional)
+## Phase 5: Post-Campaign Management (Future Implementation)
 
-(As before: monitor, withdraw, close accounts).
+> **📋 PLANNED:** Administrative operations for live campaigns.
+
+- Monitor campaign status and claim activity
+- Pause/resume campaigns as needed
+- Withdraw unclaimed tokens after distribution periods
+- Close accounts and reclaim rent
 
 This revised model provides extremely strong on-chain guarantees about the immutability and verifiability of each campaign instance.

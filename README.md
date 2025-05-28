@@ -8,9 +8,9 @@ Prism Protocol aims to solve the challenge of distributing tokens to a large aud
 
 Prism Protocol is built on the principle of strong on-chain immutability and verifiability. Each token distribution campaign instance deployed through Prism is cryptographically tied to its exact parameters, including the specific set of recipients and their entitlements for each cohort.
 
--   **Campaign Merkle Identifier:** The cornerstone of this immutability is the `campaign_fingerprint`. This unique identifier for a `Campaign` PDA is a cryptographic hash derived from the Merkle roots of *all* its constituent cohorts. 
--   **Immutable Record:** Once a `Campaign` PDA is initialized on-chain with its `campaign_fingerprint`, it represents a fixed and unalterable set of distribution rules for that specific token mint. The set of cohorts and their respective Merkle trees are locked in.
--   **No In-Place Modifications:** The Prism Protocol does not support in-place modification of active or past distribution parameters within an existing `Campaign` PDA. Any change—such as altering recipient lists, amounts, or adding new cohorts—requires generating new Merkle roots. This, in turn, results in a new `campaign_fingerprint` and thus the deployment of a *new, distinct* `Campaign` PDA instance on-chain. 
+- **Campaign Merkle Identifier:** The cornerstone of this immutability is the `campaign_fingerprint`. This unique identifier for a `Campaign` PDA is a cryptographic hash derived from the Merkle roots of _all_ its constituent cohorts.
+- **Immutable Record:** Once a `Campaign` PDA is initialized on-chain with its `campaign_fingerprint`, it represents a fixed and unalterable set of distribution rules for that specific token mint. The set of cohorts and their respective Merkle trees are locked in.
+- **No In-Place Modifications:** The Prism Protocol does not support in-place modification of active or past distribution parameters within an existing `Campaign` PDA. Any change—such as altering recipient lists, amounts, or adding new cohorts—requires generating new Merkle roots. This, in turn, results in a new `campaign_fingerprint` and thus the deployment of a _new, distinct_ `Campaign` PDA instance on-chain.
 
 This approach ensures maximum transparency, auditability, and predictability for every deployed distribution.
 
@@ -34,34 +34,37 @@ The Prism Protocol is designed with modularity and security in mind, facilitatin
 
 **Core Components:**
 
--   **Token Vaults:** Secure, on-chain SPL token accounts holding the tokens for distribution. These are funded by the campaign operator and delegated to the `Campaign` PDA for transfers during claims.
--   **Prism On-Chain Program:** The primary smart contract responsible for:
-    -   Managing `Campaign` PDAs, each uniquely identified by its `campaign_fingerprint`.
-    -   Managing `Cohort` PDAs under each `Campaign`, each uniquely identified by the parent `Campaign`'s key and the `Cohort`'s own `merkle_root`.
-    -   Verifying Merkle proofs submitted by claimants against the appropriate `Cohort`'s `merkle_root`.
-    -   Authorizing token transfers from the designated `Token Vaults` to eligible claimants.
-    -   Recording `ClaimReceipt` PDAs to prevent duplicate claims.
--   **Prism CLI (`prism-cli`):** An off-chain utility that campaign operators use to:
-    -   Process claimant lists for each cohort.
-    -   Generate a Merkle tree (and its `merkle_root`) for each cohort.
-    -   Deterministically calculate the overall `campaign_fingerprint` from all cohort Merkle roots.
-    -   Output all parameters needed for on-chain `Campaign` and `Cohort` initialization.
-    -   Generate Merkle proofs for each claimant for frontend/dApp use.
+- **Token Vaults:** Secure, on-chain SPL token accounts holding the tokens for distribution. These are funded by the campaign operator and delegated to the `Campaign` PDA for transfers during claims.
+- **Prism On-Chain Program:** The primary smart contract responsible for:
+  - Managing `Campaign` PDAs, each uniquely identified by its `campaign_fingerprint`.
+  - Managing `Cohort` PDAs under each `Campaign`, each uniquely identified by the parent `Campaign`'s key and the `Cohort`'s own `merkle_root`.
+  - Verifying Merkle proofs submitted by claimants against the appropriate `Cohort`'s `merkle_root`.
+  - Authorizing token transfers from the designated `Token Vaults` to eligible claimants.
+  - Recording `ClaimReceipt` PDAs to prevent duplicate claims.
+- **Prism CLI (`prism-protocol-cli`):** An off-chain utility that campaign operators use to:
+  - Process claimant lists for each cohort.
+  - Generate a Merkle tree (and its `merkle_root`) for each cohort.
+  - Deterministically calculate the overall `campaign_fingerprint` from all cohort Merkle roots.
+  - Output all parameters needed for on-chain `Campaign` and `Cohort` initialization.
+  - Generate Merkle proofs for each claimant for frontend/dApp use.
 
 ### Modular Crate Architecture
 
 Prism Protocol is organized into separate, focused crates for better maintainability and reusability:
 
 **Core Crates:**
+
 - **`prism-protocol`** - The minimal on-chain program containing only essential smart contract logic
 - **`prism-protocol-sdk`** - Client-side utilities for building transactions and deriving addresses
 - **`prism-protocol-merkle`** - Off-chain Merkle tree construction, proof generation, and verification utilities
 - **`prism-protocol-testing`** - Shared testing utilities and fixtures for comprehensive test coverage
 
 **Applications:**
-- **`prism-cli`** - Command-line tool for campaign operators (planned implementation)
+
+- **`prism-protocol-cli`** - Command-line tool for campaign operators
 
 This modular design ensures:
+
 - **Clean separation of concerns** between on-chain and off-chain functionality
 - **Minimal on-chain program size** for efficient deployment and execution
 - **Reusable components** that can be integrated into various client applications
@@ -84,6 +87,7 @@ cargo run -p prism-protocol-cli -- <COMMAND>
 #### Available Commands
 
 **Generate Test Fixtures (Phase 0 - Available Now)**
+
 ```bash
 # Generate 1,000 test claimants with realistic distribution across 3 cohorts
 cargo run -p prism-protocol-cli -- generate-fixtures \
@@ -114,6 +118,7 @@ cargo run -p prism-protocol-cli -- generate-fixtures \
 ```
 
 **Compile Campaign from CSV Files (Phase 1 - Available Now)**
+
 ```bash
 # Compile campaign from CSV files
 cargo run -p prism-protocol-cli -- compile-campaign \
@@ -125,6 +130,7 @@ cargo run -p prism-protocol-cli -- compile-campaign \
 ```
 
 **Campaign Management (Planned - Phase 2+)**
+
 ```bash
 # Deploy campaign on-chain
 prism-protocol deploy-campaign --config campaign-config.yaml --admin-keypair admin.json
@@ -144,7 +150,7 @@ prism-protocol campaign-status <campaign-fingerprint>
 #### Fixture Generation Features
 
 - **Deterministic Generation**: Same seed produces identical results for reproducible benchmarks
-- **Multiple Distributions**: 
+- **Multiple Distributions**:
   - `uniform` - Even distribution across entitlement range
   - `realistic` - Weighted towards lower values (more realistic user behavior)
   - `exponential` - Exponential decay distribution
@@ -198,6 +204,7 @@ make help          # Show all available test commands
 The CLI test suite (`scripts/test-cli.sh`) provides comprehensive validation:
 
 **Features:**
+
 - ✅ **Real CLI execution** - Actually runs `cargo run -p prism-protocol-cli` commands
 - ✅ **Comprehensive assertions** - File existence, content validation, database checks
 - ✅ **Error handling tests** - Ensures commands fail appropriately with bad inputs
@@ -206,6 +213,7 @@ The CLI test suite (`scripts/test-cli.sh`) provides comprehensive validation:
 - ✅ **Automatic cleanup** - No test artifacts left behind
 
 **Test Coverage:**
+
 ```bash
 # Tests all these scenarios:
 - CLI help commands work correctly
@@ -245,6 +253,7 @@ test-artifacts/
 ```
 
 **Automatic Management:**
+
 - **Created by**: Test scripts automatically create subdirectories as needed
 - **Cleaned by**: `make clean-test` removes the entire directory
 - **Git ignored**: All contents are ignored by git (see `.gitignore`)
@@ -252,6 +261,7 @@ test-artifacts/
 ### Development Workflow
 
 **Quick Development Cycle:**
+
 ```bash
 # Make changes to CLI code
 make smoke-test     # Quick validation (30s)
@@ -259,11 +269,13 @@ make dev-test       # Full CLI test cycle (1-2 min)
 ```
 
 **Pre-commit Validation:**
+
 ```bash
 make test-all       # Complete test suite
 ```
 
 **Performance Baseline:**
+
 ```bash
 make test-performance  # Establish performance benchmarks
 ```
@@ -271,27 +283,29 @@ make test-performance  # Establish performance benchmarks
 ### Test Dependencies
 
 The test system automatically handles dependencies but requires:
+
 - **Solana CLI** - For keypair generation and validation
 - **SQLite3** - For database content validation (optional, tests skip if unavailable)
 - **bc** - For performance calculations (auto-installed on supported systems)
 
 **Key Processes:**
 
-1.  **Setup & Funding (Operator using `prism-cli`):**
-    -   The operator defines campaign parameters (e.g., a descriptive name for off-chain use, the SPL token mint) and details for each cohort (claimant lists, reward per entitlement) in a configuration file.
-    -   The `prism-cli` processes this configuration:
-        1.  For each defined cohort, it generates a list of `ClaimLeaf` data (claimant, assigned vault, entitlements) and computes its unique `merkle_root`.
-        2.  After all cohort Merkle roots are determined, the CLI sorts these roots, concatenates them, and hashes the result to produce the single `campaign_fingerprint`.
-    -   The CLI outputs the `campaign_fingerprint`, individual cohort `merkle_root`s, and other data needed for on-chain transactions.
-    -   The operator funds the necessary Token Vaults and delegates their authority to the (future) `Campaign` PDA (whose address can be pre-calculated from the `campaign_fingerprint`).
-    -   The operator submits transactions to initialize the `Campaign` PDA (using `campaign_fingerprint`) and then each `Cohort` PDA (using the `Campaign` PDA's key and the cohort's `merkle_root`).
+1.  **Setup & Funding (Operator using `prism-protocol-cli`):**
+
+    - The operator defines campaign parameters (e.g., a descriptive name for off-chain use, the SPL token mint) and details for each cohort (claimant lists, reward per entitlement) in a configuration file.
+    - The `prism-protocol-cli` processes this configuration:
+      1.  For each defined cohort, it generates a list of `ClaimLeaf` data (claimant, assigned vault, entitlements) and computes its unique `merkle_root`.
+      2.  After all cohort Merkle roots are determined, the CLI sorts these roots, concatenates them, and hashes the result to produce the single `campaign_fingerprint`.
+    - The CLI outputs the `campaign_fingerprint`, individual cohort `merkle_root`s, and other data needed for on-chain transactions.
+    - The operator funds the necessary Token Vaults and delegates their authority to the (future) `Campaign` PDA (whose address can be pre-calculated from the `campaign_fingerprint`).
+    - The operator submits transactions to initialize the `Campaign` PDA (using `campaign_fingerprint`) and then each `Cohort` PDA (using the `Campaign` PDA's key and the cohort's `merkle_root`).
 
 2.  **Claiming Process (User via dApp):**
-    -   A Claimant connects to a dApp integrated with Prism.
-    -   The dApp, using the `campaign_fingerprint` and the claimant's public key, retrieves the claimant's specific `merkle_proof`, `assigned_vault`, `entitlements`, and the relevant `cohort_merkle_root` from data provided by the campaign operator (generated by `prism-cli`).
-    -   The Claimant submits a `claim_reward` transaction including these details.
-    -   The Prism on-chain program:
-        -   Derives and verifies the `Campaign` PDA using `campaign_fingerprint`.
-        -   Derives and verifies the `Cohort` PDA using the `Campaign` key and `cohort_merkle_root`.
-        -   Verifies the Merkle proof against the `Cohort`'s `merkle_root`.
-        -   Initializes a `ClaimReceipt` PDA for the claimant.
+    - A Claimant connects to a dApp integrated with Prism.
+    - The dApp, using the `campaign_fingerprint` and the claimant's public key, retrieves the claimant's specific `merkle_proof`, `assigned_vault`, `entitlements`, and the relevant `cohort_merkle_root` from data provided by the campaign operator (generated by `prism-protocol-cli`).
+    - The Claimant submits a `claim_reward` transaction including these details.
+    - The Prism on-chain program:
+      - Derives and verifies the `Campaign` PDA using `campaign_fingerprint`.
+      - Derives and verifies the `Cohort` PDA using the `Campaign` key and `cohort_merkle_root`.
+      - Verifies the Merkle proof against the `Cohort`'s `merkle_root`.
+      - Initializes a `ClaimReceipt` PDA for the claimant.
