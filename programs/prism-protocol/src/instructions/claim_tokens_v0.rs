@@ -51,14 +51,14 @@ pub struct ClaimTokensV0<'info> {
     )]
     pub cohort: Box<Account<'info, CohortV0>>,
 
-    /// The specific vault token account from which tokens will be transferred.
+    /// The specific vault from which tokens will be transferred.
     /// The vault pubkey is derived from the cohort.vaults[assigned_vault_index].
     #[account(
         mut,
-        constraint = token_vault.mint == mint.key() @ ErrorCode::InvalidMerkleProof,
-        constraint = token_vault.key() == cohort.vaults[assigned_vault_index as usize] @ ErrorCode::InvalidAssignedVault,
+        constraint = vault.mint == mint.key() @ ErrorCode::InvalidMerkleProof,
+        constraint = vault.key() == cohort.vaults[assigned_vault_index as usize] @ ErrorCode::InvalidAssignedVault,
     )]
-    pub token_vault: Box<Account<'info, TokenAccount>>,
+    pub vault: Box<Account<'info, TokenAccount>>,
 
     /// The mint of the token being distributed. Renamed from reward_token_mint.
     #[account(
@@ -143,7 +143,7 @@ pub fn handle_claim_tokens_v0(
 
     // 7. Perform the token transfer
     let transfer_accounts = Transfer {
-        from: ctx.accounts.token_vault.to_account_info(),
+        from: ctx.accounts.vault.to_account_info(),
         to: ctx.accounts.claimant_token_account.to_account_info(),
         authority: ctx.accounts.cohort.to_account_info(),
     };

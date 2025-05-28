@@ -6,7 +6,7 @@ pub mod state;
 
 pub use constants::{
     CAMPAIGN_V0_SEED_PREFIX, CLAIM_RECEIPT_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX,
-    MAX_VAULTS_PER_COHORT, VAULT_V0_SEED_PREFIX,
+    MAX_VAULTS_PER_COHORT, VAULT_SEED_PREFIX,
 };
 pub use instructions::*;
 pub use merkle_leaf::*;
@@ -36,14 +36,29 @@ pub mod prism_protocol {
         campaign_fingerprint: [u8; 32],
         merkle_root: [u8; 32],
         amount_per_entitlement: u64,
-        vaults: Vec<Pubkey>,
+        vault_count: u8,
     ) -> Result<()> {
         instructions::handle_initialize_cohort_v0(
             ctx,
             campaign_fingerprint,
             merkle_root,
             amount_per_entitlement,
-            vaults,
+            vault_count,
+        )
+    }
+
+    // admin
+    pub fn create_vault_v0(
+        ctx: Context<CreateVaultV0>,
+        campaign_fingerprint: [u8; 32],
+        cohort_merkle_root: [u8; 32],
+        vault_index: u8,
+    ) -> Result<()> {
+        instructions::handle_create_vault_v0(
+            ctx,
+            campaign_fingerprint,
+            cohort_merkle_root,
+            vault_index,
         )
     }
 

@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 anchor-lang = { workspace = true }
+anchor-spl = { workspace = true }
 mollusk-svm = { workspace = true }
 mollusk-svm-programs-token = { workspace = true, features = [
     "associated-token",
@@ -16,3 +17,4 @@ prism_protocol = { path = "../../programs/prism-protocol", features = [
 prism-protocol-merkle = { path = "../prism-protocol-merkle" }
 prism-protocol-sdk = { path = "../prism-protocol-sdk" }
 solana-sdk = { workspace = true }
+spl-token = { workspace = true }

@@ -2908,6 +2908,8 @@ dependencies = [
  "sha2 0.10.9",
  "solana-client",
  "solana-sdk",
+ "spl-associated-token-account",
+ "spl-token 7.0.0",
  "thiserror 1.0.69",
 ]
 
@@ -2934,12 +2936,14 @@ name = "prism-protocol-testing"
 version = "0.1.0"
 dependencies = [
  "anchor-lang",
+ "anchor-spl",
  "mollusk-svm",
  "mollusk-svm-programs-token",
  "prism-protocol-merkle",
  "prism-protocol-sdk",
  "prism_protocol",
  "solana-sdk",
+ "spl-token 7.0.0",
 ]
 
 [[package]]
@@ -2954,6 +2958,7 @@ dependencies = [
  "prism-protocol-sdk",
  "prism-protocol-testing",
  "solana-sdk",
+ "spl-token 7.0.0",
 ]
 
 [[package]]

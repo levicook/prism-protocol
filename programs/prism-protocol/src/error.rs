@@ -40,8 +40,11 @@ pub enum ErrorCode {
     NoVaultsProvided,
     #[msg("The number of vaults specified exceeds the maximum allowed per cohort.")]
     TooManyVaults,
-    #[msg(
-        "Campaign is still active. Funds can only be withdrawn after the campaign is deactivated."
-    )]
-    CampaignIsStillActive,
+    #[msg("Invalid vault index: vaults must be created sequentially starting from 0.")]
+    InvalidVaultIndex,
+    #[msg("Vault at this index has already been created.")]
+    VaultAlreadyExists,
+
+    #[msg("Campaign is active.")]
+    CampaignIsActive,
 }

@@ -12,11 +12,13 @@ pub struct SetCampaignActiveStatus<'info> {
         mut, // Needs to be mutable to change is_active
         seeds = [
             CAMPAIGN_V0_SEED_PREFIX,
+            admin.key().as_ref(),
             campaign_fingerprint.as_ref(),
         ],
         bump = campaign.bump,
         has_one = admin @ ErrorCode::Unauthorized, // Ensures the signer is the campaign authority
-        constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::ConstraintSeedsMismatch
+        constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::ConstraintSeedsMismatch,
+        constraint = campaign.is_active == false @ ErrorCode::CampaignIsActive
     )]
     pub campaign: Account<'info, CampaignV0>,
 }
@@ -27,23 +29,5 @@ pub fn handle_set_campaign_active_status(
     is_active: bool,
 ) -> Result<()> {
     ctx.accounts.campaign.is_active = is_active;
-
-    // Optionally, emit an event
-    // emit!(CampaignStatusChanged {
-    //     campaign_pda: ctx.accounts.campaign.key(),
-    //     campaign_fingerprint: ctx.accounts.campaign.fingerprint,
-    //     is_active: is_active,
-    //     timestamp: Clock::get()?.unix_timestamp,
-    // });
-
     Ok(())
 }
-
-// Optional Event Definition:
-// #[event]
-// pub struct CampaignStatusChanged {
-//     pub campaign_pda: Pubkey,
-//     pub campaign_fingerprint: [u8; 32],
-//     pub is_active: bool,
-//     pub timestamp: i64,
-// }

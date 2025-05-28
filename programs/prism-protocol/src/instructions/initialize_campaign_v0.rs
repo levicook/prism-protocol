@@ -34,7 +34,7 @@ pub fn handle_initialize_campaign_v0(
         admin: ctx.accounts.admin.key(),
         mint,
         fingerprint: campaign_fingerprint,
-        is_active: true,
+        is_active: false,
         bump: ctx.bumps.campaign,
     });
 

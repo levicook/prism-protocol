@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 
 use prism_protocol::{
     CAMPAIGN_V0_SEED_PREFIX, CLAIM_RECEIPT_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX,
-    ID as PRISM_PROGRAM_ID, VAULT_V0_SEED_PREFIX,
+    ID as PRISM_PROGRAM_ID, VAULT_SEED_PREFIX,
 };
 
 pub fn find_campaign_address(authority: &Pubkey, fingerprint: &[u8; 32]) -> (Pubkey, u8) {
@@ -46,11 +46,7 @@ pub fn find_claim_receipt_v0_address(
 
 pub fn find_vault_v0_address(cohort_address: &Pubkey, vault_index: u8) -> (Pubkey, u8) {
     Pubkey::find_program_address(
-        &[
-            VAULT_V0_SEED_PREFIX,
-            cohort_address.as_ref(),
-            &[vault_index],
-        ],
+        &[VAULT_SEED_PREFIX, cohort_address.as_ref(), &[vault_index]],
         &PRISM_PROGRAM_ID,
     )
 }

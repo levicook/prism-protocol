@@ -346,7 +346,8 @@ fn create_campaign_database(
             mint TEXT NOT NULL,
             admin TEXT NOT NULL,
             created_at INTEGER NOT NULL,
-            deployed_at INTEGER
+            deployed_at INTEGER,
+            deployed_signature TEXT -- transaction signature for campaign deployment
         );
 
         CREATE TABLE cohorts (
@@ -356,7 +357,8 @@ fn create_campaign_database(
             vault_count INTEGER NOT NULL,
             claimant_count INTEGER NOT NULL,
             total_tokens_required INTEGER NOT NULL,
-            deployed_at INTEGER
+            deployed_at INTEGER,
+            deployed_signature TEXT -- transaction signature for cohort deployment
         );
 
         CREATE TABLE claimants (

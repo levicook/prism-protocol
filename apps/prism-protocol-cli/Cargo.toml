@@ -25,6 +25,8 @@ serde_yaml = { workspace = true }
 sha2 = { workspace = true }
 solana-client = { workspace = true }
 solana-sdk = { workspace = true }
+spl-associated-token-account = { workspace = true }
+spl-token = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
