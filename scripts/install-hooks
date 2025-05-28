@@ -1,0 +1,16 @@
+#!/bin/bash
+set -euo pipefail
+source "$(dirname "$0")/common.sh"
+cd "$PROJECT_ROOT"
+
+# Remove existing hooks directory if it exists
+if [ -L .git/hooks ]; then
+    rm .git/hooks
+elif [ -d .git/hooks ]; then
+    rm -rf .git/hooks
+fi
+
+# Create symlink to our hooks
+ln -s "$PROJECT_ROOT/scripts/git-hooks" .git/hooks
+
+echo "Git hooks installed successfully!"

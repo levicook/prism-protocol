@@ -3,14 +3,14 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-prism_protocol = "B48CjFfcULXbB3xiw1oSQiKhpTY5SDgz9yVekgaVSAZt"
+prism_protocol = "PrsmV9Kh8HcJjPSShFidZFJrbWM5NWQ98ST8M2BNdAw"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
 cluster = "localnet"
-wallet = "test-admin.json"
+wallet = "secrets/decrypted-keypairs/localnet-deployer.json" # run ./scripts/decrypt-secrets to create this file
 
 [scripts]
 test = "cargo test-sbf"

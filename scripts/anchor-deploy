@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(dirname "$0")/common.sh"
+cd "$PROJECT_ROOT"
+
+# Default values
+TARGET_ENVIRONMENT=""
+
+usage() {
+    echo "Usage: $0 [-e environment]" 1>&2
+    echo
+    echo "Options:"
+    echo "  -e    Environment (localnet|devnet)"
+    echo "  -h    Show this help message"
+    echo
+    echo "Example:"
+    echo "  $0 -e devnet # Deploy to devnet"
+    exit 1
+}
+
+while getopts "e:h" opt; do
+    case $opt in
+    e) TARGET_ENVIRONMENT="$OPTARG" ;;
+    h) usage ;;
+    *) usage ;;
+    esac
+done
+
+if [[ -z "$TARGET_ENVIRONMENT" ]]; then
+    echo "Error: Environment (-e) must be specified"
+    usage
+fi
+
+case "$TARGET_ENVIRONMENT" in
+localnet)
+    PROVIDER_CLUSTER="localnet"
+    PROVIDER_WALLET="${PROJECT_ROOT}/secrets/decrypted-keypairs/localnet-deployer.json"
+    ;;
+
+devnet)
+    PROVIDER_CLUSTER="devnet"
+    PROVIDER_WALLET="${PROJECT_ROOT}/secrets/decrypted-keypairs/devnet-deployer.json"
+    ;;
+
+*)
+    echo "Error: Invalid environment. Must be localnet or devnet"
+    exit 1
+    ;;
+esac
+
+./scripts/decrypt-secrets
+
+anchor build
+
+anchor deploy --provider.cluster "$PROVIDER_CLUSTER" --provider.wallet "$PROVIDER_WALLET"

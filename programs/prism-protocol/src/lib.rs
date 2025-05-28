@@ -14,7 +14,7 @@ pub use state::*;
 
 use anchor_lang::prelude::*;
 
-declare_id!("B48CjFfcULXbB3xiw1oSQiKhpTY5SDgz9yVekgaVSAZt");
+declare_id!("PrsmV9Kh8HcJjPSShFidZFJrbWM5NWQ98ST8M2BNdAw");
 
 #[program]
 pub mod prism_protocol {

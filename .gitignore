@@ -8,6 +8,9 @@ node_modules
 target
 test-ledger
 
+# Secrets
+secrets/decrypted-keypairs
+
 # Test artifacts and temporary files
 test-artifacts/
 perf-test-artifacts/
