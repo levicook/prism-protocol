@@ -61,8 +61,8 @@ fn test_merkle_tree_proof_generation() {
         assert!(is_valid, "Proof should be valid for claimant {}", claimant);
 
         println!(
-            "✅ Valid proof generated for claimant {} (entitlements: {}, vault: {})",
-            claimant, claimant_leaf.entitlements, claimant_leaf.assigned_vault
+            "✅ Valid proof generated for claimant {} (entitlements: {}, vault_index: {})",
+            claimant, claimant_leaf.entitlements, claimant_leaf.assigned_vault_index
         );
     }
 
@@ -121,8 +121,8 @@ fn test_claim_tokens_instruction_building() {
         .proof_for_claimant(&other_claimants[0])
         .expect("Failed to generate merkle proof for other claimant");
 
-    // Setup addresses - use the assigned vault directly from the merkle tree
-    let token_vault_address = claimant_leaf.assigned_vault;
+    // Setup addresses - use the assigned vault from the vaults array based on index
+    let token_vault_address = vaults[claimant_leaf.assigned_vault_index as usize];
     let claimant_token_account = get_associated_token_address(&claimant, &fixture.mint);
     let (claim_receipt_address, _) =
         find_claim_receipt_v0_address(&cohort_result.address, &claimant);
@@ -145,7 +145,7 @@ fn test_claim_tokens_instruction_building() {
         fixture.test_fingerprint,
         merkle_root,
         valid_merkle_proof,
-        claimant_leaf.assigned_vault,
+        claimant_leaf.assigned_vault_index,
         claimant_leaf.entitlements,
     )
     .expect("Failed to build claim_tokens instruction with valid proof");
@@ -163,7 +163,7 @@ fn test_claim_tokens_instruction_building() {
         fixture.test_fingerprint,
         merkle_root,
         invalid_merkle_proof,
-        claimant_leaf.assigned_vault,
+        claimant_leaf.assigned_vault_index,
         claimant_leaf.entitlements,
     )
     .expect("Failed to build claim_tokens instruction with invalid proof");
@@ -222,8 +222,8 @@ fn test_claim_tokens_end_to_end() {
         .proof_for_claimant(&claimant)
         .expect("Failed to generate merkle proof");
 
-    // Setup addresses - use the assigned vault directly from the merkle tree
-    let token_vault_address = claimant_leaf.assigned_vault;
+    // Setup addresses - use the assigned vault from the vaults array based on index
+    let token_vault_address = vaults[claimant_leaf.assigned_vault_index as usize];
     let claimant_token_account = get_associated_token_address(&claimant, &fixture.mint);
     let (claim_receipt_address, _) =
         find_claim_receipt_v0_address(&cohort_result.address, &claimant);
@@ -383,7 +383,7 @@ fn test_claim_tokens_end_to_end() {
         fixture.test_fingerprint,
         merkle_root,
         valid_merkle_proof,
-        claimant_leaf.assigned_vault,
+        claimant_leaf.assigned_vault_index,
         claimant_leaf.entitlements,
     )
     .expect("Failed to build claim_tokens instruction");
@@ -442,6 +442,6 @@ fn test_claim_tokens_end_to_end() {
     println!("✅ End-to-end claim tokens test completed successfully!");
     println!("   - Expected claim amount: {}", expected_amount);
     println!("   - Claimant: {}", claimant);
-    println!("   - Vault: {}", claimant_leaf.assigned_vault);
+    println!("   - Vault: {}", claimant_leaf.assigned_vault_index);
     println!("   - Entitlements: {}", claimant_leaf.entitlements);
 }

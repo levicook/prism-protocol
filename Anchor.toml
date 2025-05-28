@@ -3,14 +3,14 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-prism_protocol = "3hLSRKWiLGPgfvJJWe6WP9kCNQB5FVZu3Y4Awp1sMEbJ"
+prism_protocol = "B48CjFfcULXbB3xiw1oSQiKhpTY5SDgz9yVekgaVSAZt"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
 cluster = "localnet"
-wallet = "~/.config/solana/id.json"
+wallet = "test-admin.json"
 
 [scripts]
 test = "cargo test-sbf"

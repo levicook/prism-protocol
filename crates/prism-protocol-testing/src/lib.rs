@@ -147,7 +147,7 @@ impl TestFixture {
             .collect();
 
         // Create a real merkle tree using production function
-        let merkle_tree = create_merkle_tree(&claimant_entitlements, vaults)
+        let merkle_tree = create_merkle_tree(&claimant_entitlements, vaults.len())
             .expect("Failed to create merkle tree");
 
         let merkle_root = merkle_tree.root().expect("Failed to get merkle root");

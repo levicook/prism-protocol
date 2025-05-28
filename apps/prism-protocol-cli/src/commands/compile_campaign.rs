@@ -2,6 +2,9 @@ use crate::error::{CliError, CliResult};
 use csv::Reader;
 use hex;
 use prism_protocol_merkle::{create_merkle_tree, ClaimMerkleTree};
+use prism_protocol_sdk::address_finders::{
+    find_campaign_address, find_cohort_v0_address, find_vault_v0_address,
+};
 use rusqlite::Connection;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -101,41 +104,42 @@ pub fn execute(
         );
     }
 
-    // Step 5: Generate merkle trees and calculate campaign fingerprint
+    // Step 5: Generate merkle trees with vault assignments
     println!("\n🌳 Generating merkle trees...");
-    let mut cohorts_with_merkle = Vec::new();
-    let mut cohort_roots = Vec::new();
+    let mut cohort_data_with_merkle = Vec::new();
 
     for cohort in cohort_data {
         println!("  🔄 Processing cohort: {}", cohort.name);
 
-        // Generate deterministic vault pubkeys for this cohort
-        let vaults = generate_vault_pubkeys(&cohort.name, cohort.vault_count);
-
         // Convert claimants to (Pubkey, u64) pairs for merkle tree
-        let claimant_entitlements: Vec<(Pubkey, u64)> = cohort
+        let claimant_pairs: Vec<(Pubkey, u64)> = cohort
             .claimants
             .iter()
             .map(|c| (c.claimant, c.entitlements))
             .collect();
 
-        // Create merkle tree with consistent hashing
-        let merkle_tree = create_merkle_tree(&claimant_entitlements, &vaults)
+        // Create merkle tree with vault count (no actual vault pubkeys needed yet)
+        let merkle_tree = create_merkle_tree(&claimant_pairs, cohort.vault_count)
             .map_err(|e| CliError::InvalidConfig(format!("Failed to create merkle tree: {}", e)))?;
 
         let merkle_root = merkle_tree
             .root()
             .ok_or_else(|| CliError::InvalidConfig("Failed to get merkle root".to_string()))?;
 
-        cohort_roots.push(merkle_root);
+        // Now derive cohort PDA from campaign and merkle root
+        let campaign_address = find_campaign_address(&admin_pubkey, &[0u8; 32]); // Temporary fingerprint
+        let (cohort_address, _) = find_cohort_v0_address(&campaign_address.0, &merkle_root);
+
+        // Find vault PDAs for this cohort
+        let vaults = find_vault_adresses(&cohort_address, cohort.vault_count);
 
         println!(
             "    ✅ Generated merkle tree with root: {}",
             hex::encode(merkle_root)
         );
 
-        cohorts_with_merkle.push(CohortWithMerkle {
-            name: cohort.name.clone(),
+        cohort_data_with_merkle.push(CohortWithMerkle {
+            name: cohort.name,
             amount_per_entitlement: cohort.amount_per_entitlement,
             vault_count: cohort.vault_count,
             vaults,
@@ -146,7 +150,10 @@ pub fn execute(
 
     // Step 6: Calculate campaign fingerprint
     println!("\n🔍 Calculating campaign fingerprint...");
-    cohort_roots.sort(); // Deterministic ordering
+    let cohort_roots: Vec<[u8; 32]> = cohort_data_with_merkle
+        .iter()
+        .map(|c| c.merkle_root)
+        .collect();
     let campaign_fingerprint = calculate_campaign_fingerprint(&cohort_roots);
     println!(
         "✅ Campaign fingerprint: {}",
@@ -159,7 +166,7 @@ pub fn execute(
         &campaign_db_out,
         &mint,
         &admin_pubkey,
-        &cohorts_with_merkle,
+        &cohort_data_with_merkle,
         &campaign_fingerprint,
     )?;
     println!(
@@ -173,8 +180,8 @@ pub fn execute(
         "  - Campaign fingerprint: {}",
         hex::encode(campaign_fingerprint)
     );
-    println!("  - {} cohorts processed", cohorts_with_merkle.len());
-    for cohort in &cohorts_with_merkle {
+    println!("  - {} cohorts processed", cohort_data_with_merkle.len());
+    for cohort in &cohort_data_with_merkle {
         println!(
             "    📦 {}: {} claimants, {} vaults, root: {}",
             cohort.name,
@@ -305,11 +312,11 @@ fn calculate_vault_count(claimant_count: usize, claimants_per_vault: usize) -> u
     )
 }
 
-fn generate_vault_pubkeys(_cohort_name: &str, vault_count: usize) -> Vec<Pubkey> {
+fn find_vault_adresses(cohort_address: &Pubkey, vault_count: usize) -> Vec<Pubkey> {
     let mut vaults = Vec::new();
-    for _i in 0..vault_count {
-        let pubkey = Pubkey::new_unique();
-        vaults.push(pubkey);
+    for i in 0..vault_count {
+        let (vault_address, _) = find_vault_v0_address(cohort_address, i as u8);
+        vaults.push(vault_address);
     }
     vaults
 }
@@ -422,12 +429,8 @@ fn create_campaign_database(
                 .proof_for_claimant(&leaf.claimant)
                 .map_err(|e| CliError::InvalidConfig(format!("Failed to generate proof: {}", e)))?;
 
-            // Find vault index for this claimant
-            let vault_index = cohort
-                .vaults
-                .iter()
-                .position(|&v| v == leaf.assigned_vault)
-                .ok_or_else(|| CliError::InvalidConfig("Vault not found".to_string()))?;
+            // Get vault pubkey from vault index
+            let vault_pubkey = cohort.vaults[leaf.assigned_vault_index as usize];
 
             // Encode proof as comma-separated hex strings
             let proof_hex = merkle_proof
@@ -442,8 +445,8 @@ fn create_campaign_database(
                     leaf.claimant.to_string(),
                     &cohort.name,
                     leaf.entitlements,
-                    vault_index,
-                    leaf.assigned_vault.to_string(),
+                    leaf.assigned_vault_index,
+                    vault_pubkey.to_string(),
                     proof_hex,
                 ),
             )?;
@@ -456,14 +459,14 @@ fn create_campaign_database(
                 .merkle_tree
                 .leaves
                 .iter()
-                .filter(|leaf| leaf.assigned_vault == vault_pubkey)
+                .filter(|leaf| leaf.assigned_vault_index as usize == vault_index)
                 .count();
 
             let required_tokens = cohort
                 .merkle_tree
                 .leaves
                 .iter()
-                .filter(|leaf| leaf.assigned_vault == vault_pubkey)
+                .filter(|leaf| leaf.assigned_vault_index as usize == vault_index)
                 .map(|leaf| leaf.entitlements * cohort.amount_per_entitlement)
                 .sum::<u64>();
 

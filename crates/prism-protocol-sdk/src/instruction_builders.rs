@@ -80,10 +80,10 @@ pub fn build_claim_tokens_ix(
     claimant_token_account: Pubkey,
     claim_receipt: Pubkey,
     campaign_fingerprint: [u8; 32],
-    cohort_merkle_root_arg: [u8; 32],
+    cohort_merkle_root: [u8; 32],
     merkle_proof: Vec<[u8; 32]>,
-    assigned_vault_from_leaf: Pubkey,
-    entitlements_from_leaf: u64,
+    assigned_vault_index: u8,
+    entitlements: u64,
 ) -> Result<(
     Instruction,
     prism_protocol::accounts::ClaimTokensV0,
@@ -106,10 +106,10 @@ pub fn build_claim_tokens_ix(
 
     let ix_data = prism_protocol::instruction::ClaimTokensV0 {
         campaign_fingerprint,
-        cohort_merkle_root_arg,
+        cohort_merkle_root,
         merkle_proof,
-        assigned_vault_from_leaf,
-        entitlements_from_leaf,
+        assigned_vault_index,
+        entitlements,
     };
 
     let ix = Instruction {

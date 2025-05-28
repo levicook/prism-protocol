@@ -14,3 +14,4 @@ perf-test-artifacts/
 *.tmp
 test-*.csv
 test-*.db
+test-*.json
