@@ -50,63 +50,69 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
   - [x] Shared test fixtures and utilities ✅
   - [x] Mollusk SVM integration helpers ✅
 
-### Off-Chain CLI (`apps/prism-cli`)
+### Off-Chain CLI (`apps/prism-protocol-cli`)
 
-- **Status:** _To Be Designed & Implemented_
-- **Priority:** High - Critical next step for end-to-end usability
+- **Status:** _Phase 0 & 1 Implemented, Phase 2+ In Progress_
+- **Priority:** High - Core functionality complete, deployment features next
 
 #### Planned CLI Features & Implementation Phases
 
-**Phase 0: Fixture Generation (For Benchmarking)**
+**Phase 0: Fixture Generation (For Benchmarking) ✅ COMPLETED**
 
 - **Purpose:** Generate large-scale test datasets for performance validation
 - **Commands:**
-  - `prism-cli generate-fixtures --count <N> --seed <SEED> [options]`
+  - `cargo run -p prism-protocol-cli -- generate-fixtures --count <N> --seed <SEED> [options]`
   - Support for deterministic pubkey generation (no real keypairs needed)
-  - Configurable entitlement distributions (uniform, realistic, custom ranges)
-  - Multiple output formats (CSV, JSON)
-  - Multi-cohort fixture generation
+  - Configurable entitlement distributions (uniform, realistic, exponential)
+  - CSV output format (campaign.csv and cohorts.csv)
+  - Multi-cohort fixture generation with configurable cohort counts
 - **Key Features:**
-  - Deterministic generation for reproducible benchmarks
-  - Memory-efficient for millions of claimants
-  - Realistic distribution patterns for testing
+  - ✅ Deterministic generation for reproducible benchmarks
+  - ✅ Memory-efficient for millions of claimants
+  - ✅ Realistic distribution patterns for testing
+  - ✅ Progress tracking for large datasets
+  - ✅ Configurable cohort and entitlement ranges
 
-**Phase 1: Core Campaign Generation**
+**Phase 1: Core Campaign Generation ✅ COMPLETED**
 
 - **Purpose:** Process campaign configs and generate all necessary data
 - **Commands:**
-  - `prism-cli generate-campaign <config.yaml>`
-- **Input:** Campaign configuration file defining cohorts and claimants
+  - `cargo run -p prism-protocol-cli -- generate-campaign --campaign-csv <file> --cohorts-csv <file> --mint <pubkey> --admin-keypair <file>`
+- **Input:** Two CSV files (campaign claimants and cohort configuration)
 - **Output:**
-  - Campaign fingerprint calculation
-  - Individual cohort merkle roots
-  - Vault funding requirements report
-  - Claimant lookup files with proofs and assignments
-  - On-chain initialization parameters
+  - ✅ SQLite database with complete campaign structure
+  - ✅ Vault count calculation and funding requirements
+  - ✅ Claimant records with entitlements and vault assignments
+  - ✅ Admin keypair validation and public key storage
+  - 🚧 Campaign fingerprint calculation (pending merkle tree generation)
+  - 🚧 Individual cohort merkle roots (pending merkle tree generation)
+  - 🚧 Merkle proofs for claimants (pending merkle tree generation)
 
-**Phase 2: Transaction Building & Deployment**
+**Phase 2: Transaction Building & Deployment 🚧 IN PROGRESS**
 
 - **Purpose:** Actually deploy campaigns on-chain
 - **Commands:**
-  - `prism-cli deploy-campaign --config <config.yaml> --keypair <admin.json>`
-  - `prism-cli deploy-cohort --campaign <fingerprint> --cohort <merkle-root> --keypair <admin.json>`
+  - `cargo run -p prism-protocol-cli -- deploy-campaign --config <config.yaml> --admin-keypair <admin.json>`
+  - `cargo run -p prism-protocol-cli -- deploy-cohort --campaign <fingerprint> --cohort <merkle-root> --admin-keypair <admin.json>`
 - **Features:**
-  - Automatic transaction construction using SDK utilities
-  - Vault funding validation
-  - Deployment status tracking
+  - 🚧 Automatic transaction construction using SDK utilities
+  - 🚧 Vault funding validation
+  - 🚧 Deployment status tracking
+  - 🚧 Merkle tree generation and fingerprint calculation
+  - 🚧 Integration with prism-protocol-merkle crate
 
-**Phase 3: Campaign Management**
+**Phase 3: Campaign Management 📋 PLANNED**
 
 - **Purpose:** Administrative operations for live campaigns
 - **Commands:**
-  - `prism-cli pause-campaign <fingerprint> --keypair <admin.json>`
-  - `prism-cli resume-campaign <fingerprint> --keypair <admin.json>`
-  - `prism-cli reclaim-tokens <fingerprint> <cohort-root> --keypair <admin.json>`
-  - `prism-cli campaign-status <fingerprint>`
+  - `cargo run -p prism-protocol-cli -- pause-campaign <fingerprint> --admin-keypair <admin.json>`
+  - `cargo run -p prism-protocol-cli -- resume-campaign <fingerprint> --admin-keypair <admin.json>`
+  - `cargo run -p prism-protocol-cli -- reclaim-tokens <fingerprint> <cohort-root> --admin-keypair <admin.json>`
+  - `cargo run -p prism-protocol-cli -- campaign-status <fingerprint>`
 - **Features:**
-  - Campaign lifecycle management
-  - Token recovery after distribution periods
-  - Status monitoring and reporting
+  - 📋 Campaign lifecycle management
+  - 📋 Token recovery after distribution periods
+  - 📋 Status monitoring and reporting
 
 **Phase 4: Advanced Features (Future)**
 
@@ -121,10 +127,20 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 
 - **Configuration Processing:**
 
-  - [ ] YAML/JSON campaign configuration parsing
-  - [ ] Claimant list processing (CSV, JSON, multiple formats)
-  - [ ] Input validation and error handling
+  - [x] CSV campaign configuration parsing ✅
+  - [x] Claimant list processing (CSV format) ✅
+  - [x] Input validation and error handling ✅
+  - [x] Cohort consistency validation ✅
+  - [ ] YAML/JSON configuration support (future enhancement)
   - [ ] Configuration schema documentation
+
+- **Database & Storage:**
+
+  - [x] SQLite database schema design ✅
+  - [x] Campaign metadata storage ✅
+  - [x] Cohort and claimant data storage ✅
+  - [x] Vault funding requirements calculation ✅
+  - [x] Admin keypair validation and public key storage ✅
 
 - **Merkle Tree Operations:**
 
@@ -141,15 +157,19 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 
 - **Output Generation:**
 
+  - [x] SQLite database with complete campaign structure ✅
+  - [x] Vault funding requirements with exact amounts ✅
+  - [x] Claimant records with entitlements ✅
+  - [ ] Merkle proofs and vault assignments
   - [ ] On-chain initialization parameters (ready-to-use)
-  - [ ] Vault funding requirements with exact amounts
-  - [ ] Claimant lookup files (proofs, assigned_vaults, entitlements)
   - [ ] Human-readable reports and summaries
 
 - **Integration & Testing:**
+  - [x] Comprehensive test suite with fixture generation ✅
+  - [x] CSV parsing and validation tests ✅
+  - [x] Database creation and population tests ✅
   - [ ] Integration with `prism-protocol-sdk` for transaction building
   - [ ] Integration with `prism-protocol-merkle` for tree operations
-  - [ ] Comprehensive test suite with fixture generation
   - [ ] Performance benchmarking with large datasets
 
 #### Technical Implementation Notes
@@ -236,13 +256,20 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 - Comprehensive test suite with Mollusk SVM integration
 - Merkle tree utilities with security best practices
 - SDK for client-side transaction building
+- **CLI Phase 0**: Fixture generation with deterministic test data
+- **CLI Phase 1**: Campaign generation with CSV processing and SQLite database output
+- Admin keypair validation and proper public key storage
+- Vault count calculation and funding requirements
 
 **🚧 In Progress:**
 
-- Documentation updates to match implementation
+- **CLI Phase 2**: Merkle tree generation and campaign fingerprint calculation
+- Integration with prism-protocol-merkle crate for tree operations
+- On-chain deployment functionality
 
 **📋 Next Phase:**
 
-- CLI tool development
-- Performance benchmarking
-- Enhanced features and optimizations
+- Complete merkle tree integration in CLI
+- Transaction building and deployment features
+- Performance benchmarking with large datasets
+- Campaign management and administrative operations

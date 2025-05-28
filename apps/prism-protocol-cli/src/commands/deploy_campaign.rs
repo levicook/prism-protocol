@@ -6,12 +6,12 @@ pub fn execute(config: PathBuf, keypair: PathBuf, rpc_url: String) -> CliResult<
     println!("Config: {}", config.display());
     println!("Keypair: {}", keypair.display());
     println!("RPC URL: {}", rpc_url);
-    
+
     // TODO: Implement campaign deployment
     // 1. Load campaign config and generated data
     // 2. Initialize campaign on-chain
     // 3. Fund token vaults
     // 4. Report deployment status
-    
+
     Ok(())
-} 
+}

@@ -5,4 +5,4 @@ pub fn execute(campaign: String, rpc_url: String) -> CliResult<()> {
     println!("Campaign: {}", campaign);
     println!("RPC URL: {}", rpc_url);
     Ok(())
-} 
+}

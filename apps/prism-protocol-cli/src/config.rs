@@ -7,16 +7,16 @@ use std::path::PathBuf;
 pub struct CampaignConfig {
     /// Human-readable campaign name (for organization)
     pub campaign_name: String,
-    
+
     /// SPL token mint to be distributed
     pub mint: Pubkey,
-    
+
     /// Path to admin keypair file
     pub admin_keypair_path: PathBuf,
-    
+
     /// Optional claim deadline (Unix timestamp)
     pub claim_deadline_timestamp: Option<i64>,
-    
+
     /// List of cohorts in this campaign
     pub cohorts: Vec<CohortConfig>,
 }
@@ -26,17 +26,17 @@ pub struct CampaignConfig {
 pub struct CohortConfig {
     /// Human-readable cohort name (for organization)
     pub cohort_name: String,
-    
+
     /// Amount of tokens per entitlement
     pub amount_per_entitlement: u64,
-    
+
     /// Path to claimants file (CSV or JSON)
     pub claimants_file: PathBuf,
-    
+
     /// Number of vaults to use for this cohort
     #[serde(default = "default_vault_count")]
     pub vault_count: usize,
-    
+
     /// Optional: Pre-specified vault pubkeys (if not provided, will be generated)
     pub vaults: Option<Vec<Pubkey>>,
 }
@@ -46,7 +46,7 @@ pub struct CohortConfig {
 pub struct ClaimantInput {
     /// Claimant's public key
     pub claimant: Pubkey,
-    
+
     /// Number of entitlements for this claimant
     #[serde(default = "default_entitlements")]
     pub entitlements: u64,
@@ -57,13 +57,13 @@ pub struct ClaimantInput {
 pub struct CampaignOutput {
     /// The calculated campaign fingerprint
     pub campaign_fingerprint: String,
-    
+
     /// Campaign initialization parameters
     pub campaign_params: CampaignParams,
-    
+
     /// Cohort data for each cohort
     pub cohorts: Vec<CohortOutput>,
-    
+
     /// Summary information
     pub summary: CampaignSummary,
 }
@@ -79,16 +79,16 @@ pub struct CampaignParams {
 pub struct CohortOutput {
     /// Human-readable cohort name
     pub cohort_name: String,
-    
+
     /// Merkle root for this cohort
     pub merkle_root: String,
-    
+
     /// Cohort initialization parameters
     pub cohort_params: CohortParams,
-    
+
     /// Vault funding requirements
     pub vault_funding: Vec<VaultFunding>,
-    
+
     /// Path to claimant lookup file
     pub claimant_lookup_file: PathBuf,
 }
@@ -135,4 +135,4 @@ fn default_vault_count() -> usize {
 
 fn default_entitlements() -> u64 {
     1
-} 
+}

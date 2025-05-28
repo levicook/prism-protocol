@@ -7,4 +7,4 @@ pub fn execute(campaign: String, keypair: PathBuf, rpc_url: String) -> CliResult
     println!("Keypair: {}", keypair.display());
     println!("RPC URL: {}", rpc_url);
     Ok(())
-} 
+}

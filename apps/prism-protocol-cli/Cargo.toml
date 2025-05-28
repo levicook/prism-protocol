@@ -25,6 +25,10 @@ serde_json = { workspace = true }
 # Error handling
 thiserror = { workspace = true }
 
+# Database & time
+chrono = { workspace = true }
+rusqlite = { workspace = true }
+
 # Solana
 solana-sdk = { workspace = true }
 
