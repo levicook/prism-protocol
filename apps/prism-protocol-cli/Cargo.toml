@@ -14,26 +14,17 @@ prism_protocol = { path = "../../programs/prism-protocol", features = [
 prism-protocol-merkle = { path = "../../crates/prism-protocol-merkle" }
 prism-protocol-sdk = { path = "../../crates/prism-protocol-sdk" }
 
-# CLI framework
-clap = { workspace = true, features = ["derive"] }
-
-# Serialization
-serde = { workspace = true, features = ["derive"] }
-serde_yaml = { workspace = true }
-serde_json = { workspace = true }
-
-# Error handling
-thiserror = { workspace = true }
-
-# Database & time
 chrono = { workspace = true }
-rusqlite = { workspace = true }
-
-# Solana
-solana-sdk = { workspace = true }
-
-# Utilities
+clap = { workspace = true, features = ["derive"] }
 csv = { workspace = true }
+hex = { workspace = true }
+rusqlite = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+sha2 = { workspace = true }
+solana-sdk = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 # prism-protocol-testing = { path = "../../crates/prism-protocol-testing" }

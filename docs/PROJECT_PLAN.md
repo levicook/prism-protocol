@@ -77,16 +77,18 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 
 - **Purpose:** Process campaign configs and generate all necessary data
 - **Commands:**
-  - `cargo run -p prism-protocol-cli -- generate-campaign --campaign-csv <file> --cohorts-csv <file> --mint <pubkey> --admin-keypair <file>`
+  - `cargo run -p prism-protocol-cli -- compile-campaign --campaign-csv <file> --cohorts-csv <file> --mint <pubkey> --admin-keypair <file>`
 - **Input:** Two CSV files (campaign claimants and cohort configuration)
 - **Output:**
   - ✅ SQLite database with complete campaign structure
   - ✅ Vault count calculation and funding requirements
   - ✅ Claimant records with entitlements and vault assignments
   - ✅ Admin keypair validation and public key storage
-  - 🚧 Campaign fingerprint calculation (pending merkle tree generation)
-  - 🚧 Individual cohort merkle roots (pending merkle tree generation)
-  - 🚧 Merkle proofs for claimants (pending merkle tree generation)
+  - ✅ Campaign fingerprint calculation from sorted cohort merkle roots
+  - ✅ Individual cohort merkle roots generated and stored
+  - ✅ Merkle proofs for all claimants generated and stored
+  - ✅ Complete merkle tree integration with consistent hashing
+  - ✅ Hex-encoded storage of all merkle data in database
 
 **Phase 2: Transaction Building & Deployment 🚧 IN PROGRESS**
 
@@ -118,10 +120,10 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 
 - **Purpose:** Enhanced functionality for complex use cases
 - **Potential Commands:**
-  - `prism-cli validate-campaign <config.yaml>` (dry-run validation)
-  - `prism-cli estimate-costs <config.yaml>` (rent and transaction cost estimation)
-  - `prism-cli export-proofs <fingerprint> --format <json|api>` (proof serving formats)
-  - `prism-cli benchmark <config.yaml>` (performance testing)
+  - `prism-protocol-cli validate-campaign <config.yaml>` (dry-run validation)
+  - `prism-protocol-cli estimate-costs <config.yaml>` (rent and transaction cost estimation)
+  - `prism-protocol-cli export-proofs <fingerprint> --format <json|api>` (proof serving formats)
+  - `prism-protocol-cli benchmark <config.yaml>` (performance testing)
 
 #### Core Functionality Checklist (Detailed)
 
@@ -144,23 +146,24 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 
 - **Merkle Tree Operations:**
 
-  - [ ] `ClaimLeaf` data generation (claimant, assigned_vault, entitlements)
-  - [ ] Merkle tree generation for each cohort using `prism-protocol-merkle`
-  - [ ] Consistent hashing for vault assignment
-  - [ ] Individual proof generation for all claimants
+  - [x] `ClaimLeaf` data generation (claimant, assigned_vault, entitlements) ✅
+  - [x] Merkle tree generation for each cohort using `prism-protocol-merkle` ✅
+  - [x] Consistent hashing for vault assignment ✅
+  - [x] Individual proof generation for all claimants ✅
 
 - **Campaign Fingerprint System:**
 
-  - [ ] Cohort merkle root collection and sorting
-  - [ ] Deterministic `campaign_fingerprint` calculation
-  - [ ] Fingerprint validation and collision detection
+  - [x] Cohort merkle root collection and sorting ✅
+  - [x] Deterministic `campaign_fingerprint` calculation ✅
+  - [x] Fingerprint validation and collision detection ✅
 
 - **Output Generation:**
 
   - [x] SQLite database with complete campaign structure ✅
   - [x] Vault funding requirements with exact amounts ✅
   - [x] Claimant records with entitlements ✅
-  - [ ] Merkle proofs and vault assignments
+  - [x] Merkle proofs and vault assignments ✅
+  - [x] Campaign fingerprint and cohort merkle roots ✅
   - [ ] On-chain initialization parameters (ready-to-use)
   - [ ] Human-readable reports and summaries
 
@@ -168,9 +171,12 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
   - [x] Comprehensive test suite with fixture generation ✅
   - [x] CSV parsing and validation tests ✅
   - [x] Database creation and population tests ✅
+  - [x] CLI integration test automation with real command execution ✅
+  - [x] Performance benchmarking test suite ✅
+  - [x] Integration with `prism-protocol-merkle` for tree operations ✅
+  - [x] Deterministic behavior validation and error handling tests ✅
   - [ ] Integration with `prism-protocol-sdk` for transaction building
-  - [ ] Integration with `prism-protocol-merkle` for tree operations
-  - [ ] Performance benchmarking with large datasets
+  - [ ] Performance benchmarking with large datasets (automated via make test-performance)
 
 #### Technical Implementation Notes
 
@@ -257,19 +263,22 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 - Merkle tree utilities with security best practices
 - SDK for client-side transaction building
 - **CLI Phase 0**: Fixture generation with deterministic test data
-- **CLI Phase 1**: Campaign generation with CSV processing and SQLite database output
+- **CLI Phase 1**: Complete campaign compilation with full merkle tree integration
+  - CSV processing and database creation
+  - Merkle tree generation with consistent hashing
+  - Campaign fingerprint calculation from sorted cohort roots
+  - Individual merkle proofs for all claimants
+  - Hex-encoded storage of all merkle data
+- **Test Automation System**: Comprehensive CLI testing with real command execution
+  - CLI integration tests with database validation
+  - Performance benchmarking suite
+  - Automated test orchestration via Makefile
+  - Organized test artifact management
 - Admin keypair validation and proper public key storage
 - Vault count calculation and funding requirements
 
 **🚧 In Progress:**
 
-- **CLI Phase 2**: Merkle tree generation and campaign fingerprint calculation
-- Integration with prism-protocol-merkle crate for tree operations
-- On-chain deployment functionality
-
-**📋 Next Phase:**
-
-- Complete merkle tree integration in CLI
-- Transaction building and deployment features
-- Performance benchmarking with large datasets
-- Campaign management and administrative operations
+- **CLI Phase 2**: On-chain deployment functionality
+- Transaction building using prism-protocol-sdk
+- Campaign and cohort deployment commands
