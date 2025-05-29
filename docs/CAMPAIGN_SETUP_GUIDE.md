@@ -3,7 +3,7 @@
 > **📋 IMPLEMENTATION STATUS:**
 >
 > - **✅ Phase 1 (Campaign Compilation): COMPLETED** - The `compile-campaign` command is fully implemented with complete merkle tree integration, campaign fingerprint calculation, and SQLite database output.
-> - **🚧 Phase 2 (On-Chain Deployment): IN PROGRESS** - Transaction building and deployment commands are planned for future development.
+> - **✅ Phase 2 (On-Chain Deployment): COMPLETED** - The `deploy-campaign` command is fully implemented with transaction building, vault creation, funding, and deployment verification.
 > - **📋 Phase 3+ (Campaign Management): PLANNED** - Administrative operations for live campaigns.
 
 This guide walks you through the process of setting up and launching a token distribution campaign using the Prism Protocol. The CLI tool handles campaign compilation and will eventually support full deployment automation.
@@ -103,35 +103,38 @@ The `compile-campaign` command processes your campaign configuration and generat
     - **Funding Summary:** Exact token amounts needed per vault
     - **Validation Results:** Confirmation of data integrity and consistency
 
-## Phase 3: On-Chain Deployment (Future Implementation)
+## Phase 3: On-Chain Deployment (Fully Implemented)
 
-> **🚧 IN PROGRESS:** The following deployment commands are planned but not yet implemented. For now, use the generated database and SDK utilities for manual deployment.
+The `deploy-campaign` command handles complete on-chain deployment of campaigns and cohorts.
 
-1.  **Fund Vaults & Delegate Authority:**
+1.  **Deploy Campaign & Cohorts On-Chain:**
 
-    - Use the funding requirements from the database to fund token vaults
-    - Delegate authority to the campaign admin keypair
+    ```bash
+    # Deploy complete campaign (campaign + all cohorts + vault creation + funding)
+    cargo run -p prism-protocol-cli -- deploy-campaign \
+        --campaign-db-in campaign_<fingerprint>.db \
+        --admin-keypair /path/to/admin.json \
+        --rpc-url http://localhost:8899
+    ```
 
-2.  **Deploy Campaign & Cohorts On-Chain:**
-    - **Planned Commands:**
+    **Automated Operations:**
+    - ✅ Initialize `Campaign` PDA with fingerprint and mint
+    - ✅ Initialize each `Cohort` PDA with merkle root and parameters  
+    - ✅ Create token vaults for each cohort
+    - ✅ Fund vaults with tokens transferred from admin account
+    - ✅ Activate campaign for claiming
+    - ✅ Record all transaction signatures in database
+    - ✅ Pre-flight checks for SOL and token balances
+    - ✅ Progressive status updates and verification
 
-      ```bash
-      # Deploy campaign
-      cargo run -p prism-protocol-cli -- deploy-campaign \
-          --database campaign_<fingerprint>.db \
-          --admin-keypair /path/to/admin.json
+2.  **Verify Deployment:**
 
-      # Deploy individual cohorts
-      cargo run -p prism-protocol-cli -- deploy-cohort \
-          --database campaign_<fingerprint>.db \
-          --cohort early_contributors \
-          --admin-keypair /path/to/admin.json
-      ```
-
-    - **On-Chain Operations:**
-      - Initialize `Campaign` PDA with fingerprint and mint
-      - Initialize each `Cohort` PDA with merkle root and parameters
-      - Validate vault funding and authority delegation
+    ```bash
+    # Check campaign status on-chain
+    cargo run -p prism-protocol-cli -- campaign-status \
+        --campaign <fingerprint> \
+        --rpc-url http://localhost:8899
+    ```
 
 ## Phase 4: Distribute Lookup Information & Go Live
 
