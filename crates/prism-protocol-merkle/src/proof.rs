@@ -28,10 +28,10 @@ pub fn generate_proof_for_leaf(
         .iter()
         .position(|leaf| {
             leaf.claimant == target_leaf.claimant
-                && leaf.assigned_vault == target_leaf.assigned_vault
+                && leaf.assigned_vault_index == target_leaf.assigned_vault_index
                 && leaf.entitlements == target_leaf.entitlements
         })
-        .ok_or_else(|| error!(ErrorCode::LeafNotFound))?;
+        .ok_or(ErrorCode::ClaimantNotFound)?;
 
     // Hash all leaves
     let leaf_hashes: Vec<[u8; 32]> = leaves.iter().map(|leaf| hash_claim_leaf(leaf)).collect();
@@ -74,6 +74,8 @@ pub fn extract_root_from_proof(
 pub enum ErrorCode {
     #[msg("Leaf not found in the provided leaves")]
     LeafNotFound,
+    #[msg("Claimant not found in the provided leaves")]
+    ClaimantNotFound,
 }
 
 #[cfg(test)]
@@ -86,22 +88,21 @@ mod tests {
             Pubkey::new_unique(),
             Pubkey::new_unique(),
         ];
-        let vault = Pubkey::new_unique();
 
         vec![
             ClaimLeaf {
                 claimant: claimants[0],
-                assigned_vault: vault,
+                assigned_vault_index: 0,
                 entitlements: 100,
             },
             ClaimLeaf {
                 claimant: claimants[1],
-                assigned_vault: vault,
+                assigned_vault_index: 0,
                 entitlements: 200,
             },
             ClaimLeaf {
                 claimant: claimants[2],
-                assigned_vault: vault,
+                assigned_vault_index: 1,
                 entitlements: 300,
             },
         ]
@@ -190,7 +191,7 @@ mod tests {
         let leaves = create_test_leaves();
         let non_existent_leaf = ClaimLeaf {
             claimant: Pubkey::new_unique(),
-            assigned_vault: Pubkey::new_unique(),
+            assigned_vault_index: 2,
             entitlements: 999,
         };
 

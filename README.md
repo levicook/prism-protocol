@@ -288,6 +288,28 @@ The test system automatically handles dependencies but requires:
 - **SQLite3** - For database content validation (optional, tests skip if unavailable)
 - **bc** - For performance calculations (auto-installed on supported systems)
 
+## Developer Onboarding & Secrets Management
+
+Prism Protocol uses encrypted keypairs for development and testing. This system is designed for **core team members** who need access to shared development secrets.
+
+### For Core Team Members
+
+1. **Setup:** Install `age`, generate a keypair, add your public key to `secrets/recipients.txt` via PR
+2. **Critical:** After your PR merges, an existing team member must re-encrypt all secrets with `./scripts/encrypt-secrets`
+3. **Daily workflow:** `./scripts/decrypt-secrets` → work → `./scripts/shred-secrets`
+4. **Deploy:** Use `./scripts/anchor-deploy -e localnet|devnet` for environment-specific deployment
+
+### For External Contributors
+
+External contributors can develop and test without access to encrypted secrets:
+- Use `solana-keygen new` to create local test keypairs
+- Run `anchor build` and `anchor test` for local development
+- The test suite works without encrypted secrets
+
+### Complete Documentation
+
+See [`secrets/README.md`](secrets/README.md) for full setup instructions, security details, and team onboarding procedures. The secrets management system may be redesigned for better open source collaboration in the future.
+
 **Key Processes:**
 
 1.  **Setup & Funding (Operator using `prism-protocol-cli`):**

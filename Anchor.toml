@@ -3,14 +3,18 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-prism_protocol = "3hLSRKWiLGPgfvJJWe6WP9kCNQB5FVZu3Y4Awp1sMEbJ"
+prism_protocol = "PrsmV9Kh8HcJjPSShFidZFJrbWM5NWQ98ST8M2BNdAw"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
 cluster = "localnet"
-wallet = "~/.config/solana/id.json"
+wallet = "secrets/decrypted-keypairs/localnet-deployer.json" # run ./scripts/decrypt-secrets to create this file
 
 [scripts]
-test = "cargo test-sbf"
+test = " cargo test-sbf"
+
+[toolchain]
+anchor_version = "0.31.1"  # `anchor-cli` version to use(requires `avm`)
+solana_version = "2.1.21"  # Solana version to use(applies to all Solana tools)

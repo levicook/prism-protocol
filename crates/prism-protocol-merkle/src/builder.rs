@@ -124,26 +124,26 @@ impl ClaimMerkleTree {
 ///
 /// ## Parameters
 /// - `claimant_entitlements`: List of (claimant_pubkey, entitlements) pairs
-/// - `vaults`: List of vault pubkeys (order matters for consistent hashing)
+/// - `vault_count`: Number of vaults
 ///
 /// ## Returns
-/// A `ClaimMerkleTree` with leaves containing the assigned vault for each claimant.
+/// A `ClaimMerkleTree` with leaves containing the assigned vault index for each claimant.
 pub fn create_merkle_tree(
     claimant_entitlements: &[(Pubkey, u64)],
-    vaults: &[Pubkey],
+    vault_count: usize,
 ) -> Result<ClaimMerkleTree> {
     require!(!claimant_entitlements.is_empty(), ErrorCode::InvalidInput);
-    require!(!vaults.is_empty(), ErrorCode::InvalidInput);
+    require!(vault_count > 0, ErrorCode::InvalidInput);
 
     let leaves: Vec<ClaimLeaf> = claimant_entitlements
         .iter()
         .map(|(claimant, entitlements)| {
             // Consistent hashing: hash the claimant pubkey to determine vault assignment
-            let vault_index = consistent_hash_vault_assignment(claimant, vaults.len());
+            let vault_index = consistent_hash_vault_assignment(claimant, vault_count);
 
             ClaimLeaf {
                 claimant: *claimant,
-                assigned_vault: vaults[vault_index],
+                assigned_vault_index: vault_index as u8,
                 entitlements: *entitlements,
             }
         })
@@ -203,22 +203,21 @@ mod tests {
             Pubkey::new_unique(),
             Pubkey::new_unique(),
         ];
-        let vault = Pubkey::new_unique();
 
         let leaves = vec![
             ClaimLeaf {
                 claimant: claimants[0],
-                assigned_vault: vault,
+                assigned_vault_index: 0,
                 entitlements: 100,
             },
             ClaimLeaf {
                 claimant: claimants[1],
-                assigned_vault: vault,
+                assigned_vault_index: 0,
                 entitlements: 200,
             },
             ClaimLeaf {
                 claimant: claimants[2],
-                assigned_vault: vault,
+                assigned_vault_index: 1,
                 entitlements: 300,
             },
         ];
@@ -240,17 +239,16 @@ mod tests {
     #[test]
     fn test_generate_and_verify_proof() {
         let claimants = [Pubkey::new_unique(), Pubkey::new_unique()];
-        let vault = Pubkey::new_unique();
 
         let leaves = vec![
             ClaimLeaf {
                 claimant: claimants[0],
-                assigned_vault: vault,
+                assigned_vault_index: 0,
                 entitlements: 100,
             },
             ClaimLeaf {
                 claimant: claimants[1],
-                assigned_vault: vault,
+                assigned_vault_index: 1,
                 entitlements: 200,
             },
         ];
@@ -272,17 +270,16 @@ mod tests {
     #[test]
     fn test_duplicate_claimant_error() {
         let claimant = Pubkey::new_unique();
-        let vault = Pubkey::new_unique();
 
         let leaves = vec![
             ClaimLeaf {
                 claimant,
-                assigned_vault: vault,
+                assigned_vault_index: 0,
                 entitlements: 100,
             },
             ClaimLeaf {
                 claimant, // Duplicate!
-                assigned_vault: vault,
+                assigned_vault_index: 1,
                 entitlements: 200,
             },
         ];
@@ -300,7 +297,7 @@ mod tests {
             Pubkey::new_unique(),
             Pubkey::new_unique(),
         ];
-        let vaults = [Pubkey::new_unique(), Pubkey::new_unique()];
+        let vault_count = 3;
 
         // Create claimant entitlements with different amounts
         let claimant_entitlements: Vec<(Pubkey, u64)> = claimants
@@ -309,7 +306,7 @@ mod tests {
             .map(|(i, &claimant)| (claimant, (i + 1) as u64 * 100))
             .collect();
 
-        let merkle_tree = create_merkle_tree(&claimant_entitlements, &vaults).unwrap();
+        let merkle_tree = create_merkle_tree(&claimant_entitlements, vault_count).unwrap();
 
         // Verify tree was created successfully
         assert!(merkle_tree.root().is_some());
@@ -321,19 +318,19 @@ mod tests {
             assert_eq!(leaf.claimant, *claimant);
             assert_eq!(leaf.entitlements, *expected_entitlements);
 
-            // Verify vault assignment is one of the provided vaults
-            assert!(vaults.contains(&leaf.assigned_vault));
-
             // Verify consistent hashing: same claimant should always get same vault
-            let vault_index = consistent_hash_vault_assignment(claimant, vaults.len());
-            assert_eq!(leaf.assigned_vault, vaults[vault_index]);
+            let vault_index = consistent_hash_vault_assignment(claimant, vault_count);
+            assert_eq!(leaf.assigned_vault_index as usize, vault_index);
         }
 
         // Test determinism: creating the tree again should produce identical assignments
-        let merkle_tree2 = create_merkle_tree(&claimant_entitlements, &vaults).unwrap();
+        let merkle_tree2 = create_merkle_tree(&claimant_entitlements, vault_count).unwrap();
         for (leaf1, leaf2) in merkle_tree.leaves.iter().zip(merkle_tree2.leaves.iter()) {
             assert_eq!(leaf1.claimant, leaf2.claimant);
-            assert_eq!(leaf1.assigned_vault, leaf2.assigned_vault);
+            assert_eq!(
+                leaf1.assigned_vault_index as usize,
+                leaf2.assigned_vault_index as usize
+            );
             assert_eq!(leaf1.entitlements, leaf2.entitlements);
         }
     }
