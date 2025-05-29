@@ -182,71 +182,91 @@ test_fixture_generation() {
 
         log_info "Testing fixture generation: $count claimants, $cohorts cohorts, $distribution distribution"
 
-        local campaign_file="test-campaign-${count}-${cohorts}-${distribution}.csv"
-        local cohorts_file="test-cohorts-${count}-${cohorts}-${distribution}.csv"
+        local campaign_name="Test Campaign ${count}-${cohorts}-${distribution}"
+        local campaign_slug="test-campaign-${count}-${cohorts}-${distribution}"
+        local fixture_dir="test-artifacts/fixtures/${campaign_slug}"
 
-        # Generate fixtures
+        # Generate fixtures with enhanced interface
         $CLI_BIN generate-fixtures \
+            --campaign-name "$campaign_name" \
             --count "$count" \
             --cohort-count "$cohorts" \
-            --distribution "$distribution" \
-            --campaign-csv-out "$campaign_file" \
-            --cohorts-csv-out "$cohorts_file"
+            --distribution "$distribution"
 
-        # Assert files were created
-        assert_file_exists "$campaign_file" "Campaign CSV"
-        assert_file_exists "$cohorts_file" "Cohorts CSV"
+        # Assert directory structure was created
+        assert_file_exists "$fixture_dir" "Fixture directory"
+        assert_file_exists "$fixture_dir/campaign.csv" "Campaign CSV"
+        assert_file_exists "$fixture_dir/cohorts.csv" "Cohorts CSV"
+        assert_file_exists "$fixture_dir/claimant-keypairs" "Keypairs directory"
 
         # Assert file structure
-        assert_file_contains "$campaign_file" "cohort,claimant,entitlements" "Campaign CSV header"
-        assert_file_contains "$cohorts_file" "cohort,amount_per_entitlement" "Cohorts CSV header"
+        assert_file_contains "$fixture_dir/campaign.csv" "cohort,claimant,entitlements" "Campaign CSV header"
+        assert_file_contains "$fixture_dir/cohorts.csv" "cohort,amount_per_entitlement" "Cohorts CSV header"
 
         # Count lines (header + data)
         local campaign_lines
-        campaign_lines=$(wc -l <"$campaign_file")
+        campaign_lines=$(wc -l <"$fixture_dir/campaign.csv")
         local expected_lines=$((count + 1)) # +1 for header
 
         if [[ "$campaign_lines" -ne "$expected_lines" ]]; then
-            log_error "Expected $expected_lines lines in $campaign_file, got $campaign_lines"
+            log_error "Expected $expected_lines lines in campaign.csv, got $campaign_lines"
             exit 1
         fi
 
         local cohorts_lines
-        cohorts_lines=$(wc -l <"$cohorts_file")
+        cohorts_lines=$(wc -l <"$fixture_dir/cohorts.csv")
         local expected_cohort_lines=$((cohorts + 1)) # +1 for header
 
         if [[ "$cohorts_lines" -ne "$expected_cohort_lines" ]]; then
-            log_error "Expected $expected_cohort_lines lines in $cohorts_file, got $cohorts_lines"
+            log_error "Expected $expected_cohort_lines lines in cohorts.csv, got $cohorts_lines"
             exit 1
         fi
 
-        log_success "Fixture generation test passed: $case"
+        # Check keypair files
+        local keypair_count
+        keypair_count=$(find "$fixture_dir/claimant-keypairs" -name "claimant-*.json" | wc -l)
+        if [[ "$keypair_count" -ne "$count" ]]; then
+            log_error "Expected $count keypair files, got $keypair_count"
+            exit 1
+        fi
+
+        # Validate a sample keypair file
+        local sample_keypair="$fixture_dir/claimant-keypairs/claimant-0001.json"
+        assert_file_exists "$sample_keypair" "Sample keypair file"
+        assert_file_contains "$sample_keypair" "\"keypair\":" "Keypair data"
+        assert_file_contains "$sample_keypair" "\"pubkey\":" "Public key"
+        assert_file_contains "$sample_keypair" "\"campaign\": \"$campaign_slug\"" "Campaign reference"
+
+        log_success "Enhanced fixture generation test passed: $case"
     done
 
-    log_success "All fixture generation tests passed"
+    log_success "All enhanced fixture generation tests passed"
 }
 
 # Test campaign compilation
 test_campaign_compilation() {
-    log_test "Campaign compilation"
+    log_test "Campaign compilation with enhanced fixtures"
 
-    # First generate test fixtures
+    # First generate test fixtures using the enhanced interface
     log_info "Generating test fixtures for compilation..."
+    local campaign_name="Compilation Test Campaign"
+    local campaign_slug="compilation-test-campaign"
+    local fixture_dir="test-artifacts/fixtures/${campaign_slug}"
+
     $CLI_BIN generate-fixtures \
+        --campaign-name "$campaign_name" \
         --count 20 \
         --cohort-count 3 \
-        --distribution realistic \
-        --campaign-csv-out test-campaign.csv \
-        --cohorts-csv-out test-cohorts.csv
+        --distribution realistic
 
-    # Test campaign compilation
+    # Test campaign compilation from fixture directory
     local db_file="test-campaign.db"
     local mint="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" # USDC mint
 
-    log_info "Compiling campaign..."
+    log_info "Compiling campaign from fixtures..."
     $CLI_BIN compile-campaign \
-        --campaign-csv-in test-campaign.csv \
-        --cohorts-csv-in test-cohorts.csv \
+        --campaign-csv-in "$fixture_dir/campaign.csv" \
+        --cohorts-csv-in "$fixture_dir/cohorts.csv" \
         --mint "$mint" \
         --admin-keypair test-admin.json \
         --campaign-db-out "$db_file"
@@ -312,10 +332,21 @@ test_campaign_compilation() {
 test_error_handling() {
     log_test "Error handling"
 
+    # First create a test fixture for error testing
+    local campaign_name="Error Test Campaign"
+    local campaign_slug="error-test-campaign"
+    local fixture_dir="test-artifacts/fixtures/${campaign_slug}"
+
+    $CLI_BIN generate-fixtures \
+        --campaign-name "$campaign_name" \
+        --count 5 \
+        --cohort-count 2 \
+        --distribution uniform
+
     # Test missing files
     if $CLI_BIN compile-campaign \
         --campaign-csv-in nonexistent.csv \
-        --cohorts-csv-in test-cohorts.csv \
+        --cohorts-csv-in "$fixture_dir/cohorts.csv" \
         --mint EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v \
         --admin-keypair test-admin.json \
         --campaign-db-out test.db >/dev/null 2>&1; then
@@ -325,8 +356,8 @@ test_error_handling() {
 
     # Test invalid mint
     if $CLI_BIN compile-campaign \
-        --campaign-csv-in test-campaign.csv \
-        --cohorts-csv-in test-cohorts.csv \
+        --campaign-csv-in "$fixture_dir/campaign.csv" \
+        --cohorts-csv-in "$fixture_dir/cohorts.csv" \
         --mint invalid-mint \
         --admin-keypair test-admin.json \
         --campaign-db-out test.db >/dev/null 2>&1; then
@@ -334,42 +365,69 @@ test_error_handling() {
         exit 1
     fi
 
+    # Test overwrite protection for fixtures
+    if $CLI_BIN generate-fixtures \
+        --campaign-name "$campaign_name" \
+        --count 10 >/dev/null 2>&1; then
+        log_error "Expected command to fail with overwrite protection"
+        exit 1
+    fi
+
     log_success "Error handling tests passed"
 }
 
-# Test deterministic behavior
-test_deterministic_behavior() {
-    log_test "Deterministic behavior"
+# Test overwrite protection (replaces deterministic behavior test)
+test_overwrite_protection() {
+    log_test "Overwrite protection"
 
-    # Generate same fixtures twice with same seed
+    local campaign_name="Overwrite Test Campaign"
+    local campaign_slug="overwrite-test-campaign"
+    local fixture_dir="test-artifacts/fixtures/${campaign_slug}"
+
+    # Generate initial fixtures
     $CLI_BIN generate-fixtures \
-        --count 50 \
-        --seed 12345 \
+        --campaign-name "$campaign_name" \
+        --count 10 \
         --cohort-count 2 \
-        --distribution uniform \
-        --campaign-csv-out test-det1-campaign.csv \
-        --cohorts-csv-out test-det1-cohorts.csv
+        --distribution uniform
 
-    $CLI_BIN generate-fixtures \
-        --count 50 \
-        --seed 12345 \
-        --cohort-count 2 \
-        --distribution uniform \
-        --campaign-csv-out test-det2-campaign.csv \
-        --cohorts-csv-out test-det2-cohorts.csv
+    # Verify fixtures were created
+    assert_file_exists "$fixture_dir/campaign.csv" "Initial campaign CSV"
+    assert_file_exists "$fixture_dir/cohorts.csv" "Initial cohorts CSV"
 
-    # Files should be identical
-    if ! diff test-det1-campaign.csv test-det2-campaign.csv >/dev/null; then
-        log_error "Campaign files are not deterministic"
+    # Try to generate again with same name - should fail
+    if $CLI_BIN generate-fixtures \
+        --campaign-name "$campaign_name" \
+        --count 20 >/dev/null 2>&1; then
+        log_error "Expected command to fail due to overwrite protection"
         exit 1
     fi
 
-    if ! diff test-det1-cohorts.csv test-det2-cohorts.csv >/dev/null; then
-        log_error "Cohorts files are not deterministic"
+    # Verify original files are unchanged
+    local lines_count
+    lines_count=$(wc -l <"$fixture_dir/campaign.csv")
+    if [[ "$lines_count" -ne 11 ]]; then # 10 claimants + 1 header
+        log_error "Original files were modified despite overwrite protection"
         exit 1
     fi
 
-    log_success "Deterministic behavior test passed"
+    # Test that removal allows regeneration
+    rm -rf "$fixture_dir"
+
+    $CLI_BIN generate-fixtures \
+        --campaign-name "$campaign_name" \
+        --count 15 \
+        --cohort-count 2 \
+        --distribution uniform
+
+    # Verify new fixtures have correct count
+    lines_count=$(wc -l <"$fixture_dir/campaign.csv")
+    if [[ "$lines_count" -ne 16 ]]; then # 15 claimants + 1 header
+        log_error "Regenerated fixtures have wrong count"
+        exit 1
+    fi
+
+    log_success "Overwrite protection test passed"
 }
 
 # Main test execution
@@ -385,10 +443,7 @@ main() {
     test_fixture_generation
     test_campaign_compilation
     test_error_handling
-
-    if [[ "$QUICK_MODE" != "true" ]]; then
-        test_deterministic_behavior
-    fi
+    test_overwrite_protection
 
     log_success "All CLI tests passed! 🎉"
 }

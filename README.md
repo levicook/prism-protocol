@@ -89,44 +89,41 @@ cargo run -p prism-protocol-cli -- <COMMAND>
 **Generate Test Fixtures (Phase 0 - Available Now)**
 
 ```bash
-# Generate 1,000 test claimants with realistic distribution across 3 cohorts
+# Generate 1,000 test claimants with realistic distribution in organized directory structure
 cargo run -p prism-protocol-cli -- generate-fixtures \
+  --campaign-name "Realistic Test Campaign" \
   --count 1000 \
   --distribution realistic \
-  --cohort-count 3 \
-  --campaign-csv-out campaign.csv \
-  --cohorts-csv-out cohorts.csv
+  --cohort-count 3
 
-# Generate 1M claimants for benchmarking (deterministic, no real keypairs)
+# Generate 10,000 claimants for benchmarking with exponential distribution
 cargo run -p prism-protocol-cli -- generate-fixtures \
-  --count 1000000 \
-  --seed 42 \
+  --campaign-name "Benchmark Campaign Large" \
+  --count 10000 \
   --distribution exponential \
   --min-entitlements 1 \
   --max-entitlements 1000 \
-  --cohort-count 5 \
-  --campaign-csv-out million-campaign.csv \
-  --cohorts-csv-out million-cohorts.csv
+  --cohort-count 5
 
-# Generate 10M claimants for stress testing
+# Generate stress test dataset with uniform distribution
 cargo run -p prism-protocol-cli -- generate-fixtures \
-  --count 10000000 \
+  --campaign-name "Stress Test Campaign" \
+  --count 100000 \
   --distribution uniform \
-  --cohort-count 10 \
-  --campaign-csv-out stress-campaign.csv \
-  --cohorts-csv-out stress-cohorts.csv
+  --cohort-count 10
 ```
 
-**Compile Campaign from CSV Files (Phase 1 - Available Now)**
+**Compile Campaign from CSV Files (Phase 2 - Available Now)**
 
 ```bash
-# Compile campaign from CSV files
+# Compile campaign from fixture source files
+cd test-artifacts/fixtures/realistic-test-campaign/
 cargo run -p prism-protocol-cli -- compile-campaign \
   --campaign-csv-in campaign.csv \
   --cohorts-csv-in cohorts.csv \
   --mint EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v \
-  --admin-keypair ~/.config/solana/id.json \
-  --campaign-db-out campaign.db
+  --admin-keypair ../../../test-admin.json \
+  --campaign-db-out ../../campaigns/realistic-test-campaign.db
 ```
 
 **Campaign Management (Planned - Phase 2+)**
@@ -149,15 +146,47 @@ prism-protocol campaign-status <campaign-fingerprint>
 
 #### Fixture Generation Features
 
-- **Deterministic Generation**: Same seed produces identical results for reproducible benchmarks
+- **Organized Directory Structure**: Campaign-specific directories under `test-artifacts/fixtures/{campaign-slug}/`
+- **Real Keypair Generation**: Always generates real Solana keypairs for all claimants (no more dummy pubkeys)
+- **Individual Keypair Files**: Each claimant gets their own `.json` file with complete keypair and metadata
+- **Overwrite Protection**: Prevents accidental data loss by requiring manual cleanup of existing fixtures
+- **Reproducible Benchmarking**: Archive generated fixtures for consistent performance testing across runs
 - **Multiple Distributions**:
   - `uniform` - Even distribution across entitlement range
   - `realistic` - Weighted towards lower values (more realistic user behavior)
   - `exponential` - Exponential decay distribution
 - **Multi-Cohort Support**: Generates both campaign.csv and cohorts.csv files with configurable cohort counts
-- **Scalable**: Efficiently generates millions of test claimants without real keypairs
+- **Scalable**: Efficiently generates thousands of test claimants with real keypairs
 - **Progress Tracking**: Built-in progress indicators for large datasets
-- **CSV Output**: Standard format compatible with campaign generation tools
+- **CSV Output**: Standard format compatible with campaign compilation tools
+
+#### Reproducible Benchmarking
+
+For consistent performance testing and benchmarking, archive your generated fixtures:
+
+```bash
+# Generate benchmark fixture
+cargo run -p prism-protocol-cli -- generate-fixtures \
+  --campaign-name "Benchmark 100K Dataset" \
+  --count 100000 \
+  --distribution realistic
+
+# Archive for reproducible benchmarks
+tar -czf benchmark-100k-dataset.tar.gz test-artifacts/fixtures/benchmark-100k-dataset/
+
+# Later: restore for consistent benchmarking
+tar -xzf benchmark-100k-dataset.tar.gz
+
+# Run benchmarks against same exact data
+cargo run -p prism-protocol-cli -- compile-campaign \
+  --campaign-csv-in test-artifacts/fixtures/benchmark-100k-dataset/campaign.csv \
+  --cohorts-csv-in test-artifacts/fixtures/benchmark-100k-dataset/cohorts.csv \
+  --mint EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v \
+  --admin-keypair test-admin.json \
+  --campaign-db-out benchmark-100k.db
+```
+
+This approach ensures identical inputs across benchmark runs while maintaining the simplicity of random generation.
 
 #### Campaign Generation Features
 
@@ -302,6 +331,7 @@ Prism Protocol uses encrypted keypairs for development and testing. This system 
 ### For External Contributors
 
 External contributors can develop and test without access to encrypted secrets:
+
 - Use `solana-keygen new` to create local test keypairs
 - Run `anchor build` and `anchor test` for local development
 - The test suite works without encrypted secrets
@@ -309,6 +339,8 @@ External contributors can develop and test without access to encrypted secrets:
 ### Complete Documentation
 
 See [`secrets/README.md`](secrets/README.md) for full setup instructions, security details, and team onboarding procedures. The secrets management system may be redesigned for better open source collaboration in the future.
+
+## 3. Key Processes
 
 **Key Processes:**
 
