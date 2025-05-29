@@ -21,21 +21,17 @@ struct Cli {
 enum Commands {
     /// Generate test fixtures for benchmarking and development
     GenerateFixtures {
+        /// Campaign name (will be slugified for directory structure)
+        #[arg(long)]
+        campaign_name: String,
+
+        /// Base output directory for organized fixture structure
+        #[arg(long, default_value = "test-artifacts/fixtures/")]
+        output_dir: PathBuf,
+
         /// Number of claimants to generate
         #[arg(long, default_value = "1000")]
         count: u64,
-
-        /// Seed for deterministic generation
-        #[arg(long, default_value = "42")]
-        seed: u64,
-
-        /// Output campaign CSV file path (cohort,claimant,entitlements)
-        #[arg(long, default_value = "campaign.csv")]
-        campaign_csv_out: PathBuf,
-
-        /// Output cohorts CSV file path (cohort,amount_per_entitlement)
-        #[arg(long, default_value = "cohorts.csv")]
-        cohorts_csv_out: PathBuf,
 
         /// Distribution type
         #[arg(long, default_value = "uniform")]
@@ -165,10 +161,9 @@ fn main() -> CliResult<()> {
 
     match cli.command {
         Commands::GenerateFixtures {
+            campaign_name,
+            output_dir,
             count,
-            seed,
-            campaign_csv_out,
-            cohorts_csv_out,
             distribution,
             min_entitlements,
             max_entitlements,
@@ -176,10 +171,9 @@ fn main() -> CliResult<()> {
             min_amount_per_entitlement,
             max_amount_per_entitlement,
         } => commands::generate_fixtures::execute(
+            campaign_name,
+            output_dir,
             count,
-            seed,
-            campaign_csv_out,
-            cohorts_csv_out,
             distribution,
             min_entitlements,
             max_entitlements,

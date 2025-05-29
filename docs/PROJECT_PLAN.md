@@ -57,21 +57,25 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 
 #### Planned CLI Features & Implementation Phases
 
-**Phase 0: Fixture Generation (For Benchmarking) ✅ COMPLETED**
+**Phase 0: Enhanced Fixture Generation (For Testing) ✅ COMPLETED**
 
-- **Purpose:** Generate large-scale test datasets for performance validation
+- **Purpose:** Generate organized test datasets with real keypairs for development and testing
 - **Commands:**
-  - `cargo run -p prism-protocol-cli -- generate-fixtures --count <N> --seed <SEED> [options]`
-  - Support for deterministic pubkey generation (no real keypairs needed)
-  - Configurable entitlement distributions (uniform, realistic, exponential)
+  - `cargo run -p prism-protocol-cli -- generate-fixtures --campaign-name <NAME> [options]`
+  - Organized directory structure: `test-artifacts/fixtures/{campaign-slug}/`
+  - Real Solana keypair generation for all claimants (no more dummy pubkeys)
+  - Individual keypair files with complete metadata for each claimant
   - CSV output format (campaign.csv and cohorts.csv)
   - Multi-cohort fixture generation with configurable cohort counts
 - **Key Features:**
-  - ✅ Deterministic generation for reproducible benchmarks
-  - ✅ Memory-efficient for millions of claimants
-  - ✅ Realistic distribution patterns for testing
+  - ✅ Organized campaign-specific directory structure
+  - ✅ Real keypair generation for authentic testing
+  - ✅ Individual keypair file storage with metadata
+  - ✅ Overwrite protection to prevent data loss
+  - ✅ Multiple distribution patterns (uniform, realistic, exponential)
   - ✅ Progress tracking for large datasets
   - ✅ Configurable cohort and entitlement ranges
+  - ✅ Reproducible benchmarking via fixture archiving (replaces deterministic seeds)
 
 **Phase 1: Core Campaign Generation ✅ COMPLETED**
 
@@ -113,7 +117,8 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 - **Purpose:** Build complete claiming infrastructure with clean separation between test fixtures and real campaigns
 - **Strategic Approach:** Full ecosystem including enhanced fixtures, API server, and dApp support with unified CLI architecture
 - **Key Architectural Decisions:**
-  - **Clean Directory Separation:** 
+
+  - **Clean Directory Separation:**
     - `test-artifacts/fixtures/{slug}/` - Campaign source files with real keypairs
     - `test-artifacts/campaigns/` - Compiled test campaigns (API-servable)
     - `campaigns/` - Compiled production campaigns (API-servable)
@@ -123,14 +128,17 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
   - **API Server Simplicity:** Reads from single campaigns directory (`--campaigns-dir test-artifacts/campaigns/` or `--campaigns-dir campaigns/`)
 
 - **Components:**
+
   1. **Enhanced Fixture Generator** (Week 1 - Foundation)
+
      - Default output: `test-artifacts/fixtures/{campaign-slug}/` (slugified campaign names)
      - Always generate real, random keypairs for all claimants (no more dummy pubkeys)
      - Backward compatible with existing interface
      - Clear separation from production campaigns
      - See: `docs/specs/ENHANCED_FIXTURE_GENERATOR_SPEC.md`
-  
+
   2. **API Server** (`prism-protocol-cli serve-api`) (Week 2 - Core Infrastructure)
+
      - Subcommand of existing CLI for unified toolchain
      - Serves merkle proofs from compiled campaign databases only
      - Single directory interface: `--campaigns-dir` for clean separation
@@ -138,13 +146,14 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
      - Optional transaction building for dApps
      - Feature-flagged implementation for clean separation
      - See: `docs/specs/API_SERVER_SPEC.md`
-  
+
   3. **CLI Claim Integration** (Week 3 - Testing)
+
      - `claim-tokens` command using API server for proof lookup
      - End-to-end testing with real HD wallet keypairs from fixtures
      - Multi-user concurrent claim testing
      - Integration between fixtures → compile → deploy → claim workflow
-  
+
   4. **dApp Frontend** (Week 4-5 - User Interface)
      - Next.js/React with Solana wallet integration
      - Campaign discovery and claiming interface
@@ -153,6 +162,7 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
      - See: `docs/specs/DAPP_FRONTEND_SPEC.md`
 
 **Unified Docker Architecture:**
+
 - Single Docker image for all CLI functionality
 - Can run different commands in separate containers
 - API server, deployment, and campaign management all from one binary
@@ -162,8 +172,9 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 
 - **Purpose:** Administrative operations, production deployment, and campaign creation tools
 - **Strategic Components:**
-  
+
   1. **Campaign Admin dApp** (New Strategic Component)
+
      - Web UI for campaign operators to define campaigns (replaces manual CSV creation)
      - Visual cohort configuration and claimant list management
      - Export to CLI-compatible formats
@@ -171,6 +182,7 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
      - Integration with secrets management for secure admin operations
 
   2. **CLI Administrative Operations**
+
      - `cargo run -p prism-protocol-cli -- pause-campaign <fingerprint> --admin-keypair <admin.json>`
      - `cargo run -p prism-protocol-cli -- resume-campaign <fingerprint> --admin-keypair <admin.json>`
      - `cargo run -p prism-protocol-cli -- reclaim-tokens <fingerprint> <cohort-root> --admin-keypair <admin.json>`
