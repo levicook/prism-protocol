@@ -16,7 +16,6 @@ test-artifacts/
 │   │   │   ├── claimant-0001.json  # First claimant keypair
 │   │   │   ├── claimant-0002.json  # Second claimant keypair
 │   │   │   └── ...
-│   │   └── README.md               # Test fixture summary and usage
 │   └── stress-test-100k/           # Large-scale test fixture
 │       ├── campaign.csv
 │       ├── cohorts.csv
@@ -32,6 +31,7 @@ campaigns/                          # Compiled production campaigns (API-servabl
 ```
 
 **Key Concepts:**
+
 - **Campaign** = CSV files (human-readable source)
 - **Compiled Campaign** = SQLite database (API-servable, deployable)
 - **API Server** reads from a single campaigns directory (test-artifacts/campaigns/ OR campaigns/)
@@ -58,27 +58,22 @@ cargo run -p prism-protocol-cli -- generate-fixtures \
   --count 10000 \                                   # Number of claimants
   --cohort-count 3 \                               # Number of cohorts
   --distribution realistic \                        # Distribution type
-  --seed 42                                        # Optional: deterministic generation
+  --min-entitlements 1 \                           # Minimum entitlements per claimant
+  --max-entitlements 100 \                         # Maximum entitlements per claimant
+  --min-amount-per-entitlement 1000000 \           # Minimum amount per entitlement (base units)
+  --max-amount-per-entitlement 10000000            # Maximum amount per entitlement (base units)
 ```
 
-## 🔑 Simplified Keypair Implementation
+## 🔑 Simplified Random Keypair Implementation
 
 ### Random Keypair Generation
 
 ```rust
 use solana_sdk::signature::{Keypair, Signer};
-use rand::thread_rng;
 
-// Simple random keypair generation
+// Simple random keypair generation (no determinism, use zip files for reproducibility)
 fn generate_claimant_keypair() -> Keypair {
     Keypair::new()
-}
-
-// For deterministic testing (with seed)
-fn generate_deterministic_keypair(seed: u64, index: u32) -> Keypair {
-    use rand::{SeedableRng, rngs::StdRng};
-    let mut rng = StdRng::seed_from_u64(seed.wrapping_add(index as u64));
-    Keypair::generate(&mut rng)
 }
 ```
 
@@ -87,7 +82,9 @@ fn generate_deterministic_keypair(seed: u64, index: u32) -> Keypair {
 ```json
 // claimant-0001.json
 {
-  "keypair": [/* 64-byte array */],
+  "keypair": [
+    /* 64-byte array */
+  ],
   "pubkey": "7BgBvyjrZX8YKHGoW9Y8929nsq6TsQANzvsGVEpVLUD8",
   "index": 1,
   "campaign": "test-campaign-001",
@@ -101,7 +98,7 @@ fn generate_deterministic_keypair(seed: u64, index: u32) -> Keypair {
 ### Test Fixture → Compiled Campaign Workflow
 
 ```bash
-# 1. Generate test fixture source files
+# 1. Generate test fixture source files (with overwrite protection)
 cargo run -p prism-protocol-cli -- generate-fixtures \
   --campaign-name "Pengu Airdrop Test" \
   --count 1000 \
@@ -110,8 +107,8 @@ cargo run -p prism-protocol-cli -- generate-fixtures \
 # 2. Compile test fixture to API-servable database
 cd test-artifacts/fixtures/pengu-airdrop-test/
 cargo run -p prism-protocol-cli -- compile-campaign \
-  --campaign-csv campaign.csv \
-  --cohorts-csv cohorts.csv \
+  --campaign-csv-in campaign.csv \
+  --cohorts-csv-in cohorts.csv \
   --mint EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v \
   --admin-keypair ../../../test-admin.json \
   --campaign-db-out ../../campaigns/pengu-airdrop-test.db
@@ -137,8 +134,8 @@ cp test-artifacts/fixtures/pengu-airdrop-test/{campaign.csv,cohorts.csv} \
 # 2. Compile production campaign directly to campaigns directory
 cd campaigns-source/pengu-airdrop-season1/
 cargo run -p prism-protocol-cli -- compile-campaign \
-  --campaign-csv campaign.csv \
-  --cohorts-csv cohorts.csv \
+  --campaign-csv-in campaign.csv \
+  --cohorts-csv-in cohorts.csv \
   --mint EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v \
   --admin-keypair ../../secrets/mainnet-admin.json \
   --campaign-db-out ../../campaigns/pengu-airdrop-season1.db
@@ -155,46 +152,70 @@ cargo run -p prism-protocol-cli -- serve-api \
   --port 3000
 ```
 
-## 📊 Campaign Metadata
+## 📊 Directory Structure
 
-### README.md Generation
+### Generated Files Structure
 
-```markdown
-# Test Campaign: pengu-airdrop-test
-
-Generated: 2024-01-15 10:30:00 UTC
-Claimants: 1,000 (with real keypairs)
-Cohorts: 3
-Distribution: realistic
-
-## Testing Workflow
-
-This fixture provides a complete testing environment for the Pengu Airdrop campaign.
-
-### Quick Test
-```bash
-# Compile and deploy test campaign
-cargo run -p prism-protocol-cli -- compile-campaign \
-  --campaign-csv campaign.csv \
-  --cohorts-csv cohorts.csv \
-  --mint YOUR_TEST_MINT \
-  --admin-keypair ../../../test-admin.json \
-  --campaign-db-out campaign.db
-
-# Test claiming with first claimant
-cargo run -p prism-protocol-cli -- claim-tokens \
-  --campaign-db campaign.db \
-  --claimant-keypair claimant-keypairs/claimant-0001.json
+```
+test-artifacts/fixtures/pengu-airdrop-test/
+├── campaign.csv           # Claimant data with real pubkeys
+├── cohorts.csv           # Cohort configuration
+└── claimant-keypairs/    # Individual keypair files
+    ├── claimant-0001.json
+    ├── claimant-0002.json
+    └── ...
 ```
 
-### Production Deployment
+## 📊 Reproducible Benchmarking
+
+Since the enhanced fixture generator uses random keypair generation, reproducible benchmarking requires archiving fixtures:
+
+### Benchmark Fixture Workflow
+
 ```bash
-# Copy to campaigns folder for production
-mkdir -p campaigns/pengu-airdrop-season1/
-cp {campaign.csv,cohorts.csv} campaigns/pengu-airdrop-season1/
-cd campaigns/pengu-airdrop-season1/
-# ... compile with production settings
+# 1. Generate benchmark dataset
+cargo run -p prism-protocol-cli -- generate-fixtures \
+  --campaign-name "Performance Benchmark 100K" \
+  --count 100000 \
+  --distribution realistic \
+  --cohort-count 5
+
+# 2. Archive for reproducible testing
+tar -czf performance-benchmark-100k.tar.gz \
+  test-artifacts/fixtures/performance-benchmark-100k/
+
+# 3. Share archive with team or CI/CD system
+# performance-benchmark-100k.tar.gz can be committed or stored
+
+# 4. Restore for consistent benchmarking
+tar -xzf performance-benchmark-100k.tar.gz
+
+# 5. Run benchmarks against identical data
+make test-performance  # Uses same fixture across runs
 ```
+
+### Benefits of Archive Approach
+
+- **Simplicity**: No seed management or deterministic complexity
+- **Portability**: Archives travel easily between environments
+- **Versioning**: Different benchmark datasets for different test scenarios
+- **Team Sharing**: Consistent benchmarks across all developers
+- **CI/CD Integration**: Reproducible performance testing in automation
+
+### Benchmark Archive Management
+
+```bash
+# Create versioned benchmark archives
+cargo run -p prism-protocol-cli -- generate-fixtures \
+  --campaign-name "Stress Test v2.1" \
+  --count 1000000
+
+tar -czf benchmarks/stress-test-v2.1.tar.gz \
+  test-artifacts/fixtures/stress-test-v2-1/
+
+# Use in CI/CD
+tar -xzf benchmarks/stress-test-v2.1.tar.gz
+make test-performance
 ```
 
 ## 🧪 Testing Integration
@@ -241,19 +262,21 @@ kill $API_PID
 ## 🎯 Implementation Checklist
 
 ### Core Functionality
+
 - [ ] Remove `--real-keypairs` flag (always generate real keypairs)
 - [ ] Implement simple random keypair generation
 - [ ] Create organized directory structure with slugified names
 - [ ] Generate and save individual keypair files
-- [ ] Create campaign README.md with realistic workflow examples
 
 ### Integration
+
 - [ ] Update examples to show fixtures → campaigns workflow
 - [ ] Use evocative campaign names in documentation
 - [ ] Guide users toward API-servable database organization
 - [ ] Update test scripts to use new simplified interface
 
 ### Documentation
+
 - [ ] Update CLI help text to reflect simplified approach
 - [ ] Provide clear examples for both testing and production workflows
 - [ ] Show how to transition from fixtures to production campaigns
@@ -261,6 +284,7 @@ kill $API_PID
 ## 💡 Future Enhancements
 
 ### Campaign Templates
+
 ```bash
 # Predefined campaign templates with realistic names
 cargo run -p prism-protocol-cli -- generate-fixtures \
@@ -269,9 +293,10 @@ cargo run -p prism-protocol-cli -- generate-fixtures \
 ```
 
 ### Integration with Campaign Admin dApp
+
 ```bash
 # Future: Generate fixtures from admin dApp configuration
 cargo run -p prism-protocol-cli -- generate-fixtures \
   --from-admin-config campaign-admin-export.json \
   --campaign-name "designed-in-admin-ui"
-``` 
+```
