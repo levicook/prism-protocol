@@ -1,6 +1,6 @@
 use crate::error::ErrorCode;
 use crate::state::{CampaignV0, CohortV0};
-use crate::CAMPAIGN_V0_SEED_PREFIX;
+use crate::{CAMPAIGN_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX};
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
@@ -14,29 +14,36 @@ pub struct ReclaimTokens<'info> {
     pub admin: Signer<'info>,
 
     #[account(
-        seeds = [b"campaign".as_ref(), campaign_fingerprint.as_ref()],
+        seeds = [
+            CAMPAIGN_V0_SEED_PREFIX,
+            admin.key().as_ref(),
+            campaign_fingerprint.as_ref(),
+        ],
         bump = campaign.bump,
         has_one = admin @ ErrorCode::Unauthorized,
         constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::ConstraintSeedsMismatch,
-        constraint = !campaign.is_active @ ErrorCode::CampaignIsStillActive // Crucial: Campaign must be inactive
+        constraint = !campaign.is_active @ ErrorCode::CampaignIsActive // Crucial: Campaign must be inactive
     )]
     pub campaign: Account<'info, CampaignV0>,
 
     #[account(
-        seeds = [b"cohort".as_ref(), campaign.key().as_ref(), cohort_merkle_root.as_ref()],
+        seeds = [
+            COHORT_V0_SEED_PREFIX,
+            campaign.key().as_ref(),
+            cohort_merkle_root.as_ref(),
+        ],
         bump = cohort.bump,
         constraint = cohort.campaign == campaign.key() @ ErrorCode::InvalidMerkleProof, // Basic integrity check
         constraint = cohort.merkle_root == cohort_merkle_root @ ErrorCode::MerkleRootMismatch
     )]
     pub cohort: Account<'info, CohortV0>,
 
+    /// The vault to reclaim tokens from
     #[account(
         mut,
-        constraint = cohort.vaults.contains(&token_vault_to_reclaim_from.key()) @ ErrorCode::InvalidAssignedVault,
-        // The vault's admin should be the Campaign PDA.
-        // This is implicitly handled because the Campaign PDA will sign the transfer.
+        constraint = cohort.vaults.contains(&vault.key()) @ ErrorCode::InvalidAssignedVault,
     )]
-    pub token_vault_to_reclaim_from: Account<'info, TokenAccount>,
+    pub vault: Account<'info, TokenAccount>,
 
     #[account(
         mut,
@@ -53,7 +60,7 @@ pub fn handle_reclaim_tokens(
     campaign_fingerprint: [u8; 32],
     _cohort_merkle_root_arg: [u8; 32], // Consumed by Accounts macro
 ) -> Result<()> {
-    let amount_to_reclaim = ctx.accounts.token_vault_to_reclaim_from.amount;
+    let amount_to_reclaim = ctx.accounts.vault.amount;
 
     if amount_to_reclaim == 0 {
         // Or return Ok(()) if withdrawing 0 is acceptable.
@@ -63,7 +70,7 @@ pub fn handle_reclaim_tokens(
     }
 
     let transfer_accounts = Transfer {
-        from: ctx.accounts.token_vault_to_reclaim_from.to_account_info(),
+        from: ctx.accounts.vault.to_account_info(),
         to: ctx.accounts.destination_token_account.to_account_info(),
         authority: ctx.accounts.admin.to_account_info(),
     };
@@ -84,26 +91,5 @@ pub fn handle_reclaim_tokens(
         amount_to_reclaim,
     )?;
 
-    // Optionally, emit an event
-    // emit!(FundsWithdrawn {
-    //     campaign_pda: ctx.accounts.campaign.key(),
-    //     cohort_pda: ctx.accounts.cohort.key(),
-    //     withdrawn_from_vault: ctx.accounts.token_vault_to_withdraw_from.key(),
-    //     withdrawn_to_account: ctx.accounts.destination_token_account.key(),
-    //     amount_withdrawn: amount_to_withdraw,
-    //     timestamp: Clock::get()?.unix_timestamp,
-    // });
-
     Ok(())
 }
-
-// Optional Event:
-// #[event]
-// pub struct FundsWithdrawn {
-//     pub campaign_pda: Pubkey,
-//     pub cohort_pda: Pubkey,
-//     pub withdrawn_from_vault: Pubkey,
-//     pub withdrawn_to_account: Pubkey,
-//     pub amount_withdrawn: u64,
-//     pub timestamp: i64,
-// }

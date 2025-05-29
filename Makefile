@@ -1,5 +1,5 @@
 # Prism Protocol - Test Automation
-.PHONY: test test-unit test-cli test-anchor test-integration test-performance test-all clean-test-artifacts help smoke-test dev-test
+.PHONY: test test-unit test-cli test-anchor test-integration test-performance test-e2e test-all clean-test-artifacts help smoke-test dev-test
 
 # Default target
 help:
@@ -11,7 +11,8 @@ help:
 	@echo "  test-anchor      - Run Anchor on-chain program tests"
 	@echo "  test-integration - Run full integration tests"
 	@echo "  test-performance - Run performance benchmarks"
-	@echo "  test-all         - Run all tests (unit + CLI + anchor + integration)"
+	@echo "  test-e2e         - Run end-to-end tests with real network"
+	@echo "  test-all         - Run all tests (unit + CLI + anchor + integration + e2e)"
 	@echo "  test             - Alias for test-all"
 	@echo "  smoke-test       - Quick smoke test for development"
 	@echo "  dev-test         - Development test cycle (clean + CLI tests)"
@@ -21,7 +22,7 @@ help:
 # Run all tests
 test: test-all
 
-test-all: test-unit test-cli test-anchor test-integration
+test-all: test-unit test-cli test-anchor test-integration test-e2e
 	@echo "✅ All tests completed successfully!"
 
 # Unit tests for all crates
@@ -54,6 +55,12 @@ test-performance:
 	@./scripts/test-performance.sh
 	@echo "✅ Performance tests completed!"
 
+# End-to-end tests with real network
+test-e2e:
+	@echo "🌐 Running end-to-end tests..."
+	@./scripts/test-e2e.sh
+	@echo "✅ End-to-end tests passed!"
+
 # Clean up test artifacts
 clean-test:
 	@echo "🧹 Cleaning test artifacts..."
@@ -75,7 +82,7 @@ smoke-test:
 	@echo "✅ Smoke tests passed!"
 
 # Continuous integration target
-ci-test: test-unit test-cli test-anchor test-integration
+ci-test: test-unit test-cli test-anchor test-integration test-e2e
 	@echo "🤖 CI test suite completed!"
 
 # Watch mode for development (requires cargo-watch)

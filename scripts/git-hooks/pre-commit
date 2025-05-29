@@ -1,0 +1,11 @@
+#!/bin/bash
+set -euo pipefail
+
+# Get the project root (git repo root)
+project_root="$(git rev-parse --show-toplevel)"
+
+# Run the secrets check from the project root
+"$project_root/scripts/check-secrets"
+
+# If the check failed, the commit will be aborted
+exit $?

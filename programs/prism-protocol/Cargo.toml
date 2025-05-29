@@ -33,3 +33,4 @@ prism-protocol-merkle = { path = "../../crates/prism-protocol-merkle" }
 prism-protocol-sdk = { path = "../../crates/prism-protocol-sdk" }
 prism-protocol-testing = { path = "../../crates/prism-protocol-testing" }
 solana-sdk = { workspace = true }
+spl-token = { workspace = true }

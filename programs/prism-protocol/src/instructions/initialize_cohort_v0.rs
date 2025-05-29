@@ -8,7 +8,7 @@ use anchor_lang::prelude::*;
     campaign_fingerprint: [u8; 32],
     merkle_root: [u8; 32],
     amount_per_entitlement: u64,
-    vaults_for_cohort: Vec<Pubkey>
+    vault_count: u8
 )]
 pub struct InitializeCohortV0<'info> {
     #[account(mut)]
@@ -23,6 +23,7 @@ pub struct InitializeCohortV0<'info> {
         bump = campaign.bump,
         has_one = admin @ ErrorCode::Unauthorized, // Ensures the signer is the campaign admin
         constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::ConstraintSeedsMismatch,
+        constraint = !campaign.is_active @ ErrorCode::CampaignIsActive,
     )]
     pub campaign: Account<'info, CampaignV0>,
 
@@ -47,13 +48,11 @@ pub fn handle_initialize_cohort_v0(
     _campaign_fingerprint: [u8; 32], // consumed in account constraints
     merkle_root: [u8; 32],
     amount_per_entitlement: u64,
-    vaults: Vec<Pubkey>,
+    vault_count: u8,
 ) -> Result<()> {
-    require!(!vaults.is_empty(), ErrorCode::NoVaultsProvided);
-
+    require!(vault_count > 0, ErrorCode::InvalidVaultIndex);
     require!(
-        // is this really necessary?
-        vaults.len() <= MAX_VAULTS_PER_COHORT,
+        vault_count as usize <= MAX_VAULTS_PER_COHORT,
         ErrorCode::TooManyVaults
     );
 
@@ -62,7 +61,7 @@ pub fn handle_initialize_cohort_v0(
         campaign: ctx.accounts.campaign.key(),
         merkle_root,
         amount_per_entitlement,
-        vaults,
+        vaults: vec![Pubkey::default(); vault_count as usize], // Pre-size with default pubkeys
         bump: ctx.bumps.cohort,
     });
 

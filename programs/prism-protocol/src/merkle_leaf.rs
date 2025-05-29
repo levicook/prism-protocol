@@ -7,8 +7,9 @@ use anchor_lang::solana_program::hash::Hasher;
 pub struct ClaimLeaf {
     /// The public key of the recipient.
     pub claimant: Pubkey,
-    /// The public key of the specific token vault assigned for this claim.
-    pub assigned_vault: Pubkey,
+    /// The index of the vault assigned for this claim (0-based).
+    /// The actual vault pubkey is derived as a PDA from the cohort address and this index.
+    pub assigned_vault_index: u8,
     /// The number of entitlements (e.g., number of NFTs held, specific tier count)
     /// for which the claimant is eligible for the reward_per_entitlement.
     pub entitlements: u64,
@@ -40,22 +41,21 @@ mod tests {
     #[test]
     fn test_hash_claim_leaf_consistent() {
         let key1 = Pubkey::new_unique();
-        let vault1 = Pubkey::new_unique();
         let leaf1_v1 = ClaimLeaf {
             claimant: key1,
-            assigned_vault: vault1,
+            assigned_vault_index: 0,
             entitlements: 10,
         };
         let leaf1_v2 = ClaimLeaf {
             claimant: key1,
-            assigned_vault: vault1,
+            assigned_vault_index: 0,
             entitlements: 10,
         };
 
         let key2 = Pubkey::new_unique();
         let leaf2 = ClaimLeaf {
             claimant: key2,
-            assigned_vault: vault1,
+            assigned_vault_index: 0,
             entitlements: 5,
         };
 
@@ -79,7 +79,7 @@ mod tests {
         // Manually hash with and without the prefix to compare.
         let leaf = ClaimLeaf {
             claimant: Pubkey::new_unique(),
-            assigned_vault: Pubkey::new_unique(),
+            assigned_vault_index: 0,
             entitlements: 1,
         };
         let serialized_leaf = leaf.try_to_vec().unwrap();

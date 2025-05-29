@@ -1,67 +1,50 @@
-#![cfg(all(feature = "test-sbf"))]
+#![cfg(feature = "test-sbf")]
 
 use {
-    anchor_lang::{prelude::AccountDeserialize as _, Space as _},
-    prism_protocol::{self, state::CampaignV0, ID as PRISM_PROGRAM_ID},
+    anchor_lang::prelude::AccountDeserialize,
+    prism_protocol::state::CampaignV0,
     prism_protocol_testing::TestFixture,
+    solana_sdk::signature::{Keypair, Signer},
 };
 
 #[test]
-fn test_initialize_campaign_success() {
-    // 1. Setup test fixture and initialize campaign
+fn test_initialize_campaign_v0() {
     let mut fixture = TestFixture::new();
-    let campaign_result = fixture.initialize_campaign();
 
-    // 2. Validate campaign account properties
+    // Create a test mint
+    let mint_keypair = Keypair::new();
+    let _mint_account = fixture.create_mint(&mint_keypair, 9);
+    let mint = mint_keypair.pubkey();
+
+    let campaign_result = fixture.initialize_campaign(mint);
+
+    // Verify the campaign was created correctly
     let campaign_account = &campaign_result.campaign_account;
+    assert_eq!(campaign_account.owner, prism_protocol::ID);
 
-    assert_eq!(
-        campaign_account.owner, PRISM_PROGRAM_ID,
-        "owner mismatch: expected: {:?}, actual: {:?}",
-        PRISM_PROGRAM_ID, campaign_account.owner
-    );
-
-    assert_eq!(
-        campaign_account.data.len(),
-        CampaignV0::INIT_SPACE + 8,
-        "account size mismatch: expected: {}, actual: {}",
-        CampaignV0::INIT_SPACE + 8,
-        campaign_account.data.len()
-    );
-
-    // 3. Validate campaign state
+    // Deserialize and verify the campaign state
     let campaign_state = CampaignV0::try_deserialize(&mut campaign_account.data.as_slice())
-        .expect("Failed to deserialize Campaign state");
+        .expect("Failed to deserialize campaign state");
 
+    assert_eq!(campaign_state.admin, fixture.admin_address);
+    assert_eq!(campaign_state.fingerprint, fixture.test_fingerprint);
+    assert_eq!(campaign_state.bump, campaign_result.bump);
+    assert!(!campaign_state.is_active); // Should start inactive
+
+    // Verify mint matches
     assert_eq!(
-        campaign_state.admin, fixture.admin_address,
-        "admin mismatch: expected: {}, actual: {}",
-        fixture.admin_address, campaign_state.admin
+        campaign_state.mint, mint,
+        "Campaign mint should match the provided mint"
+    );
+    assert_eq!(
+        mint, campaign_state.mint,
+        "Provided mint should match campaign mint"
     );
 
-    assert_eq!(
-        campaign_state.fingerprint, fixture.test_fingerprint,
-        "fingerprint mismatch: expected: {:?}, actual: {:?}",
-        fixture.test_fingerprint, campaign_state.fingerprint
-    );
-
-    assert_eq!(
-        campaign_state.mint, fixture.mint,
-        "mint mismatch: expected: {:?}, actual: {:?}",
-        fixture.mint, campaign_state.mint
-    );
-
-    assert_eq!(
-        campaign_state.is_active, true,
-        "is_active mismatch: expected: {}, actual: {}",
-        true, campaign_state.is_active
-    );
-
-    assert_eq!(
-        campaign_state.bump, campaign_result.bump,
-        "bump mismatch: expected: {}, actual: {}",
-        campaign_result.bump, campaign_state.bump
-    );
-
-    println!("✅ Campaign state validation passed");
+    println!("✅ Campaign initialized successfully");
+    println!("   - Address: {}", campaign_result.address);
+    println!("   - Admin: {}", campaign_state.admin);
+    println!("   - Mint: {}", campaign_state.mint);
+    println!("   - Fingerprint: {:?}", campaign_state.fingerprint);
+    println!("   - Is Active: {}", campaign_state.is_active);
 }

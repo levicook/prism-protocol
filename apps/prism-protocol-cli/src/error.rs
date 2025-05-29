@@ -21,4 +21,12 @@ pub enum CliError {
 
     #[error("Invalid configuration: {0}")]
     InvalidConfig(String),
+
+    // #[error("RPC error: {0}")]
+    // Rpc(String),
+    #[error("Solana client error: {0}")]
+    SolanaClient(#[from] solana_client::client_error::ClientError),
+
+    #[error("Solana program error: {0}")]
+    SolanaProgram(#[from] solana_sdk::program_error::ProgramError),
 }

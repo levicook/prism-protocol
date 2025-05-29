@@ -83,12 +83,11 @@ mod tests {
     fn test_prism_hasher_leaf_consistency() {
         // Test that our hasher produces the same result as hash_claim_leaf
         let claimant = Pubkey::new_unique();
-        let assigned_vault = Pubkey::new_unique();
         let entitlements = 42;
 
         let leaf = ClaimLeaf {
             claimant,
-            assigned_vault,
+            assigned_vault_index: 0,
             entitlements,
         };
 
