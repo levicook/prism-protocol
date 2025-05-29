@@ -108,20 +108,80 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
   - ✅ Default to localnet for development, configurable RPC endpoint
   - ✅ Enhanced progress reporting similar to `anchor deploy`
 
-**Phase 3: Campaign Management 📋 PLANNED**
+**Phase 3: Claiming Ecosystem Foundation 🚧 IN PROGRESS**
 
-- **Purpose:** Administrative operations for live campaigns
-- **Commands:**
-  - `cargo run -p prism-protocol-cli -- pause-campaign <fingerprint> --admin-keypair <admin.json>`
-  - `cargo run -p prism-protocol-cli -- resume-campaign <fingerprint> --admin-keypair <admin.json>`
-  - `cargo run -p prism-protocol-cli -- reclaim-tokens <fingerprint> <cohort-root> --admin-keypair <admin.json>`
-  - `cargo run -p prism-protocol-cli -- campaign-status <fingerprint>`
-- **Features:**
-  - 📋 Campaign lifecycle management
-  - 📋 Token recovery after distribution periods
-  - 📋 Status monitoring and reporting
+- **Purpose:** Build complete claiming infrastructure with clean separation between test fixtures and real campaigns
+- **Strategic Approach:** Full ecosystem including enhanced fixtures, API server, and dApp support with unified CLI architecture
+- **Key Architectural Decisions:**
+  - **Clean Directory Separation:** 
+    - `test-artifacts/fixtures/{slug}/` - Campaign source files with real keypairs
+    - `test-artifacts/campaigns/` - Compiled test campaigns (API-servable)
+    - `campaigns/` - Compiled production campaigns (API-servable)
+  - **Campaign vs Compiled Campaign:** CSV files are "campaigns" (source), SQLite DBs are "compiled campaigns" (deployable/servable)
+  - **Database as Single Source of Truth:** Created by compile, updated by deploy, served by API
+  - **Unified CLI:** API server as `prism-protocol-cli serve-api` subcommand, one Docker container for all functionality
+  - **API Server Simplicity:** Reads from single campaigns directory (`--campaigns-dir test-artifacts/campaigns/` or `--campaigns-dir campaigns/`)
 
-**Phase 4: Advanced Features (Future)**
+- **Components:**
+  1. **Enhanced Fixture Generator** (Week 1 - Foundation)
+     - Default output: `test-artifacts/fixtures/{campaign-slug}/` (slugified campaign names)
+     - Always generate real, random keypairs for all claimants (no more dummy pubkeys)
+     - Backward compatible with existing interface
+     - Clear separation from production campaigns
+     - See: `docs/specs/ENHANCED_FIXTURE_GENERATOR_SPEC.md`
+  
+  2. **API Server** (`prism-protocol-cli serve-api`) (Week 2 - Core Infrastructure)
+     - Subcommand of existing CLI for unified toolchain
+     - Serves merkle proofs from compiled campaign databases only
+     - Single directory interface: `--campaigns-dir` for clean separation
+     - Portable and stateless (only needs compiled .db files)
+     - Optional transaction building for dApps
+     - Feature-flagged implementation for clean separation
+     - See: `docs/specs/API_SERVER_SPEC.md`
+  
+  3. **CLI Claim Integration** (Week 3 - Testing)
+     - `claim-tokens` command using API server for proof lookup
+     - End-to-end testing with real HD wallet keypairs from fixtures
+     - Multi-user concurrent claim testing
+     - Integration between fixtures → compile → deploy → claim workflow
+  
+  4. **dApp Frontend** (Week 4-5 - User Interface)
+     - Next.js/React with Solana wallet integration
+     - Campaign discovery and claiming interface
+     - Integration with API server for proofs and transaction building
+     - Mobile-responsive design with progressive disclosure
+     - See: `docs/specs/DAPP_FRONTEND_SPEC.md`
+
+**Unified Docker Architecture:**
+- Single Docker image for all CLI functionality
+- Can run different commands in separate containers
+- API server, deployment, and campaign management all from one binary
+- Simplified deployment and development workflow
+
+**Phase 4: Campaign Management & Production Readiness 📋 PLANNED**
+
+- **Purpose:** Administrative operations, production deployment, and campaign creation tools
+- **Strategic Components:**
+  
+  1. **Campaign Admin dApp** (New Strategic Component)
+     - Web UI for campaign operators to define campaigns (replaces manual CSV creation)
+     - Visual cohort configuration and claimant list management
+     - Export to CLI-compatible formats
+     - Campaign preview and validation
+     - Integration with secrets management for secure admin operations
+
+  2. **CLI Administrative Operations**
+     - `cargo run -p prism-protocol-cli -- pause-campaign <fingerprint> --admin-keypair <admin.json>`
+     - `cargo run -p prism-protocol-cli -- resume-campaign <fingerprint> --admin-keypair <admin.json>`
+     - `cargo run -p prism-protocol-cli -- reclaim-tokens <fingerprint> <cohort-root> --admin-keypair <admin.json>`
+
+  3. **Production Infrastructure**
+     - Docker containerization for full stack
+     - API rate limiting and security
+     - Performance optimization for 100K+ claimants
+     - Monitoring and alerting
+
+**Phase 5: Advanced Features (Future)**
 
 - **Purpose:** Enhanced functionality for complex use cases
 - **Potential Commands:**
@@ -129,6 +189,11 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
   - `prism-protocol-cli estimate-costs <config.yaml>` (rent and transaction cost estimation)
   - `prism-protocol-cli export-proofs <fingerprint> --format <json|api>` (proof serving formats)
   - `prism-protocol-cli benchmark <config.yaml>` (performance testing)
+- **Advanced Features:**
+  - Jito bundle building for MEV protection
+  - Claim status tracking and analytics
+  - Horizontal scaling support
+  - Campaign templates and batch operations
 
 #### Core Functionality Checklist (Detailed)
 
@@ -249,11 +314,19 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 
 ### Identified Testing Gaps ⚠️
 
+**Critical: Claiming Ecosystem Gaps**
+
+- [ ] **Enhanced Fixture Generator** - No campaign-organized directory structure
+- [ ] **HD Wallet Generation** - Current fixtures use dummy pubkeys, not derivable keypairs
+- [ ] **API Server** - No proof serving infrastructure exists
+- [ ] **CLI Claim Command** - No `claim-tokens` command implemented
+- [ ] **dApp Frontend** - No user interface for claiming
+
 **Missing End-to-End Scenarios:**
 
 - [ ] **Token claiming workflow** - No actual claim testing yet
-- [ ] **Multi-user claim scenarios** - Testing concurrent claims
-- [ ] **Partial vault funding** - Testing incremental funding
+- [ ] **Multi-user claim scenarios** - Testing concurrent claims with real keypairs
+- [ ] **API server integration** - Testing proof serving and transaction building
 - [ ] **Campaign activation/deactivation** - Testing state transitions
 - [ ] **Error recovery scenarios** - Testing failed deployments and retries
 - [ ] **Large-scale testing** - Testing with realistic token amounts and user counts
@@ -264,21 +337,23 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 - [ ] **Vault exhaustion** - Testing behavior when vaults run out of tokens
 - [ ] **Invalid proof handling** - Testing malformed or incorrect proofs
 - [ ] **Network failure recovery** - Testing deployment resilience
+- [ ] **API server load testing** - Testing concurrent proof requests
 
 **Performance & Scale Testing:**
 
-- [ ] **Large merkle trees** - Testing with 10k+ claimants
-- [ ] **Multiple vault scenarios** - Testing cohorts with many vaults
+- [ ] **Large merkle trees** - Testing with 100K+ claimants
+- [ ] **HD wallet generation** - Performance testing for millions of keypairs
+- [ ] **API server performance** - Response times with large campaign databases
 - [ ] **Transaction batching** - Optimizing deployment transaction costs
 - [ ] **Memory usage profiling** - Ensuring efficient resource usage
 
-### Recommended Next Steps
+### Recommended Next Steps (Strategic Claiming Ecosystem)
 
-1. **Implement Token Claiming Tests** - Add actual claim workflow to E2E tests
-2. **Add Performance Benchmarks** - Test with realistic scale (10k+ users)
-3. **Error Scenario Testing** - Test failure modes and recovery
-4. **Multi-Environment Testing** - Test on devnet/mainnet-beta
-5. **Security Audit Preparation** - Comprehensive edge case testing
+1. **Phase 3 Foundation (Week 1)** - Enhanced fixture generator with HD wallets
+2. **API Server Core (Week 2)** - Proof serving from campaign databases
+3. **CLI Integration (Week 3)** - Claim command using API server
+4. **dApp Frontend (Week 4-5)** - User interface for claiming
+5. **Production Readiness (Week 6)** - Security, performance, monitoring
 
 ## 6. Key Design Decisions & Implementation Notes
 
@@ -330,6 +405,10 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 - [ ] Client-side SDK (JavaScript/TypeScript) development
 - [ ] Security audit preparation
 - [ ] Advanced CLI features (campaign management, interactive modes)
+- [ ] **Campaign Data Model Extraction** - Extract campaign data structures from CLI into reusable library
+- [ ] **Campaign Admin dApp** - Visual campaign creation and management interface
+- [ ] **Multi-signature Admin Support** - Enhanced security for campaign operations
+- [ ] **Campaign Analytics Dashboard** - Real-time claiming metrics and insights
 
 ## 10. Current Status Summary
 
