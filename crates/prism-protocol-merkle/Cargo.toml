@@ -3,6 +3,10 @@ name = "prism-protocol-merkle"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "prism_protocol_merkle"
+path = "src/lib.rs"
+
 [dependencies]
 anchor-lang = { workspace = true }
 prism_protocol = { path = "../../programs/prism-protocol", features = [
