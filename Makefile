@@ -88,4 +88,70 @@ ci-test: test-unit test-cli test-anchor test-integration test-e2e
 # Watch mode for development (requires cargo-watch)
 test-watch:
 	@echo "👀 Starting test watch mode..."
-	@cargo watch -x "test --workspace --lib" -s "make smoke-test" 
+	@cargo watch -x "test --workspace --lib" -s "make smoke-test"
+
+# Docker build settings
+DOCKER_BUILDKIT ?= 1
+DOCKER_BUILD_PLATFORM ?= linux/x86_64
+DOCKER_BUILD_PROGRESS ?= auto
+
+# Docker image names
+PRISM_CLI_IMAGE ?= prism-protocol-cli
+
+# Dockerfile paths
+PRISM_CLI_DOCKERFILE ?= infra/docker/prism-protocol-cli.dockerfile
+
+.PHONY: docker-build-prism-cli docker-test-volumes docker-clean
+
+# Build prism-protocol CLI Docker image
+docker-build-prism-cli:
+	DOCKER_BUILDKIT=$(DOCKER_BUILDKIT) docker build \
+		--platform $(DOCKER_BUILD_PLATFORM) \
+		--progress=$(DOCKER_BUILD_PROGRESS) \
+		-t $(PRISM_CLI_IMAGE) \
+		-f $(PRISM_CLI_DOCKERFILE) \
+		.
+
+# Test the Docker container with volume mounting
+docker-test-volumes: docker-build-prism-cli
+	@echo "🧪 Testing Docker CLI with volume mounting..."
+	@mkdir -p test-artifacts/fixtures test-artifacts/campaigns
+	docker run --rm \
+		-v $(PWD)/test-artifacts:/workspace/test-artifacts \
+		$(PRISM_CLI_IMAGE) \
+		--version
+	@echo "✅ Docker CLI container working!"
+
+# Clean up Docker images and containers
+docker-clean:
+	@echo "🧹 Cleaning up Docker resources..."
+	-docker rmi $(PRISM_CLI_IMAGE)
+	-docker system prune -f
+
+# Show available commands
+docker-help:
+	@echo "🐳 Prism Protocol Docker Commands"
+	@echo "=================================="
+	@echo ""
+	@echo "Build Commands:"
+	@echo "  make docker-build-prism-cli      - Build prism-protocol CLI Docker image"
+	@echo ""
+	@echo "Test Commands:"
+	@echo "  make docker-test-volumes         - Test CLI container with volume mounting"
+	@echo ""
+	@echo "Utility Commands:"
+	@echo "  make docker-clean               - Clean up Docker images and containers"
+	@echo "  make docker-help                - Show this help message"
+	@echo ""
+	@echo "Variables:"
+	@echo "  PRISM_CLI_IMAGE                 - CLI image name (default: prism-protocol-cli)"
+	@echo "  PRISM_CLI_DOCKERFILE            - Path to CLI Dockerfile (default: infra/docker/prism-protocol-cli.dockerfile)"
+	@echo ""
+	@echo "Example Usage:"
+	@echo "  # Build and test"
+	@echo "  make docker-build-prism-cli"
+	@echo "  make docker-test-volumes"
+	@echo ""
+	@echo "  # Generate fixtures with Docker"
+	@echo "  docker run -v \$$(pwd)/test-artifacts:/workspace/test-artifacts prism-protocol-cli \\"
+	@echo "    generate-fixtures --campaign-name \"Docker Test\" --count 100" 

@@ -3,6 +3,10 @@ name = "prism-protocol-sdk"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "prism_protocol_sdk"
+path = "src/lib.rs"
+
 [dependencies]
 anchor-lang = { workspace = true }
 anchor-spl = { workspace = true }
