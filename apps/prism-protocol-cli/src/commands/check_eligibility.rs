@@ -1,36 +1,28 @@
 use crate::error::{CliError, CliResult};
 use hex;
-use prism_protocol_sdk::AddressFinder;
-use rusqlite::Connection;
-use solana_client::rpc_client::RpcClient;
+use prism_protocol_client::PrismProtocolClient;
+use prism_protocol_db::CampaignDatabase;
 use solana_sdk::{
-    commitment_config::CommitmentConfig,
     pubkey::Pubkey,
     signature::{read_keypair_file, Signer},
 };
 use std::path::PathBuf;
 use std::str::FromStr;
 
-#[derive(Debug)]
-struct CampaignInfo {
-    fingerprint: [u8; 32],
-    mint: Pubkey,
-    admin: Pubkey,
-}
-
+// Extended eligibility info with on-chain state
 #[derive(Debug)]
 #[allow(dead_code)]
 struct EligibilityInfo {
+    // From database
     cohort_name: String,
     cohort_merkle_root: [u8; 32],
     entitlements: u64,
     amount_per_entitlement: u64,
     total_tokens: u64,
-    // Database state
     db_claimed: bool,
     db_claimed_at: Option<i64>,
     db_claimed_signature: Option<String>,
-    // On-chain state
+    // On-chain verification
     onchain_claimed: Option<bool>, // None = not checked, Some(true/false) = checked
     claim_receipt_address: Pubkey,
 }
@@ -55,40 +47,72 @@ pub fn execute(campaign_db_in: PathBuf, claimant: String, rpc_url: String) -> Cl
 
     println!("🔍 Checking eligibility for claimant: {}", claimant_pubkey);
 
-    // Read campaign info
+    // Open database and read campaign info using our new interface
     println!("📊 Reading campaign information...");
-    let campaign_info = read_campaign_info(&campaign_db_in)?;
+    let db = CampaignDatabase::open(&campaign_db_in)
+        .map_err(|e| CliError::InvalidConfig(format!("Failed to open database: {}", e)))?;
+    
+    let campaign_info = db.read_campaign_info()
+        .map_err(|e| CliError::InvalidConfig(format!("Failed to read campaign info: {}", e)))?;
+    
     println!("✅ Campaign: {}", hex::encode(campaign_info.fingerprint));
     println!("   Mint: {}", campaign_info.mint);
     println!("   Admin: {}", campaign_info.admin);
 
-    // Query eligibility from database
+    // Query eligibility from database using our new interface
     println!("\n🔍 Querying database eligibility...");
-    let mut eligibility =
-        query_claimant_eligibility(&campaign_db_in, &claimant_pubkey, &campaign_info)?;
+    let db_eligibility = db.read_claimant_eligibility(&claimant_pubkey)
+        .map_err(|e| CliError::InvalidConfig(format!("Failed to query eligibility: {}", e)))?;
 
-    if eligibility.is_empty() {
+    if db_eligibility.is_empty() {
         println!("❌ No eligibility found for claimant {}", claimant_pubkey);
         println!("   This claimant is not part of this campaign.");
         return Ok(());
     }
 
-    // Verify on-chain state
+    // Create RPC client using our new interface
     println!("🌐 Verifying on-chain claim status...");
-    let rpc_client = RpcClient::new_with_commitment(rpc_url, CommitmentConfig::confirmed());
+    let client = PrismProtocolClient::new(rpc_url)
+        .map_err(|e| CliError::InvalidConfig(format!("Failed to create RPC client: {}", e)))?;
 
-    for entry in &mut eligibility {
-        match rpc_client.get_account(&entry.claim_receipt_address) {
-            Ok(_) => {
-                entry.onchain_claimed = Some(true);
-            }
-            Err(_) => {
-                entry.onchain_claimed = Some(false);
-            }
-        }
+    // Convert database eligibility to extended format with on-chain verification
+    let mut eligibility: Vec<EligibilityInfo> = Vec::new();
+    for db_entry in db_eligibility {
+        // Calculate claim receipt address using the client's address finder
+        let (campaign_address, _) = client
+            .address_finder()
+            .find_campaign_v0_address(&campaign_info.admin, &campaign_info.fingerprint);
+
+        let (cohort_address, _) = client
+            .address_finder()
+            .find_cohort_v0_address(&campaign_address, &db_entry.cohort_merkle_root);
+
+        let (claim_receipt_address, _) = client
+            .address_finder()
+            .find_claim_receipt_v0_address(&cohort_address, &claimant_pubkey);
+
+        // Check on-chain claim receipt
+        let onchain_claimed = match client.get_claim_receipt_v0(&cohort_address, &claimant_pubkey) {
+            Ok(Some(_)) => Some(true),
+            Ok(None) => Some(false),
+            Err(_) => Some(false), // Treat RPC errors as "not claimed"
+        };
+
+        eligibility.push(EligibilityInfo {
+            cohort_name: db_entry.cohort_name,
+            cohort_merkle_root: db_entry.cohort_merkle_root,
+            entitlements: db_entry.entitlements,
+            amount_per_entitlement: db_entry.amount_per_entitlement,
+            total_tokens: db_entry.total_tokens,
+            db_claimed: db_entry.db_claimed,
+            db_claimed_at: db_entry.db_claimed_at,
+            db_claimed_signature: db_entry.db_claimed_signature,
+            onchain_claimed,
+            claim_receipt_address,
+        });
     }
 
-    // Display results with on-chain verification
+    // Display results with on-chain verification (IDENTICAL output format)
     println!("✅ Found eligibility in {} cohort(s):\n", eligibility.len());
 
     let mut total_claimable = 0u64;
@@ -148,7 +172,7 @@ pub fn execute(campaign_db_in: PathBuf, claimant: String, rpc_url: String) -> Cl
         println!();
     }
 
-    // Summary with verification results
+    // Summary with verification results (IDENTICAL output format)
     println!("📊 Summary:");
     println!("   Total cohorts: {}", eligibility.len());
     println!("   Unclaimed cohorts: {}", unclaimed_count);
@@ -176,133 +200,4 @@ pub fn execute(campaign_db_in: PathBuf, claimant: String, rpc_url: String) -> Cl
     }
 
     Ok(())
-}
-
-fn read_campaign_info(db_path: &PathBuf) -> CliResult<CampaignInfo> {
-    let conn = Connection::open(db_path)?;
-
-    let mut stmt = conn.prepare("SELECT fingerprint, mint, admin FROM campaign LIMIT 1")?;
-    let mut rows = stmt.query_map([], |row| {
-        let fingerprint_hex: String = row.get(0)?;
-        let mint_str: String = row.get(1)?;
-        let admin_str: String = row.get(2)?;
-        Ok((fingerprint_hex, mint_str, admin_str))
-    })?;
-
-    if let Some(row) = rows.next() {
-        let (fingerprint_hex, mint_str, admin_str) = row?;
-
-        let fingerprint_bytes = hex::decode(fingerprint_hex)
-            .map_err(|e| CliError::InvalidConfig(format!("Invalid fingerprint hex: {}", e)))?;
-        let fingerprint: [u8; 32] = fingerprint_bytes
-            .try_into()
-            .map_err(|_| CliError::InvalidConfig("Fingerprint must be 32 bytes".to_string()))?;
-
-        let mint = Pubkey::from_str(&mint_str)
-            .map_err(|e| CliError::InvalidConfig(format!("Invalid mint pubkey: {}", e)))?;
-
-        let admin = Pubkey::from_str(&admin_str)
-            .map_err(|e| CliError::InvalidConfig(format!("Invalid admin pubkey: {}", e)))?;
-
-        Ok(CampaignInfo {
-            fingerprint,
-            mint,
-            admin,
-        })
-    } else {
-        Err(CliError::InvalidConfig(
-            "No campaign data found in database".to_string(),
-        ))
-    }
-}
-
-fn query_claimant_eligibility(
-    db_path: &PathBuf,
-    claimant: &Pubkey,
-    campaign_info: &CampaignInfo,
-) -> CliResult<Vec<EligibilityInfo>> {
-    let address_finder = AddressFinder::default();
-    let conn = Connection::open(db_path)?;
-
-    let mut stmt = conn.prepare(
-        "SELECT 
-            c.cohort_name,
-            c.entitlements,
-            c.claimed_at,
-            c.claimed_signature,
-            h.amount_per_entitlement,
-            h.merkle_root
-         FROM claimants c
-         JOIN cohorts h ON c.cohort_name = h.cohort_name
-         WHERE c.claimant = ?
-         ORDER BY c.cohort_name",
-    )?;
-
-    let rows = stmt.query_map([claimant.to_string()], |row| {
-        let cohort_name: String = row.get(0)?;
-        let entitlements: u64 = row.get(1)?;
-        let claimed_at: Option<i64> = row.get(2)?;
-        let claimed_signature: Option<String> = row.get(3)?;
-        let amount_per_entitlement: u64 = row.get(4)?;
-        let merkle_root_hex: String = row.get(5)?;
-
-        Ok((
-            cohort_name,
-            entitlements,
-            claimed_at,
-            claimed_signature,
-            amount_per_entitlement,
-            merkle_root_hex,
-        ))
-    })?;
-
-    let mut eligibility = Vec::new();
-    for row in rows {
-        let (
-            cohort_name,
-            entitlements,
-            claimed_at,
-            claimed_signature,
-            amount_per_entitlement,
-            merkle_root_hex,
-        ) = row?;
-
-        // Parse merkle root
-        let merkle_root_bytes = hex::decode(merkle_root_hex)
-            .map_err(|e| CliError::InvalidConfig(format!("Invalid merkle root hex: {}", e)))?;
-        let cohort_merkle_root: [u8; 32] = merkle_root_bytes
-            .try_into()
-            .map_err(|_| CliError::InvalidConfig("Merkle root must be 32 bytes".to_string()))?;
-
-        // Calculate claim receipt address
-        let (campaign_address, _) = address_finder
-            .find_campaign_v0_address(&campaign_info.admin, &campaign_info.fingerprint);
-
-        let (cohort_address, _) =
-            address_finder.find_cohort_v0_address(&campaign_address, &cohort_merkle_root);
-
-        let (claim_receipt_address, _) =
-            address_finder.find_claim_receipt_v0_address(&cohort_address, claimant);
-
-        let total_tokens = entitlements * amount_per_entitlement;
-
-        let already_claimed = claimed_at.is_some();
-
-        eligibility.push(EligibilityInfo {
-            cohort_name,
-            cohort_merkle_root,
-            entitlements,
-            amount_per_entitlement,
-            total_tokens,
-            // Database state
-            db_claimed: already_claimed,
-            db_claimed_at: claimed_at,
-            db_claimed_signature: claimed_signature,
-            // On-chain state
-            onchain_claimed: None,
-            claim_receipt_address,
-        });
-    }
-
-    Ok(eligibility)
 }
