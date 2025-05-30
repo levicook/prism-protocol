@@ -1,7 +1,10 @@
 pub mod campaign_status;
+pub mod check_eligibility;
+pub mod claim_tokens;
 pub mod compile_campaign;
 pub mod deploy_campaign;
 pub mod generate_fixtures;
 pub mod pause_campaign;
+pub mod query_claims;
 pub mod reclaim_tokens;
 pub mod resume_campaign;
