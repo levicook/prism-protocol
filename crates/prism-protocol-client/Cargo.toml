@@ -1,0 +1,23 @@
+[package]
+name = "prism-protocol-client"
+version = "0.1.0"
+edition = "2021"
+description = "Unified client for Prism Protocol RPC operations and SPL token management"
+
+[lib]
+name = "prism_protocol_client"
+path = "src/lib.rs"
+
+[dependencies]
+anchor-lang = { workspace = true }
+anchor-spl = { workspace = true }
+hex = { workspace = true }
+prism-protocol-sdk = { path = "../prism-protocol-sdk" }
+solana-client = { workspace = true }
+solana-sdk = { workspace = true }
+spl-associated-token-account = { workspace = true }
+spl-token = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

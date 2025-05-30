@@ -7,7 +7,7 @@ use crate::{hash_claim_leaf, ClaimLeaf, PrismHasher};
 
 /// Result of building a merkle tree from claim leaves
 #[derive(Clone)]
-pub struct ClaimMerkleTree {
+pub struct ClaimTree {
     /// The underlying merkle tree
     pub tree: MerkleTree<PrismHasher>,
     /// Mapping from claimant pubkey to their leaf index in the tree
@@ -16,7 +16,7 @@ pub struct ClaimMerkleTree {
     pub leaves: Vec<ClaimLeaf>,
 }
 
-impl ClaimMerkleTree {
+impl ClaimTree {
     /// Build a merkle tree from a list of claim leaves
     pub fn from_leaves(leaves: Vec<ClaimLeaf>) -> Result<Self> {
         require!(!leaves.is_empty(), ErrorCode::InvalidInput);
@@ -35,7 +35,7 @@ impl ClaimMerkleTree {
         // Build the merkle tree
         let tree = MerkleTree::<PrismHasher>::from_leaves(&leaf_hashes);
 
-        Ok(ClaimMerkleTree {
+        Ok(ClaimTree {
             tree,
             claimant_to_index,
             leaves,
@@ -131,7 +131,7 @@ impl ClaimMerkleTree {
 pub fn create_merkle_tree(
     claimant_entitlements: &[(Pubkey, u64)],
     vault_count: usize,
-) -> Result<ClaimMerkleTree> {
+) -> Result<ClaimTree> {
     require!(!claimant_entitlements.is_empty(), ErrorCode::InvalidInput);
     require!(vault_count > 0, ErrorCode::InvalidInput);
 
@@ -149,7 +149,7 @@ pub fn create_merkle_tree(
         })
         .collect();
 
-    ClaimMerkleTree::from_leaves(leaves)
+    ClaimTree::from_leaves(leaves)
 }
 
 /// Performs consistent hashing to assign a claimant to a vault index.
@@ -222,7 +222,7 @@ mod tests {
             },
         ];
 
-        let merkle_tree = ClaimMerkleTree::from_leaves(leaves.clone()).unwrap();
+        let merkle_tree = ClaimTree::from_leaves(leaves.clone()).unwrap();
 
         // Verify root exists
         assert!(merkle_tree.root().is_some());
@@ -253,7 +253,7 @@ mod tests {
             },
         ];
 
-        let merkle_tree = ClaimMerkleTree::from_leaves(leaves).unwrap();
+        let merkle_tree = ClaimTree::from_leaves(leaves).unwrap();
 
         // Generate proof for first claimant
         let proof = merkle_tree.proof_for_claimant(&claimants[0]).unwrap();
@@ -284,7 +284,7 @@ mod tests {
             },
         ];
 
-        let result = ClaimMerkleTree::from_leaves(leaves);
+        let result = ClaimTree::from_leaves(leaves);
         assert!(result.is_err());
     }
 

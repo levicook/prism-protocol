@@ -1,0 +1,27 @@
+[package]
+name = "prism-protocol-csvs"
+version = "0.1.0"
+edition = "2021"
+description = "CSV schema definitions and validation for Prism Protocol"
+
+[lib]
+name = "prism_protocol_csvs"
+path = "src/lib.rs"
+
+[dependencies]
+# Serialization & CSV
+serde = { workspace = true, features = ["derive"] }
+csv = { workspace = true }
+
+# Solana (for pubkey types)
+solana-sdk = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Utilities
+hex = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }

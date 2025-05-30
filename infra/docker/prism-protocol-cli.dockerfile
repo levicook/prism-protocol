@@ -1,16 +1,26 @@
 FROM rust:1.86 AS chef
 RUN cargo install cargo-chef
 
-## Planner Stage
+## Planner Stage (beware, there are many caching optimizations here)
 ## -------------
 FROM chef AS planner
 WORKDIR /build
 COPY Cargo.lock Cargo.toml ./
-COPY apps/prism-protocol-cli/Cargo.toml ./apps/prism-protocol-cli/
-COPY crates/prism-protocol-sdk/Cargo.toml ./crates/prism-protocol-sdk/
-COPY crates/prism-protocol-merkle/Cargo.toml ./crates/prism-protocol-merkle/
-COPY crates/prism-protocol-testing/Cargo.toml ./crates/prism-protocol-testing/
+
+## Copy programs first because they change least often
+## have to copy entire programs because anchor libs are built different
 COPY programs/prism-protocol/ ./programs/prism-protocol/
+
+## Copy crates next because they change less often
+COPY crates/prism-protocol-client/Cargo.toml ./crates/prism-protocol-client/
+COPY crates/prism-protocol-csvs/Cargo.toml ./crates/prism-protocol-csvs/
+COPY crates/prism-protocol-db/Cargo.toml ./crates/prism-protocol-db/
+COPY crates/prism-protocol-merkle/Cargo.toml ./crates/prism-protocol-merkle/
+COPY crates/prism-protocol-sdk/Cargo.toml ./crates/prism-protocol-sdk/
+COPY crates/prism-protocol-testing/Cargo.toml ./crates/prism-protocol-testing/
+
+## Copy apps last because they change most often
+COPY apps/prism-protocol-cli/Cargo.toml ./apps/prism-protocol-cli/
 
 # Generate the recipe file based on manifests
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
