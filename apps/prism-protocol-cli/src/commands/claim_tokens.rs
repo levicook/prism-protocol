@@ -1,6 +1,6 @@
 use crate::error::{CliError, CliResult};
 use hex;
-use prism_protocol_sdk::{instruction_builders::build_claim_tokens_ix, AddressFinder};
+use prism_protocol_sdk::{build_claim_tokens_ix, AddressFinder};
 use rusqlite::Connection;
 use solana_client::rpc_client::RpcClient;
 use solana_client::rpc_config::RpcSendTransactionConfig;

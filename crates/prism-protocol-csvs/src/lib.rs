@@ -23,8 +23,7 @@ Contains claimant information with columns:
 ### Cohorts CSV (`cohorts.csv`)
 Contains cohort configuration with columns:
 - `cohort`: Cohort identifier
-- `merkle_root`: Merkle root hash (hex)
-- `total_entitlements`: Total entitlements for cohort (u64)
+- `amount_per_entitlement`: Amount of tokens per entitlement for this cohort (u64)
 
 ## Versioning
 
@@ -35,7 +34,7 @@ All CSV schemas include version metadata to handle evolution:
 ## Usage
 
 ```rust
-use prism_protocol_csvs::{CampaignCsvRow, CohortsCsvRow, read_campaign_csv, read_cohorts_csv, validate_csv_consistency, CsvResult};
+use prism_protocol_csvs::{CampaignRow, CohortsRow, read_campaign_csv, read_cohorts_csv, validate_csv_consistency, CsvResult};
 
 fn example() -> CsvResult<()> {
     // Read and validate CSV files

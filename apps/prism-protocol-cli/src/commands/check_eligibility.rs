@@ -51,17 +51,19 @@ pub fn execute(campaign_db_in: PathBuf, claimant: String, rpc_url: String) -> Cl
     println!("📊 Reading campaign information...");
     let db = CampaignDatabase::open(&campaign_db_in)
         .map_err(|e| CliError::InvalidConfig(format!("Failed to open database: {}", e)))?;
-    
-    let campaign_info = db.read_campaign_info()
+
+    let campaign_info = db
+        .read_campaign_info()
         .map_err(|e| CliError::InvalidConfig(format!("Failed to read campaign info: {}", e)))?;
-    
+
     println!("✅ Campaign: {}", hex::encode(campaign_info.fingerprint));
     println!("   Mint: {}", campaign_info.mint);
     println!("   Admin: {}", campaign_info.admin);
 
     // Query eligibility from database using our new interface
     println!("\n🔍 Querying database eligibility...");
-    let db_eligibility = db.read_claimant_eligibility(&claimant_pubkey)
+    let db_eligibility = db
+        .read_claimant_eligibility(&claimant_pubkey)
         .map_err(|e| CliError::InvalidConfig(format!("Failed to query eligibility: {}", e)))?;
 
     if db_eligibility.is_empty() {

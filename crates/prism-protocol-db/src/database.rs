@@ -69,22 +69,96 @@ pub struct CampaignDatabase {
 }
 
 impl CampaignDatabase {
-    /// Open database connection and ensure schema is initialized
+    /// Open an existing database file (read-only operations)
     pub fn open(path: &Path) -> DbResult<Self> {
+        if !path.exists() {
+            return Err(DbError::InvalidConfig(format!(
+                "Database file does not exist: {}",
+                path.display()
+            )));
+        }
+
         let conn = Connection::open(path)
             .map_err(|e| DbError::Connection(format!("Failed to open database: {}", e)))?;
 
-        Ok(Self { conn })
+        // Verify it has the expected schema
+        let db = Self { conn };
+        if !db.verify_schema()? {
+            return Err(DbError::InvalidConfig(format!(
+                "Database file has invalid schema: {}",
+                path.display()
+            )));
+        }
+
+        Ok(db)
     }
 
-    /// Create a new database with initialized schema
-    pub fn create(path: &Path) -> DbResult<Self> {
-        let conn = Connection::open(path)
-            .map_err(|e| DbError::Connection(format!("Failed to create database: {}", e)))?;
+    /// Create a new in-memory database with initialized schema
+    /// Use save_to_file() to persist when ready
+    pub fn create_in_memory() -> DbResult<Self> {
+        let conn = Connection::open(":memory:").map_err(|e| {
+            DbError::Connection(format!("Failed to create in-memory database: {}", e))
+        })?;
 
         initialize_database(&conn)?;
 
         Ok(Self { conn })
+    }
+
+    /// Create a new database file, overwriting if it exists
+    /// For when you explicitly want to create a file-based database
+    pub fn create_file(path: &Path, overwrite: bool) -> DbResult<Self> {
+        if path.exists() && !overwrite {
+            return Err(DbError::InvalidConfig(format!(
+                "Database file already exists (use overwrite=true to replace): {}",
+                path.display()
+            )));
+        }
+
+        // Remove existing file if overwriting
+        if path.exists() && overwrite {
+            std::fs::remove_file(path).map_err(|e| {
+                DbError::Connection(format!("Failed to remove existing file: {}", e))
+            })?;
+        }
+
+        let conn = Connection::open(path)
+            .map_err(|e| DbError::Connection(format!("Failed to create database file: {}", e)))?;
+
+        initialize_database(&conn)?;
+
+        Ok(Self { conn })
+    }
+
+    /// Save in-memory database to a file
+    pub fn save_to_file(&self, path: &Path, overwrite: bool) -> DbResult<()> {
+        if path.exists() && !overwrite {
+            return Err(DbError::InvalidConfig(format!(
+                "File already exists (use overwrite=true to replace): {}",
+                path.display()
+            )));
+        }
+
+        // Remove existing file if overwriting
+        if path.exists() && overwrite {
+            std::fs::remove_file(path).map_err(|e| {
+                DbError::Connection(format!("Failed to remove existing file: {}", e))
+            })?;
+        }
+
+        // Create file connection
+        let mut file_conn = Connection::open(path)
+            .map_err(|e| DbError::Connection(format!("Failed to create output file: {}", e)))?;
+
+        // Use SQLite backup API to copy in-memory DB to file
+        let backup = rusqlite::backup::Backup::new(&self.conn, &mut file_conn)
+            .map_err(|e| DbError::Connection(format!("Failed to create backup: {}", e)))?;
+
+        backup
+            .run_to_completion(5, std::time::Duration::from_millis(250), None)
+            .map_err(|e| DbError::Connection(format!("Failed to save database: {}", e)))?;
+
+        Ok(())
     }
 
     /// Check if database has proper schema
@@ -419,6 +493,119 @@ impl CampaignDatabase {
             params![signature, claimant.to_string(), cohort_name],
         )
         .map_err(|e| DbError::Database(e))?;
+
+        tx.commit()
+            .map_err(|e| DbError::Transaction(format!("Failed to commit transaction: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Insert campaign data (for use by SDK during compilation)
+    pub fn insert_campaign(
+        &mut self,
+        fingerprint: [u8; 32],
+        mint: Pubkey,
+        admin: Pubkey,
+    ) -> DbResult<()> {
+        let tx = self
+            .conn
+            .transaction()
+            .map_err(|e| DbError::Transaction(format!("Failed to start transaction: {}", e)))?;
+
+        tx.execute(
+            "INSERT INTO campaign (fingerprint, mint, admin) VALUES (?, ?, ?)",
+            params![
+                hex::encode(fingerprint),
+                mint.to_string(),
+                admin.to_string()
+            ],
+        )
+        .map_err(|e| DbError::Database(e))?;
+
+        tx.commit()
+            .map_err(|e| DbError::Transaction(format!("Failed to commit transaction: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Insert cohort data (for use by SDK during compilation)
+    pub fn insert_cohort(
+        &mut self,
+        name: &str,
+        merkle_root: [u8; 32],
+        amount_per_entitlement: u64,
+    ) -> DbResult<()> {
+        let tx = self
+            .conn
+            .transaction()
+            .map_err(|e| DbError::Transaction(format!("Failed to start transaction: {}", e)))?;
+
+        tx.execute(
+            "INSERT INTO cohorts (cohort_name, merkle_root, amount_per_entitlement) VALUES (?, ?, ?)",
+            params![
+                name,
+                hex::encode(merkle_root),
+                amount_per_entitlement
+            ],
+        ).map_err(|e| DbError::Database(e))?;
+
+        tx.commit()
+            .map_err(|e| DbError::Transaction(format!("Failed to commit transaction: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Insert claimant data (for use by SDK during compilation)
+    pub fn insert_claimant(
+        &mut self,
+        claimant: Pubkey,
+        cohort_name: &str,
+        entitlements: u64,
+        merkle_proof: &str,
+    ) -> DbResult<()> {
+        let tx = self
+            .conn
+            .transaction()
+            .map_err(|e| DbError::Transaction(format!("Failed to start transaction: {}", e)))?;
+
+        tx.execute(
+            "INSERT INTO claimants (claimant, cohort_name, entitlements, merkle_proof) VALUES (?, ?, ?, ?)",
+            params![
+                claimant.to_string(),
+                cohort_name,
+                entitlements,
+                merkle_proof
+            ],
+        ).map_err(|e| DbError::Database(e))?;
+
+        tx.commit()
+            .map_err(|e| DbError::Transaction(format!("Failed to commit transaction: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Insert vault data (for use by SDK during compilation)
+    pub fn insert_vault(
+        &mut self,
+        cohort_name: &str,
+        vault_index: usize,
+        vault_pubkey: Pubkey,
+        required_tokens: u64,
+    ) -> DbResult<()> {
+        let tx = self
+            .conn
+            .transaction()
+            .map_err(|e| DbError::Transaction(format!("Failed to start transaction: {}", e)))?;
+
+        tx.execute(
+            "INSERT INTO vaults (cohort_name, vault_index, vault_pubkey, required_tokens) VALUES (?, ?, ?, ?)",
+            params![
+                cohort_name,
+                vault_index as i64,
+                vault_pubkey.to_string(),
+                required_tokens
+            ],
+        ).map_err(|e| DbError::Database(e))?;
 
         tx.commit()
             .map_err(|e| DbError::Transaction(format!("Failed to commit transaction: {}", e)))?;

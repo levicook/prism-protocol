@@ -65,7 +65,7 @@ mod tests {
         let db_path = temp_file.path();
 
         // Create database with schema
-        let db = CampaignDatabase::create(db_path).unwrap();
+        let db = CampaignDatabase::create_file(db_path, true).unwrap();
 
         // Verify schema was created properly
         assert!(db.verify_schema().unwrap());
@@ -88,46 +88,44 @@ mod tests {
         let db_path = temp_file.path();
 
         // Create database with schema
-        let db = CampaignDatabase::create(db_path).unwrap();
+        let db = CampaignDatabase::create_file(db_path, true).unwrap();
 
         // Check schema version
         let version = get_schema_version(db.connection()).unwrap();
         assert_eq!(version, Some(SCHEMA_VERSION));
     }
 
-    /// Test opening existing database without schema
+    /// Test opening database with missing file
     #[test]
+    fn test_open_missing_database() {
+        let result = CampaignDatabase::open(std::path::Path::new("/nonexistent/path/db.sqlite"));
+        assert!(result.is_err());
+
+        if let Err(DbError::InvalidConfig(_)) = result {
+            // Expected: database file does not exist
+        } else {
+            panic!("Expected InvalidConfig error for missing database file");
+        }
+    }
+
+    /// Test opening empty database without schema (should fail)
+    #[test]  
     fn test_open_empty_database() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
 
-        // Open empty database (no schema)
-        let db = CampaignDatabase::open(db_path).unwrap();
+        // Create an empty database file (no schema) using create_file to initialize it
+        let _empty_db = rusqlite::Connection::open(db_path).unwrap();
+        // Note: we don't initialize schema, so it's empty
 
-        // Schema should not exist
-        assert!(!db.verify_schema().unwrap());
-
-        // Should return database error for missing table
-        let result = db.read_campaign_info();
+        // Opening empty database should fail schema validation
+        let result = CampaignDatabase::open(db_path);
         assert!(result.is_err());
 
-        if let Err(DbError::Database(_)) = result {
-            // Expected: rusqlite error for missing table
+        if let Err(DbError::InvalidConfig(_)) = result {
+            // Expected: database file has invalid schema
         } else {
-            panic!("Expected database error for missing table");
-        }
-    }
-
-    /// Test error handling for invalid paths
-    #[test]
-    fn test_invalid_database_path() {
-        let result = CampaignDatabase::open(std::path::Path::new("/nonexistent/path/db.sqlite"));
-        assert!(result.is_err());
-
-        if let Err(DbError::Connection(_)) = result {
-            // Expected: connection error
-        } else {
-            panic!("Expected connection error for invalid path");
+            panic!("Expected InvalidConfig error for invalid schema");
         }
     }
 
@@ -138,7 +136,7 @@ mod tests {
         let db_path = temp_file.path();
 
         // Create database with proper schema
-        let db = CampaignDatabase::create(db_path).unwrap();
+        let db = CampaignDatabase::create_file(db_path, true).unwrap();
         let test_pubkey = Pubkey::from_str("11111111111111111111111111111112").unwrap();
 
         // Should return empty results, not error
