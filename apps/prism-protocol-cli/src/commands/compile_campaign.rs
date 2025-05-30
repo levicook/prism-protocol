@@ -104,9 +104,9 @@ pub fn execute(
         );
     }
 
-    // Step 5: Generate merkle trees with vault assignments
+    // Step 5: Generate merkle trees (first pass - no addresses yet)
     println!("\n🌳 Generating merkle trees...");
-    let mut cohort_data_with_merkle = Vec::new();
+    let mut cohort_merkle_data = Vec::new();
 
     for cohort in cohort_data {
         println!("  🔄 Processing cohort: {}", cohort.name);
@@ -126,16 +126,42 @@ pub fn execute(
             .root()
             .ok_or_else(|| CliError::InvalidConfig("Failed to get merkle root".to_string()))?;
 
-        // Now derive cohort PDA from campaign and merkle root
-        let campaign_address = find_campaign_address(&admin_pubkey, &[0u8; 32]); // Temporary fingerprint
+        println!(
+            "    ✅ Generated merkle tree with root: {}",
+            hex::encode(merkle_root)
+        );
+
+        cohort_merkle_data.push((cohort, merkle_tree, merkle_root));
+    }
+
+    // Step 6: Calculate campaign fingerprint from merkle roots
+    println!("\n🔍 Calculating campaign fingerprint...");
+    let cohort_roots: Vec<[u8; 32]> = cohort_merkle_data
+        .iter()
+        .map(|(_, _, root)| *root)
+        .collect();
+    let campaign_fingerprint = calculate_campaign_fingerprint(&cohort_roots);
+    println!(
+        "✅ Campaign fingerprint: {}",
+        hex::encode(campaign_fingerprint)
+    );
+
+    // Step 7: Now derive addresses using the REAL fingerprint
+    println!("\n📍 Deriving addresses with real campaign fingerprint...");
+    let campaign_address = find_campaign_address(&admin_pubkey, &campaign_fingerprint);
+    
+    let mut cohort_data_with_merkle = Vec::new();
+
+    for (cohort, merkle_tree, merkle_root) in cohort_merkle_data {
+        // Now derive cohort PDA from campaign and merkle root using REAL fingerprint
         let (cohort_address, _) = find_cohort_v0_address(&campaign_address.0, &merkle_root);
 
         // Find vault PDAs for this cohort
         let vaults = find_vault_adresses(&cohort_address, cohort.vault_count);
 
         println!(
-            "    ✅ Generated merkle tree with root: {}",
-            hex::encode(merkle_root)
+            "    ✅ Cohort: {}, Address: {}, {} vaults",
+            cohort.name, cohort_address, vaults.len()
         );
 
         cohort_data_with_merkle.push(CohortWithMerkle {
@@ -148,19 +174,7 @@ pub fn execute(
         });
     }
 
-    // Step 6: Calculate campaign fingerprint
-    println!("\n🔍 Calculating campaign fingerprint...");
-    let cohort_roots: Vec<[u8; 32]> = cohort_data_with_merkle
-        .iter()
-        .map(|c| c.merkle_root)
-        .collect();
-    let campaign_fingerprint = calculate_campaign_fingerprint(&cohort_roots);
-    println!(
-        "✅ Campaign fingerprint: {}",
-        hex::encode(campaign_fingerprint)
-    );
-
-    // Step 7: Create and populate SQLite database
+    // Step 8: Create and populate SQLite database
     println!("\n💾 Creating campaign database...");
     create_campaign_database(
         &campaign_db_out,
@@ -371,6 +385,7 @@ fn create_campaign_database(
             assigned_vault_pubkey TEXT, -- hex-encoded pubkey for convenience
             merkle_proof TEXT, -- hex-encoded proof (comma-separated hashes)
             claimed_at INTEGER,
+            claimed_signature TEXT, -- transaction signature for claim
             PRIMARY KEY (claimant, cohort_name),
             FOREIGN KEY (cohort_name) REFERENCES cohorts(cohort_name)
         );
