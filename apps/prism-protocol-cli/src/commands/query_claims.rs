@@ -63,7 +63,8 @@ pub fn execute(campaign_db_in: PathBuf, claimant: String, rpc_url: String) -> Cl
     println!("   Admin: {}", campaign_info.admin);
 
     // Calculate campaign address for filtering
-    let (campaign_address, _) = address_finder.find_campaign_v0_address(&campaign_info.admin, &campaign_info.fingerprint);
+    let (campaign_address, _) =
+        address_finder.find_campaign_v0_address(&campaign_info.admin, &campaign_info.fingerprint);
     println!("🏛️  Campaign address: {}", campaign_address);
 
     // Query blockchain for claim receipts

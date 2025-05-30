@@ -236,6 +236,34 @@ impl PrismProtocolClient {
         *mint == spl_token::native_mint::id()
     }
 
+    /// Format token amount with proper decimals (for display)
+    pub fn format_token_amount(&self, base_units: u64, decimals: u8) -> String {
+        let divisor = 10_u64.pow(decimals as u32);
+        let whole_tokens = base_units / divisor;
+        let fractional_units = base_units % divisor;
+
+        if fractional_units == 0 {
+            format!("{}", whole_tokens)
+        } else {
+            // Format with trailing zeros removed
+            let fractional_str = format!("{:0width$}", fractional_units, width = decimals as usize);
+            let trimmed = fractional_str.trim_end_matches('0');
+            if trimmed.is_empty() {
+                format!("{}", whole_tokens)
+            } else {
+                format!("{}.{}", whole_tokens, trimmed)
+            }
+        }
+    }
+
+    /// Get vault balance with proper error handling
+    pub fn get_vault_balance(&self, cohort: &Pubkey, vault_index: u8) -> ClientResult<u64> {
+        match self.get_vault_v0(cohort, vault_index)? {
+            Some(vault_account) => Ok(vault_account.amount),
+            None => Ok(0), // Vault doesn't exist = 0 balance
+        }
+    }
+
     /// Get or create associated token account address
     pub fn get_associated_token_account_address(&self, owner: &Pubkey, mint: &Pubkey) -> Pubkey {
         spl_associated_token_account::get_associated_token_address(owner, mint)

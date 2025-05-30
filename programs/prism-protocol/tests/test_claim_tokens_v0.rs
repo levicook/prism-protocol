@@ -7,9 +7,7 @@ use {
         token::{spl_token, TokenAccount, ID as TOKEN_PROGRAM_ID},
     },
     mollusk_svm::{program::keyed_account_for_system_program, result::Check, sysvar::Sysvars},
-    prism_protocol_sdk::{
-        address_finders::find_claim_receipt_v0_address, instruction_builders::build_claim_tokens_ix,
-    },
+    prism_protocol_sdk::instruction_builders::build_claim_tokens_ix,
     prism_protocol_testing::{TestFixture, TEST_AMOUNT_PER_ENTITLEMENT},
     solana_sdk::{
         account::Account as SolanaAccount, signature::Signer,
@@ -139,8 +137,9 @@ fn test_claim_tokens_instruction_building() {
     // For instruction building test, we can use a dummy vault address since we're not executing
     let dummy_vault_address = Pubkey::new_unique();
     let claimant_token_account = get_associated_token_address(&claimant, &mint);
-    let (claim_receipt_address, _) =
-        find_claim_receipt_v0_address(&cohort_result.address, &claimant);
+    let (claim_receipt_address, _) = fixture
+        .address_finder
+        .find_claim_receipt_v0_address(&cohort_result.address, &claimant);
 
     let merkle_root = cohort_result
         .merkle_tree
@@ -302,8 +301,9 @@ fn test_claim_tokens_end_to_end() {
         .expect("Failed to generate merkle proof");
 
     // Step 11: Test claim tokens with valid proof
-    let (claim_receipt_address, _) =
-        find_claim_receipt_v0_address(&cohort_result.address, &claimant);
+    let (claim_receipt_address, _) = fixture
+        .address_finder
+        .find_claim_receipt_v0_address(&cohort_result.address, &claimant);
 
     let merkle_root = cohort_result
         .merkle_tree

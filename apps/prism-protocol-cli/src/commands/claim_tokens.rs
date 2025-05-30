@@ -1,9 +1,6 @@
 use crate::error::{CliError, CliResult};
 use hex;
-use prism_protocol_sdk::{
-    AddressFinder,
-    instruction_builders::build_claim_tokens_ix,
-};
+use prism_protocol_sdk::{instruction_builders::build_claim_tokens_ix, AddressFinder};
 use rusqlite::Connection;
 use solana_client::rpc_client::RpcClient;
 use solana_client::rpc_config::RpcSendTransactionConfig;
@@ -298,10 +295,8 @@ fn process_single_claim(
     let address_finder = AddressFinder::default();
 
     // Calculate addresses
-    let (campaign_address, _) = address_finder.find_campaign_v0_address(
-        &campaign_data.admin,
-        &campaign_data.fingerprint,
-    );
+    let (campaign_address, _) =
+        address_finder.find_campaign_v0_address(&campaign_data.admin, &campaign_data.fingerprint);
 
     let (cohort_address, _) =
         address_finder.find_cohort_v0_address(&campaign_address, &claim.cohort_merkle_root);

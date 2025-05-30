@@ -30,4 +30,4 @@ pub enum ClientError {
 
     #[error("Serialization error: {0}")]
     Serialization(String),
-} 
+}

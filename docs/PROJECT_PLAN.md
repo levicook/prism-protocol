@@ -353,8 +353,11 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 
 ### **IMMEDIATE NEXT PRIORITIES** ⚡
 
-**🎯 Phase 3A: Infrastructure Cleanup (PRIORITY 1 - BLOCKING API SERVER)**
+**🎯 Phase 3A: Infrastructure Cleanup (CRITICAL PATH TO API SERVER)**
 
+**STRATEGY DECISION**: Complete infrastructure cleanup in logical sequence to avoid technical debt inheritance in API server.
+
+### **CURRENT PR: Foundation + Database Interface** 
 - ✅ **CSV Schema Formalization** - **COMPLETED** ✨
   - ✅ Created dedicated `prism-protocol-csvs` crate
   - ✅ Authoritative schema definitions for `campaign.csv` and `cohorts.csv`
@@ -363,60 +366,47 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
   - ✅ Comprehensive test coverage with version management
   - **Impact**: API server can now safely accept CSV uploads with guaranteed schema consistency
 
-- ⏳ **Database Connection Management** (IN PROGRESS)
-  - **Problem**: 19+ redundant `Connection::open()` calls across CLI commands
-  - **Solution**: Create unified `CampaignDatabase` interface in `prism-protocol-db` crate
-  - **Files to Refactor**: All command files with scattered database connections
+- ✅ **Client Crate Infrastructure** - **COMPLETED** ✨
+  - ✅ `prism-protocol-client` crate with `anchor_spl` standardization
+  - ✅ AddressFinder encapsulation exposing CLI technical debt
+  - ✅ Architecture decisions document preventing regression
+  - **Impact**: Clean abstractions ready for CLI integration and API server
 
-- ⏳ **Campaign Compilation Consolidation** (PENDING)
-  - **Problem**: Campaign compilation logic (CSV → merkle trees → SQLite) scattered across CLI commands
-  - **Solution**: Move to `prism-protocol-db` crate as factory method: `CampaignDatabase::compile_from_csvs(campaign_rows, cohorts_rows, output_path)`
-  - **Benefits**: Reusable compilation logic for CLI and future API endpoints
+- ✅ **Database Interface Implementation** - **COMPLETED** ✨
+  - **Problem**: 21 confirmed `Connection::open()` calls across CLI commands  
+  - **Solution**: Complete `CampaignDatabase` interface in `prism-protocol-db` crate with schema management
+  - **Scope**: Essential methods for campaign info, eligibility, merkle proofs, deployment tracking
+  - **Implementation**: Database creation, schema validation, all CRUD operations with proper error handling
+  - **Testing**: 5 passing tests including schema validation and error handling
+  - **Impact**: Ready for CLI integration and API server development
 
-- ⏳ **CLI CSV Integration** (PENDING)  
-  - **Problem**: CLI commands still use custom CSV parsing instead of `prism-protocol-csvs` crate
-  - **Solution**: Convert `generate-fixtures`, `compile-campaign` to use `prism_protocol_csvs::{CampaignRow, CohortsRow}` types
-  - **Files to Update**: `generate_fixtures.rs`, `compile_campaign.rs`
+### **NEXT PR: CLI Integration & Validation**
+- 🔄 **CLI Modernization** - **PLANNED**
+  - Convert 2-3 CLI commands to use `CampaignDatabase` + `PrismProtocolClient`
+  - Prove new abstractions work in practice
+  - Remove manual SPL token operations (`Mint::unpack()` in `deploy_campaign.rs`)
+  - Add `--dry-run` support using client transaction simulation
+  - **Validation**: Confirm infrastructure cleanup removes technical debt
 
-- ⏳ **Protocol Client Library** (PENDING)
-  - **Problem**: Copy-paste RPC client code and byte scanning across commands  
-  - **Solution**: Create `prism-protocol-client` crate with clean abstractions
-  - **Include**: Token program types, account fetching, RPC connection management
+### **FOLLOWING PR: API Server Implementation**  
+- 🌐 **HTTP API Server** - **READY AFTER CLI INTEGRATION**
+  - REST endpoints using proven `CampaignDatabase` + `PrismProtocolClient`
+  - Connection pooling for both database and RPC (no 21-connections-per-request)
+  - Proof serving for frontend dApp integration  
+  - Rate limiting, security, proper error handling
+  - **Benefit**: Clean foundation = rapid, reliable development
 
-### **NEXT: Phase 3B - API Server Implementation**
+**REVISED TIMELINE:**
+- **Current PR (Database Foundation)**: 1-2 days
+- **CLI Integration PR**: 2-3 days  
+- **API Server PR**: 2-3 days (straightforward with clean foundation)
+- **Total**: ~1 week for complete infrastructure + API server
 
-**Target: Week 2 of Next Sprint (2-3 days with clean foundation)**
-
-1. **🌐 HTTP API Server** (`prism-protocol-cli serve-api`)
-
-   - REST endpoints using shared database and client crates
-   - Proof serving for frontend dApp integration
-   - Campaign status and eligibility checking
-   - Rate limiting, security, proper error handling
-
-2. **🔗 Enhanced CLI Claim Integration**
-   - `claim-tokens` command that uses API server for proof lookup
-   - Simplified user experience with API-powered proof resolution
-
-### **LATER: Phase 4+ - Production Features**
-
-1. **🎨 dApp Frontend**: User interface for claiming tokens
-2. **🏭 Production Readiness**: Cross-network testing, large-scale validation
-3. **⚙️ Admin Operations**: Campaign management, pause/resume, token reclamation
-
-**🎯 Success Metrics:**
-
-- **Technical Debt Resolution**: Zero redundant database connections, unified RPC handling
-- **API Server Performance**: <100ms response times, proper connection pooling
-- **Developer Experience**: Clean, maintainable codebase ready for team scaling
-- **User Experience**: Smooth claiming flow from API → dApp → successful token transfer
-
-**📈 Impact of This Approach:**
-
-- **Foundation First**: Clean architecture enables rapid feature development
-- **Scalable Infrastructure**: Proper connection management handles production load
-- **Maintainable Codebase**: Shared abstractions reduce copy-paste bugs
-- **Team Velocity**: New developers can contribute without navigating technical debt
+**WHY THIS SEQUENCE:**
+- ✅ **Avoids Technical Debt Inheritance**: API server built on clean foundation
+- ✅ **Validates Abstractions**: CLI integration proves database interface works
+- ✅ **Logical Progression**: Foundation → Integration → Production Feature
+- ✅ **Risk Mitigation**: Issues caught during CLI integration, not API server development
 
 ## 6. Key Design Decisions & Implementation Notes
 

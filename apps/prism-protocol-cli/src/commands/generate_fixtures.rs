@@ -180,10 +180,7 @@ fn generate_campaign_csv_with_keypairs(
 }
 
 /// Save individual keypair files
-fn save_claimant_keypairs(
-    keypairs_dir: &PathBuf,
-    claimant_data: &[ClaimantData],
-) -> CliResult<()> {
+fn save_claimant_keypairs(keypairs_dir: &PathBuf, claimant_data: &[ClaimantData]) -> CliResult<()> {
     for data in claimant_data {
         let filename = format!("claimant-{:04}.json", data.index + 1);
         let keypair_path = keypairs_dir.join(&filename);

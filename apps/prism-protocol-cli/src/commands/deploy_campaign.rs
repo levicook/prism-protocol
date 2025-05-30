@@ -1210,8 +1210,8 @@ fn verify_deployment(
                 CliError::InvalidConfig(format!("Cohort {} not found", vault_req.cohort_name))
             })?;
 
-        let (campaign_address, _) =
-            address_finder.find_campaign_v0_address(&campaign_data.admin, &campaign_data.fingerprint);
+        let (campaign_address, _) = address_finder
+            .find_campaign_v0_address(&campaign_data.admin, &campaign_data.fingerprint);
 
         let (cohort_address, _) =
             address_finder.find_cohort_v0_address(&campaign_address, &cohort.merkle_root);
