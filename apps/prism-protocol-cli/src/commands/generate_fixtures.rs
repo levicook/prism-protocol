@@ -1,7 +1,10 @@
 use crate::error::{CliError, CliResult};
 use csv::Writer;
 use rand::Rng;
-use solana_sdk::{signature::Keypair, signer::Signer};
+use solana_sdk::{
+    signature::Signer,
+    signer::keypair::{write_keypair_file, Keypair},
+};
 use std::{fs, path::PathBuf};
 
 /// Generate test fixtures with organized directory structure and real keypairs
@@ -185,18 +188,9 @@ fn save_claimant_keypairs(
         let filename = format!("claimant-{:04}.json", data.index + 1);
         let keypair_path = keypairs_dir.join(&filename);
 
-        // Create keypair file content
-        let keypair_json = serde_json::json!({
-            "keypair": data.keypair.to_bytes().to_vec(),
-            "pubkey": data.keypair.pubkey().to_string(),
-            "index": data.index + 1,
-            "campaign": campaign_slug,
-            "cohort": data.cohort,
-            "entitlements": data.entitlements
-        });
-
         // Write keypair file
-        fs::write(&keypair_path, serde_json::to_string_pretty(&keypair_json)?)?;
+        write_keypair_file(&data.keypair, &keypair_path)
+            .map_err(|e| CliError::WriteKeypair(e.to_string()))?;
 
         // Progress for large datasets
         if claimant_data.len() > 10_000 && (data.index + 1) % 10_000 == 0 {

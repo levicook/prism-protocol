@@ -1,0 +1,43 @@
+#!/bin/bash
+set -euo pipefail
+source "$(dirname "$0")/common.sh"
+cd "$PROJECT_ROOT"
+
+echo "Generating Solana CLI configs for test networks..."
+
+# Process each network
+for NETWORK in localnet devnet; do
+    case $NETWORK in
+    localnet)
+        RPC_URL="http://127.0.0.1:8899"
+        ;;
+    devnet)
+        RPC_URL="https://api.devnet.solana.com"
+        ;;
+    esac
+
+    CONFIG_DIR="test-artifacts/configs/$NETWORK"
+
+    echo "Processing $NETWORK ($RPC_URL)"
+    mkdir -p "$CONFIG_DIR"
+
+    # Generate configs for each encrypted keypair
+    while IFS= read -r encrypted_file; do
+        # Get the base filename (remove .enc extension)
+        base_name=$(basename "$encrypted_file" .enc)
+        config_file="$CONFIG_DIR/$base_name.yml"
+        decrypted_path="secrets/decrypted-keypairs/$base_name"
+
+        # Generate the config file pointing to decrypted location
+        cat >"$config_file" <<EOF
+json_rpc_url: "$RPC_URL"
+websocket_url: ""
+keypair_path: "$PROJECT_ROOT/$decrypted_path"
+address_labels: {}
+commitment: "confirmed"
+EOF
+
+        echo "  $base_name -> $config_file"
+
+    done < <(find secrets/encrypted-keypairs -maxdepth 1 -name '*.json.enc' -type f 2>/dev/null || true)
+done

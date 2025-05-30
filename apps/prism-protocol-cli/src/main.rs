@@ -110,7 +110,7 @@ enum Commands {
         keypair: PathBuf,
 
         /// Solana RPC URL
-        #[arg(short, long, default_value = "https://api.mainnet-beta.solana.com")]
+        #[arg(short, long, default_value = "http://127.0.0.1:8899")]
         rpc_url: String,
     },
 
@@ -124,7 +124,7 @@ enum Commands {
         keypair: PathBuf,
 
         /// Solana RPC URL
-        #[arg(short, long, default_value = "https://api.mainnet-beta.solana.com")]
+        #[arg(short, long, default_value = "http://127.0.0.1:8899")]
         rpc_url: String,
     },
 
@@ -141,17 +141,67 @@ enum Commands {
         keypair: PathBuf,
 
         /// Solana RPC URL
-        #[arg(short, long, default_value = "https://api.mainnet-beta.solana.com")]
+        #[arg(short, long, default_value = "http://127.0.0.1:8899")]
         rpc_url: String,
     },
 
     /// Get campaign status
     CampaignStatus {
-        /// Campaign fingerprint (hex string)
-        campaign: String,
+        /// Campaign database file (contains campaign fingerprint and merkle trees)
+        #[arg(long)]
+        campaign_db_in: PathBuf,
 
         /// Solana RPC URL
-        #[arg(short, long, default_value = "https://api.mainnet-beta.solana.com")]
+        #[arg(short, long, default_value = "http://127.0.0.1:8899")]
+        rpc_url: String,
+    },
+
+    /// Claim tokens from a campaign using claimant keypair
+    ClaimTokens {
+        /// Campaign database file (contains campaign fingerprint and merkle trees)
+        #[arg(long)]
+        campaign_db_in: PathBuf,
+
+        /// Claimant keypair file
+        #[arg(long)]
+        claimant_keypair: PathBuf,
+
+        /// Solana RPC URL
+        #[arg(long, default_value = "http://127.0.0.1:8899")]
+        rpc_url: String,
+
+        /// Optional: dry run mode (simulate transaction without submitting)
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Check what tokens a claimant is eligible for without claiming
+    CheckEligibility {
+        /// Campaign database file (contains campaign fingerprint and merkle trees)
+        #[arg(long)]
+        campaign_db_in: PathBuf,
+
+        /// Claimant pubkey or path to keypair file (auto-detected)
+        #[arg(long)]
+        claimant: String,
+
+        /// Solana RPC URL for on-chain verification
+        #[arg(long, default_value = "http://127.0.0.1:8899")]
+        rpc_url: String,
+    },
+
+    /// Query actual claims made by a claimant for this campaign (blockchain-only)
+    QueryClaims {
+        /// Campaign database file (for campaign fingerprint and filtering)
+        #[arg(long)]
+        campaign_db_in: PathBuf,
+
+        /// Claimant pubkey or path to keypair file (auto-detected)
+        #[arg(long)]
+        claimant: String,
+
+        /// Solana RPC URL
+        #[arg(long, default_value = "http://127.0.0.1:8899")]
         rpc_url: String,
     },
 }
@@ -223,8 +273,28 @@ fn main() -> CliResult<()> {
             rpc_url,
         } => commands::reclaim_tokens::execute(campaign, cohort, keypair, rpc_url),
 
-        Commands::CampaignStatus { campaign, rpc_url } => {
-            commands::campaign_status::execute(campaign, rpc_url)
-        }
+        Commands::CampaignStatus {
+            campaign_db_in,
+            rpc_url,
+        } => commands::campaign_status::execute(campaign_db_in, rpc_url),
+
+        Commands::ClaimTokens {
+            campaign_db_in,
+            claimant_keypair,
+            rpc_url,
+            dry_run,
+        } => commands::claim_tokens::execute(campaign_db_in, claimant_keypair, rpc_url, dry_run),
+
+        Commands::CheckEligibility {
+            campaign_db_in,
+            claimant,
+            rpc_url,
+        } => commands::check_eligibility::execute(campaign_db_in, claimant, rpc_url),
+
+        Commands::QueryClaims {
+            campaign_db_in,
+            claimant,
+            rpc_url,
+        } => commands::query_claims::execute(campaign_db_in, claimant, rpc_url),
     }
 }

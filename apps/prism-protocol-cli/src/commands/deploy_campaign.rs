@@ -60,12 +60,13 @@ use solana_client::rpc_client::RpcClient;
 use solana_client::rpc_config::RpcSendTransactionConfig;
 use solana_sdk::{
     commitment_config::{CommitmentConfig, CommitmentLevel},
+    program_pack::Pack,
     pubkey::Pubkey,
     signature::{read_keypair_file, Signer},
     transaction::Transaction,
 };
 use spl_associated_token_account::get_associated_token_address;
-use spl_token;
+use spl_token::{self, state::Mint};
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -90,6 +91,76 @@ struct VaultData {
     cohort_name: String,
     vault_index: usize,
     required_tokens: u64,
+}
+
+/// Fetch the mint account and get the number of decimals
+fn get_mint_decimals(rpc_client: &RpcClient, mint: &Pubkey) -> CliResult<u8> {
+    let account_data = rpc_client.get_account_data(mint).map_err(|e| {
+        CliError::InvalidConfig(format!("Failed to fetch mint account {}: {}", mint, e))
+    })?;
+
+    let mint_info = Mint::unpack(&account_data).map_err(|e| {
+        CliError::InvalidConfig(format!("Failed to parse mint account {}: {}", mint, e))
+    })?;
+
+    Ok(mint_info.decimals)
+}
+
+/// Convert base units to human-readable format using actual mint decimals
+fn format_token_amount(base_units: u64, decimals: u8) -> String {
+    let divisor = 10_u64.pow(decimals as u32);
+    let whole_tokens = base_units / divisor;
+    let fractional_units = base_units % divisor;
+
+    if fractional_units == 0 {
+        format!("{}", whole_tokens)
+    } else {
+        // Format with trailing zeros removed
+        let fractional_str = format!("{:0width$}", fractional_units, width = decimals as usize);
+        let trimmed = fractional_str.trim_end_matches('0');
+        if trimmed.is_empty() {
+            format!("{}", whole_tokens)
+        } else {
+            format!("{}.{}", whole_tokens, trimmed)
+        }
+    }
+}
+
+/// Calculate actual tokens needed for funding (excluding already-funded vaults)
+fn calculate_actual_tokens_needed(
+    rpc_client: &RpcClient,
+    campaign_data: &CampaignData,
+    cohort_data: &[CohortData],
+    vault_requirements: &[VaultData],
+) -> CliResult<u64> {
+    let mut actual_tokens_needed = 0u64;
+
+    for vault_req in vault_requirements {
+        // Find the corresponding cohort
+        let cohort = cohort_data
+            .iter()
+            .find(|c| c.name == vault_req.cohort_name)
+            .ok_or_else(|| {
+                CliError::InvalidConfig(format!("Cohort {} not found", vault_req.cohort_name))
+            })?;
+
+        // Derive vault address
+        let (campaign_address, _) =
+            find_campaign_address(&campaign_data.admin, &campaign_data.fingerprint);
+        let (cohort_address, _) = find_cohort_v0_address(&campaign_address, &cohort.merkle_root);
+        let (vault_address, _) =
+            find_vault_v0_address(&cohort_address, vault_req.vault_index as u8);
+
+        // Check current vault balance
+        let current_balance = get_vault_token_balance(rpc_client, &vault_address).unwrap_or(0);
+
+        // Only count tokens still needed
+        if current_balance < vault_req.required_tokens {
+            actual_tokens_needed += vault_req.required_tokens - current_balance;
+        }
+    }
+
+    Ok(actual_tokens_needed)
 }
 
 pub fn execute(campaign_db_in: PathBuf, admin_keypair: PathBuf, rpc_url: String) -> CliResult<()> {
@@ -136,14 +207,79 @@ pub fn execute(campaign_db_in: PathBuf, admin_keypair: PathBuf, rpc_url: String)
     println!("\n💰 Reading vault funding requirements...");
     let vault_requirements = read_vault_requirements(&campaign_db_in)?;
     let total_tokens_needed: u64 = vault_requirements.iter().map(|v| v.required_tokens).sum();
+
+    // Fetch actual mint decimals from blockchain
+    let mint_decimals = get_mint_decimals(&rpc_client, &campaign_data.mint)?;
+
     println!(
-        "✅ Found {} vaults requiring {} total tokens",
+        "✅ Found {} vaults requiring {} base units ({} tokens)",
         vault_requirements.len(),
-        total_tokens_needed
+        total_tokens_needed,
+        format_token_amount(total_tokens_needed, mint_decimals)
     );
+
+    // Show per-cohort breakdown
+    let mut cohort_totals: std::collections::HashMap<String, u64> =
+        std::collections::HashMap::new();
+    for vault in &vault_requirements {
+        *cohort_totals.entry(vault.cohort_name.clone()).or_insert(0) += vault.required_tokens;
+    }
+
+    println!("📊 Funding breakdown by cohort:");
+    for (cohort_name, tokens) in &cohort_totals {
+        println!(
+            "  📦 {}: {} base units ({} tokens)",
+            cohort_name,
+            tokens,
+            format_token_amount(*tokens, mint_decimals)
+        );
+    }
+
+    // Show WSOL funding instructions if using WSOL
+    if campaign_data.mint.to_string() == "So11111111111111111111111111111111111111112" {
+        let human_amount = format_token_amount(total_tokens_needed, mint_decimals);
+        let buffer_amount = format_token_amount(total_tokens_needed + 1_000_000, mint_decimals); // 0.001 SOL buffer
+
+        println!("\n💡 WSOL Funding Instructions:");
+        println!("   To wrap SOL for funding this campaign:");
+        println!("   ");
+        println!("   1. Check for existing WSOL account:");
+        println!("      spl-token accounts");
+        println!("   ");
+        println!("   2. If WSOL account exists, unwrap it first:");
+        println!("      spl-token unwrap <WSOL-ACCOUNT-ADDRESS>");
+        println!("   ");
+        println!("   3. Wrap the required amount:");
+        println!("      spl-token wrap {}", buffer_amount);
+        println!("   ");
+        println!("   (Required: {} + small buffer for fees)", human_amount);
+    }
 
     // Step 6: Pre-flight checks
     println!("\n🔍 Performing pre-flight checks...");
+
+    // Calculate actual tokens needed (accounting for already-funded vaults)
+    let actual_tokens_needed = calculate_actual_tokens_needed(
+        &rpc_client,
+        &campaign_data,
+        &cohort_data,
+        &vault_requirements,
+    )?;
+
+    if actual_tokens_needed < total_tokens_needed {
+        println!("💡 Some vaults are already funded:");
+        println!(
+            "   Total required: {} base units ({} tokens)",
+            total_tokens_needed,
+            format_token_amount(total_tokens_needed, mint_decimals)
+        );
+        println!(
+            "   Actually needed: {} base units ({} tokens)",
+            actual_tokens_needed,
+            format_token_amount(actual_tokens_needed, mint_decimals)
+        );
+    }
+
     perform_preflight_checks(
         &rpc_client,
         &admin_keypair,
