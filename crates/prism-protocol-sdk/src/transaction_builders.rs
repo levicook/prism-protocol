@@ -16,7 +16,12 @@ that can be signed and sent by the caller.
 
 ```rust
 use prism_protocol_sdk::{build_initialize_campaign_tx, AddressFinder};
-use solana_sdk::{signature::Keypair, hash::Hash};
+use solana_sdk::{
+    hash::Hash,
+    pubkey::Pubkey,
+    signature::{Keypair, Signer},
+    transaction::Transaction,
+};
 
 // Build transaction
 let admin = Keypair::new();
@@ -29,7 +34,7 @@ let tx = build_initialize_campaign_tx(
     &mint,
     &fingerprint,
     recent_blockhash,
-)?;
+).expect("Failed to build transaction");
 
 // Sign and send (caller responsibility)
 let signed_tx = Transaction::from(tx).sign(&[&admin], recent_blockhash);

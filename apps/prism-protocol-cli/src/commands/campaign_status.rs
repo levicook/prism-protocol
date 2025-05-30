@@ -19,6 +19,7 @@ struct CampaignInfo {
     admin: Pubkey,
     mint: Pubkey,
     exists: bool,
+    #[allow(dead_code)]
     account_data_length: Option<usize>,
 }
 
@@ -38,6 +39,7 @@ struct VaultStatus {
     vault_address: Pubkey,
     exists: bool,
     token_balance: u64,
+    #[allow(dead_code)]
     account_data_length: Option<usize>,
 }
 
