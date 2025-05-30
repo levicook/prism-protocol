@@ -181,27 +181,62 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 **Phase 4: Campaign Management & Production Readiness 📋 PLANNED**
 
 - **Purpose:** Administrative operations, production deployment, and campaign creation tools
-- **Strategic Components:**
 
-  1. **Campaign Admin dApp** (New Strategic Component)
+- **🚀 STRATEGIC ENHANCEMENT: Transaction Packing Optimization**
 
-     - Web UI for campaign operators to define campaigns (replaces manual CSV creation)
-     - Visual cohort configuration and claimant list management
-     - Export to CLI-compatible formats
-     - Campaign preview and validation
-     - Integration with secrets management for secure admin operations
+  - **Current Problem**: Deployment creates 50+ individual transactions (1 campaign + 5+ cohorts + 20+ vaults + 20+ funding + 1 activation)
+  - **Solution**: Leverage `build_multi_instruction_tx()` for intelligent transaction batching
+  - **Approach**: Intelligently batch by transaction size limits while preserving instruction order
+  - **Expected Impact**:
+    - **50+ transactions → 3-5 transactions**
+    - **~60 seconds → ~10 seconds deployment time**
+    - **~$1.25 → ~$0.15 in transaction fees**
+  - **Implementation**: Split instructions by size limits, maintain execution order, batch cohort/vault operations
 
-  2. **CLI Administrative Operations**
+- **🔧 ARCHITECTURAL IMPROVEMENTS NEEDED:**
 
-     - `cargo run -p prism-protocol-cli -- pause-campaign <fingerprint> --admin-keypair <admin.json>`
-     - `cargo run -p prism-protocol-cli -- resume-campaign <fingerprint> --admin-keypair <admin.json>`
-     - `cargo run -p prism-protocol-cli -- reclaim-tokens <fingerprint> <cohort-root> --admin-keypair <admin.json>`
+  **Instruction Naming Consistency & Versioning**
 
-  3. **Production Infrastructure**
-     - Docker containerization for full stack
-     - API rate limiting and security
-     - Performance optimization for 100K+ claimants
-     - Monitoring and alerting
+  - **Problem**: Inconsistent command/instruction naming patterns
+  - **Current**: `set_campaign_blah_blah_blah`, `pause_campaign`, `resume_campaign`
+  - **Target**: `pause_campaign_v0`, `resume_campaign_v0`, `set_campaign_status_v0`
+  - **Rationale**: Consistent versioning for future upgrades, cleaner CLI patterns
+
+  **Campaign Activation Validation**
+
+  - **Problem**: Currently possible to activate campaign without all prerequisites ready
+  - **Risk**: Activated campaigns with unfunded vaults, missing cohorts, etc.
+  - **Required Pre-activation Checks**:
+    - ✅ All cohorts created and initialized
+    - ✅ All vaults created for all cohorts
+    - ✅ All vaults adequately funded (>= expected total entitlements)
+    - ✅ Campaign configuration validated
+    - ✅ Merkle trees properly constructed and stored
+  - **Implementation**: Add comprehensive `validate_campaign_ready_for_activation()` function
+  - **UX**: Clear error messages explaining what prerequisites are missing
+
+  **Claim Transaction Building Consolidation**
+
+  - **Problem**: Claim transaction logic scattered in CLI command (272 lines)
+  - **Solution**: Move to SDK with `build_claim_transactions_for_claimant()` function
+  - **Benefits**:
+    - **CLI command reduction**: 272 lines → ~150 lines
+    - **API server reuse**: Zero duplication of claim logic
+    - **Consistent behavior**: Same transaction building across all interfaces
+  - **Implementation**: Extract to `prism-protocol-sdk` with database + RPC abstractions
+
+  **Multi-Cohort Claim Transaction Packing**
+
+  - **Problem**: Claimants with multiple cohorts create separate transactions per cohort
+  - **Current**: 5 eligible cohorts = 5 separate transactions
+  - **Solution**: Leverage `build_multi_instruction_tx()` for intelligent claim batching
+  - **Expected Impact**:
+    - **5+ transactions → 1-2 transactions** for multi-cohort claimants
+    - **~$1.25 → ~$0.30** in transaction fees for 5-cohort claims
+    - **Faster claiming**: Single transaction confirmation vs multiple
+  - **Implementation**: Group claim instructions by transaction size limits, preserve execution order
+
+- **Key Operations:**
 
 **Phase 5: Advanced Features (Future)**
 
@@ -675,7 +710,3 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 - API server with concurrent requests would amplify these problems exponentially
 - Clean infrastructure makes API server implementation trivial
 - Without cleanup first, API server will inherit all current technical debt and be fragile
-
-## 9. Documentation Checklist
-
-- [x] `

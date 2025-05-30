@@ -6,11 +6,8 @@ mod transaction_builders;
 pub use address_finder::AddressFinder;
 pub use campaign_compiler::*;
 pub use instruction_builders::*;
-#[allow(unused)]
-pub use transaction_builders::*;
-
-// Re-export program types with proper versioning
 pub use prism_protocol::state::*;
+pub use transaction_builders::*;
 
 // Re-export program ID
 pub use prism_protocol::ID as PROGRAM_ID;

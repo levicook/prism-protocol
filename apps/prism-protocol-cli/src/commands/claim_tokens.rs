@@ -1,121 +1,133 @@
 use crate::error::{CliError, CliResult};
 use hex;
+use prism_protocol_db::{CampaignDatabase, EligibilityInfo};
 use prism_protocol_sdk::{build_claim_tokens_ix, AddressFinder};
-use rusqlite::Connection;
 use solana_client::rpc_client::RpcClient;
 use solana_client::rpc_config::RpcSendTransactionConfig;
 use solana_sdk::{
     commitment_config::{CommitmentConfig, CommitmentLevel},
+    instruction::Instruction,
+    message::Message,
     pubkey::Pubkey,
     signature::{read_keypair_file, Keypair, Signer},
     transaction::Transaction,
 };
 use spl_associated_token_account::get_associated_token_address;
 use std::path::PathBuf;
-use std::str::FromStr;
 
 #[derive(Debug)]
-struct CampaignData {
-    fingerprint: [u8; 32],
-    mint: Pubkey,
-    admin: Pubkey,
-}
-
-#[derive(Debug)]
-struct ClaimData {
-    cohort_name: String,
-    cohort_merkle_root: [u8; 32],
-    entitlements: u64,
-    assigned_vault_index: u8,
-    assigned_vault_pubkey: Pubkey,
-    merkle_proof: Vec<[u8; 32]>,
-    amount_per_entitlement: u64,
+struct ClaimTransaction {
+    eligibility: EligibilityInfo,
+    claim_ix: Instruction,
+    expected_tokens: u64,
 }
 
 pub fn execute(
-    campaign_db_in: PathBuf,
-    claimant_keypair: PathBuf,
+    campaign_db_path: PathBuf,
+    claimant_keypair_path: PathBuf,
     rpc_url: String,
     dry_run: bool,
 ) -> CliResult<()> {
     println!("🎯 Starting token claim process...");
 
+    // Open database and RPC client
+    let mut db = CampaignDatabase::open(&campaign_db_path)
+        .map_err(|e| CliError::InvalidConfig(format!("Failed to open database: {}", e)))?;
+    let rpc_client = RpcClient::new_with_commitment(rpc_url, CommitmentConfig::confirmed());
+
     // Load claimant keypair
     println!("🔑 Loading claimant keypair...");
-    let claimant_keypair = read_keypair_file(&claimant_keypair)
+    let claimant_keypair = read_keypair_file(&claimant_keypair_path)
         .map_err(|e| CliError::InvalidConfig(format!("Failed to read keypair: {}", e)))?;
     let claimant_pubkey = claimant_keypair.pubkey();
     println!("✅ Claimant: {}", claimant_pubkey);
 
-    // Read campaign data from database
+    // Get campaign info
     println!("📊 Reading campaign data...");
-    let campaign_data = read_campaign_data(&campaign_db_in)?;
-    println!("✅ Campaign: {}", hex::encode(campaign_data.fingerprint));
-    println!("   Mint: {}", campaign_data.mint);
-    println!("   Admin: {}", campaign_data.admin);
+    let campaign_info = db
+        .read_campaign_info()
+        .map_err(|e| CliError::InvalidConfig(format!("Failed to read campaign: {}", e)))?;
+    println!("✅ Campaign: {}", hex::encode(campaign_info.fingerprint));
+    println!("   Mint: {}", campaign_info.mint);
+    println!("   Admin: {}", campaign_info.admin);
 
-    // Find all eligible claims for this claimant
+    // Find eligible claims
     println!("🔍 Finding eligible claims...");
-    let claims = find_claimant_claims(&campaign_db_in, &claimant_pubkey)?;
+    let eligibility_info = db
+        .read_claimant_eligibility(&claimant_pubkey)
+        .map_err(|e| CliError::InvalidConfig(format!("Failed to read eligibility: {}", e)))?;
 
-    if claims.is_empty() {
+    // Filter out already claimed cohorts
+    let pending_claims: Vec<&EligibilityInfo> = eligibility_info
+        .iter()
+        .filter(|info| !info.db_claimed)
+        .collect();
+
+    if pending_claims.is_empty() {
         println!(
-            "❌ No eligible claims found for claimant {}",
+            "❌ No pending claims found for claimant {}",
             claimant_pubkey
         );
+        if !eligibility_info.is_empty() {
+            println!("   (All eligible cohorts have already been claimed)");
+        }
         return Ok(());
     }
 
-    println!("✅ Found {} eligible claim(s):", claims.len());
-    for (i, claim) in claims.iter().enumerate() {
-        let total_tokens = claim.entitlements * claim.amount_per_entitlement;
+    println!("✅ Found {} pending claim(s):", pending_claims.len());
+    for (i, info) in pending_claims.iter().enumerate() {
         println!(
             "   {}. Cohort: {} - {} tokens ({} entitlements × {})",
             i + 1,
-            claim.cohort_name,
-            total_tokens,
-            claim.entitlements,
-            claim.amount_per_entitlement
+            info.cohort_name,
+            info.total_tokens,
+            info.entitlements,
+            info.amount_per_entitlement
         );
     }
 
-    // Setup RPC client
-    let rpc_client = RpcClient::new_with_commitment(rpc_url, CommitmentConfig::confirmed());
-
     // Get claimant's token account
-    let claimant_token_account = get_associated_token_address(
-        &claimant_pubkey, //
-        &campaign_data.mint,
-    );
+    let claimant_token_account =
+        get_associated_token_address(&claimant_pubkey, &campaign_info.mint);
     println!("💰 Claimant token account: {}", claimant_token_account);
 
-    // Process each claim
+    // Build claim transactions
+    println!("🔨 Building claim transactions...");
+    let claim_transactions = build_claim_transactions(
+        &db,
+        &rpc_client,
+        &campaign_info,
+        &claimant_pubkey,
+        &claimant_token_account,
+        &pending_claims,
+    )?;
+
+    // Process claims
     let mut successful_claims = 0;
     let mut total_tokens_claimed = 0u64;
 
-    for (i, claim) in claims.iter().enumerate() {
-        println!("\n📦 Processing claim {} of {}...", i + 1, claims.len());
-        println!("   Cohort: {}", claim.cohort_name);
+    for (i, claim_tx) in claim_transactions.iter().enumerate() {
+        println!(
+            "\n📦 Processing claim {} of {}...",
+            i + 1,
+            claim_transactions.len()
+        );
+        println!("   Cohort: {}", claim_tx.eligibility.cohort_name);
 
-        match process_single_claim(
-            &rpc_client,
-            &claimant_keypair,
-            &campaign_data,
-            claim,
-            &claimant_token_account,
-            dry_run,
-        ) {
-            Ok((tokens_claimed, signature)) => {
+        match execute_claim_transaction(&rpc_client, &claimant_keypair, claim_tx, dry_run) {
+            Ok(signature) => {
                 successful_claims += 1;
-                total_tokens_claimed += tokens_claimed;
-                println!("✅ Successfully claimed {} tokens", tokens_claimed);
+                total_tokens_claimed += claim_tx.expected_tokens;
+                println!(
+                    "✅ Successfully claimed {} tokens",
+                    claim_tx.expected_tokens
+                );
 
                 if !dry_run {
                     // Update database to mark claim as processed
-                    if let Err(e) = mark_claim_processed(
-                        &campaign_db_in,
+                    if let Err(e) = db.update_claim_status(
                         &claimant_pubkey,
-                        &claim.cohort_name,
+                        &claim_tx.eligibility.cohort_name,
                         &signature,
                     ) {
                         println!("⚠️  Warning: Failed to update database: {}", e);
@@ -125,7 +137,7 @@ pub fn execute(
             Err(e) => {
                 println!(
                     "❌ Failed to claim from cohort {}: {}",
-                    claim.cohort_name, e
+                    claim_tx.eligibility.cohort_name, e
                 );
                 // Continue processing other claims
             }
@@ -137,7 +149,7 @@ pub fn execute(
     println!(
         "   Successful claims: {}/{}",
         successful_claims,
-        claims.len()
+        claim_transactions.len()
     );
     println!("   Total tokens claimed: {}", total_tokens_claimed);
 
@@ -145,7 +157,7 @@ pub fn execute(
         println!("   (This was a dry run - no transactions were submitted)");
     }
 
-    if successful_claims < claims.len() {
+    if successful_claims < claim_transactions.len() {
         println!(
             "⚠️  Some claims failed. You can retry this command to attempt failed claims again."
         );
@@ -154,198 +166,120 @@ pub fn execute(
     Ok(())
 }
 
-fn read_campaign_data(db_path: &PathBuf) -> CliResult<CampaignData> {
-    let conn = Connection::open(db_path)?;
+fn build_claim_transactions(
+    db: &CampaignDatabase,
+    rpc_client: &RpcClient,
+    campaign_info: &prism_protocol_db::CampaignInfo,
+    claimant: &Pubkey,
+    claimant_token_account: &Pubkey,
+    pending_claims: &[&EligibilityInfo],
+) -> CliResult<Vec<ClaimTransaction>> {
+    let address_finder = AddressFinder::default();
+    let mut transactions = Vec::new();
 
-    let mut stmt = conn.prepare("SELECT fingerprint, mint, admin FROM campaign LIMIT 1")?;
-    let mut rows = stmt.query_map([], |row| {
-        let fingerprint_hex: String = row.get(0)?;
-        let mint_str: String = row.get(1)?;
-        let admin_str: String = row.get(2)?;
-        Ok((fingerprint_hex, mint_str, admin_str))
-    })?;
+    for eligibility in pending_claims {
+        // Get merkle proof from database
+        let proof_data = db
+            .read_merkle_proof(claimant, &eligibility.cohort_name)
+            .map_err(|e| CliError::InvalidConfig(format!("Failed to read merkle proof: {}", e)))?;
 
-    if let Some(row) = rows.next() {
-        let (fingerprint_hex, mint_str, admin_str) = row?;
+        // Calculate addresses
+        let (campaign_address, _) = address_finder
+            .find_campaign_v0_address(&campaign_info.admin, &campaign_info.fingerprint);
 
-        let fingerprint_bytes = hex::decode(fingerprint_hex)
-            .map_err(|e| CliError::InvalidConfig(format!("Invalid fingerprint hex: {}", e)))?;
-        let fingerprint: [u8; 32] = fingerprint_bytes
-            .try_into()
-            .map_err(|_| CliError::InvalidConfig("Fingerprint must be 32 bytes".to_string()))?;
+        let (cohort_address, _) = address_finder
+            .find_cohort_v0_address(&campaign_address, &eligibility.cohort_merkle_root);
 
-        let mint = Pubkey::from_str(&mint_str)
-            .map_err(|e| CliError::InvalidConfig(format!("Invalid mint pubkey: {}", e)))?;
+        let (claim_receipt_address, _) =
+            address_finder.find_claim_receipt_v0_address(&cohort_address, claimant);
 
-        let admin = Pubkey::from_str(&admin_str)
-            .map_err(|e| CliError::InvalidConfig(format!("Invalid admin pubkey: {}", e)))?;
+        // Check if already claimed on-chain (double-check against database)
+        if rpc_client.get_account(&claim_receipt_address).is_ok() {
+            println!(
+                "⚠️  Cohort {} already claimed on-chain, skipping",
+                eligibility.cohort_name
+            );
+            continue;
+        }
 
-        Ok(CampaignData {
-            fingerprint,
-            mint,
-            admin,
-        })
-    } else {
-        Err(CliError::InvalidConfig(
-            "No campaign data found in database".to_string(),
-        ))
-    }
-}
+        // Parse merkle proof from database format
+        let merkle_proof: Vec<[u8; 32]> = proof_data
+            .merkle_proof
+            .iter()
+            .map(|hex_str| {
+                let bytes = hex::decode(hex_str.trim())
+                    .map_err(|e| CliError::InvalidConfig(format!("Invalid proof hex: {}", e)))?;
+                let hash: [u8; 32] = bytes.try_into().map_err(|_| {
+                    CliError::InvalidConfig("Proof hash must be 32 bytes".to_string())
+                })?;
+                Ok(hash)
+            })
+            .collect::<CliResult<Vec<[u8; 32]>>>()?;
 
-fn find_claimant_claims(db_path: &PathBuf, claimant: &Pubkey) -> CliResult<Vec<ClaimData>> {
-    let conn = Connection::open(db_path)?;
+        // Get vault assignment from database (the correct, stored assignment)
+        let (vault_index, assigned_vault) = db
+            .read_claimant_vault_assignment(claimant, &eligibility.cohort_name)
+            .map_err(|e| {
+                CliError::InvalidConfig(format!("Failed to read vault assignment: {}", e))
+            })?;
 
-    let mut stmt = conn.prepare(
-        "SELECT 
-            c.cohort_name,
-            c.entitlements,
-            c.assigned_vault_index,
-            c.assigned_vault_pubkey,
-            c.merkle_proof,
-            h.merkle_root,
-            h.amount_per_entitlement
-         FROM claimants c
-         JOIN cohorts h ON c.cohort_name = h.cohort_name
-         WHERE c.claimant = ? AND c.claimed_at IS NULL",
-    )?;
-
-    let rows = stmt.query_map([claimant.to_string()], |row| {
-        let cohort_name: String = row.get(0)?;
-        let entitlements: u64 = row.get(1)?;
-        let assigned_vault_index: u8 = row.get(2)?;
-        let assigned_vault_pubkey_str: String = row.get(3)?;
-        let merkle_proof_hex: String = row.get(4)?;
-        let merkle_root_hex: String = row.get(5)?;
-        let amount_per_entitlement: u64 = row.get(6)?;
-
-        Ok((
-            cohort_name,
-            entitlements,
-            assigned_vault_index,
-            assigned_vault_pubkey_str,
-            merkle_proof_hex,
-            merkle_root_hex,
-            amount_per_entitlement,
-        ))
-    })?;
-
-    let mut claims = Vec::new();
-    for row in rows {
-        let (
-            cohort_name,
-            entitlements,
-            assigned_vault_index,
-            assigned_vault_pubkey_str,
-            merkle_proof_hex,
-            merkle_root_hex,
-            amount_per_entitlement,
-        ) = row?;
-
-        // Parse vault pubkey
-        let assigned_vault_pubkey = Pubkey::from_str(&assigned_vault_pubkey_str)
-            .map_err(|e| CliError::InvalidConfig(format!("Invalid vault pubkey: {}", e)))?;
-
-        // Parse merkle root
-        let merkle_root_bytes = hex::decode(merkle_root_hex)
-            .map_err(|e| CliError::InvalidConfig(format!("Invalid merkle root hex: {}", e)))?;
-        let cohort_merkle_root: [u8; 32] = merkle_root_bytes
-            .try_into()
-            .map_err(|_| CliError::InvalidConfig("Merkle root must be 32 bytes".to_string()))?;
-
-        // Parse merkle proof
-        let merkle_proof = if merkle_proof_hex.is_empty() {
-            Vec::new()
-        } else {
-            merkle_proof_hex
-                .split(',')
-                .map(|hex_str| {
-                    let bytes = hex::decode(hex_str.trim()).map_err(|e| {
-                        CliError::InvalidConfig(format!("Invalid proof hex: {}", e))
-                    })?;
-                    let hash: [u8; 32] = bytes.try_into().map_err(|_| {
-                        CliError::InvalidConfig("Proof hash must be 32 bytes".to_string())
-                    })?;
-                    Ok(hash)
-                })
-                .collect::<CliResult<Vec<[u8; 32]>>>()?
-        };
-
-        claims.push(ClaimData {
-            cohort_name,
-            cohort_merkle_root,
-            entitlements,
-            assigned_vault_index,
-            assigned_vault_pubkey,
+        // Build claim instruction
+        let (claim_ix, _, _) = build_claim_tokens_ix(
+            campaign_info.admin,
+            *claimant,
+            campaign_address,
+            cohort_address,
+            assigned_vault,
+            campaign_info.mint,
+            *claimant_token_account,
+            claim_receipt_address,
+            campaign_info.fingerprint,
+            eligibility.cohort_merkle_root,
             merkle_proof,
-            amount_per_entitlement,
+            vault_index,
+            eligibility.entitlements,
+        )
+        .map_err(|e| {
+            CliError::InvalidConfig(format!("Failed to build claim instruction: {}", e))
+        })?;
+
+        transactions.push(ClaimTransaction {
+            eligibility: (*eligibility).clone(),
+            claim_ix,
+            expected_tokens: eligibility.total_tokens,
         });
     }
 
-    Ok(claims)
+    Ok(transactions)
 }
 
-fn process_single_claim(
+fn execute_claim_transaction(
     rpc_client: &RpcClient,
     claimant_keypair: &Keypair,
-    campaign_data: &CampaignData,
-    claim: &ClaimData,
-    claimant_token_account: &Pubkey,
+    claim_tx: &ClaimTransaction,
     dry_run: bool,
-) -> CliResult<(u64, String)> {
-    let address_finder = AddressFinder::default();
-
-    // Calculate addresses
-    let (campaign_address, _) =
-        address_finder.find_campaign_v0_address(&campaign_data.admin, &campaign_data.fingerprint);
-
-    let (cohort_address, _) =
-        address_finder.find_cohort_v0_address(&campaign_address, &claim.cohort_merkle_root);
-
-    let (claim_receipt_address, _) =
-        address_finder.find_claim_receipt_v0_address(&cohort_address, &claimant_keypair.pubkey());
-
-    // Check if already claimed
-    if rpc_client.get_account(&claim_receipt_address).is_ok() {
-        return Err(CliError::InvalidConfig(
-            "Tokens already claimed from this cohort".to_string(),
-        ));
-    }
-
-    // Build claim instruction
-    let (claim_ix, _, _) = build_claim_tokens_ix(
-        campaign_data.admin,
-        claimant_keypair.pubkey(),
-        campaign_address,
-        cohort_address,
-        claim.assigned_vault_pubkey,
-        campaign_data.mint,
-        *claimant_token_account,
-        claim_receipt_address,
-        campaign_data.fingerprint,
-        claim.cohort_merkle_root,
-        claim.merkle_proof.clone(),
-        claim.assigned_vault_index,
-        claim.entitlements,
-    )
-    .map_err(|e| CliError::InvalidConfig(format!("Failed to build claim instruction: {}", e)))?;
-
-    let tokens_to_claim = claim.entitlements * claim.amount_per_entitlement;
-
+) -> CliResult<String> {
     if dry_run {
-        println!("   Dry run: Would claim {} tokens", tokens_to_claim);
-        return Ok((tokens_to_claim, String::new()));
+        println!(
+            "   Dry run: Would claim {} tokens",
+            claim_tx.expected_tokens
+        );
+        return Ok(String::new());
     }
 
-    // Create transaction
+    // Build transaction using Message API for proper structure
     let recent_blockhash = rpc_client.get_latest_blockhash()?;
-    let tx = Transaction::new_signed_with_payer(
-        &[claim_ix],
+    let message = Message::new(
+        &[claim_tx.claim_ix.clone()],
         Some(&claimant_keypair.pubkey()),
-        &[claimant_keypair],
-        recent_blockhash,
     );
+    let mut transaction = Transaction::new_unsigned(message);
+    transaction.message.recent_blockhash = recent_blockhash;
 
-    // Submit transaction
+    // Sign transaction
+    transaction.sign(&[claimant_keypair], recent_blockhash);
+
+    // Submit transaction with proper configuration
     let config = RpcSendTransactionConfig {
         skip_preflight: false,
         preflight_commitment: Some(CommitmentLevel::Confirmed),
@@ -355,39 +289,11 @@ fn process_single_claim(
     };
 
     let signature = rpc_client.send_and_confirm_transaction_with_spinner_and_config(
-        &tx,
+        &transaction,
         CommitmentConfig::confirmed(),
         config,
     )?;
 
     println!("   Transaction signature: {}", signature);
-    Ok((tokens_to_claim, signature.to_string()))
-}
-
-fn mark_claim_processed(
-    db_path: &PathBuf,
-    claimant: &Pubkey,
-    cohort_name: &str,
-    signature: &str,
-) -> CliResult<()> {
-    let conn = Connection::open(db_path)?;
-    let now = chrono::Utc::now().timestamp();
-
-    // Try to update with signature first (new schema)
-    let result = conn.execute(
-        "UPDATE claimants SET claimed_at = ?, claimed_signature = ? WHERE claimant = ? AND cohort_name = ?",
-        (now, signature, claimant.to_string(), cohort_name),
-    );
-
-    // If that fails (old schema without claimed_signature column), fall back to just timestamp
-    if result.is_err() {
-        conn.execute(
-            "UPDATE claimants SET claimed_at = ? WHERE claimant = ? AND cohort_name = ?",
-            (now, claimant.to_string(), cohort_name),
-        )?;
-    } else {
-        result?;
-    }
-
-    Ok(())
+    Ok(signature.to_string())
 }

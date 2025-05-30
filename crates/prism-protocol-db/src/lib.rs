@@ -109,7 +109,7 @@ mod tests {
     }
 
     /// Test opening empty database without schema (should fail)
-    #[test]  
+    #[test]
     fn test_open_empty_database() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();

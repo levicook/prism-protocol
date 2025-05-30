@@ -9,6 +9,7 @@ use crate::{
     schema::{check_schema, initialize_database},
     DbError, DbResult,
 };
+use hex;
 use rusqlite::{params, Connection};
 use solana_sdk::pubkey::Pubkey;
 use std::path::Path;
@@ -427,6 +428,39 @@ impl CampaignDatabase {
         } else {
             Err(DbError::InvalidConfig(format!(
                 "No merkle proof found for claimant {} in cohort {}",
+                claimant, cohort_name
+            )))
+        }
+    }
+
+    /// Get claimant vault assignment
+    pub fn read_claimant_vault_assignment(
+        &self,
+        claimant: &Pubkey,
+        cohort_name: &str,
+    ) -> DbResult<(u8, Pubkey)> {
+        let mut stmt = self.conn.prepare(
+            "SELECT assigned_vault_index, assigned_vault_pubkey FROM claimants WHERE claimant = ? AND cohort_name = ?"
+        ).map_err(|e| DbError::Database(e))?;
+
+        let mut rows = stmt
+            .query_map(params![claimant.to_string(), cohort_name], |row| {
+                let vault_index: i64 = row.get(0)?;
+                let vault_pubkey_str: String = row.get(1)?;
+                Ok((vault_index as u8, vault_pubkey_str))
+            })
+            .map_err(|e| DbError::Database(e))?;
+
+        if let Some(row) = rows.next() {
+            let (vault_index, vault_pubkey_str) = row.map_err(|e| DbError::Database(e))?;
+
+            let vault_pubkey = Pubkey::from_str(&vault_pubkey_str)
+                .map_err(|e| DbError::InvalidPubkey(format!("Invalid vault pubkey: {}", e)))?;
+
+            Ok((vault_index, vault_pubkey))
+        } else {
+            Err(DbError::InvalidConfig(format!(
+                "No vault assignment found for claimant {} in cohort {}",
                 claimant, cohort_name
             )))
         }
