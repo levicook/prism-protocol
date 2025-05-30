@@ -1,9 +1,7 @@
 use crate::error::{CliError, CliResult};
 use hex;
 use prism_protocol_sdk::{
-    address_finders::{
-        find_campaign_address, find_claim_receipt_v0_address, find_cohort_v0_address,
-    },
+    AddressFinder,
     instruction_builders::build_claim_tokens_ix,
 };
 use rusqlite::Connection;
@@ -297,12 +295,19 @@ fn process_single_claim(
     claimant_token_account: &Pubkey,
     dry_run: bool,
 ) -> CliResult<(u64, String)> {
+    let address_finder = AddressFinder::default();
+
     // Calculate addresses
-    let (campaign_address, _) =
-        find_campaign_address(&campaign_data.admin, &campaign_data.fingerprint);
-    let (cohort_address, _) = find_cohort_v0_address(&campaign_address, &claim.cohort_merkle_root);
+    let (campaign_address, _) = address_finder.find_campaign_v0_address(
+        &campaign_data.admin,
+        &campaign_data.fingerprint,
+    );
+
+    let (cohort_address, _) =
+        address_finder.find_cohort_v0_address(&campaign_address, &claim.cohort_merkle_root);
+
     let (claim_receipt_address, _) =
-        find_claim_receipt_v0_address(&cohort_address, &claimant_keypair.pubkey());
+        address_finder.find_claim_receipt_v0_address(&cohort_address, &claimant_keypair.pubkey());
 
     // Check if already claimed
     if rpc_client.get_account(&claim_receipt_address).is_ok() {

@@ -3,12 +3,12 @@ use {
     anchor_spl::token::{spl_token, Mint, ID as TOKEN_PROGRAM_ID},
     mollusk_svm::{program::keyed_account_for_system_program, result::Check, Mollusk},
     prism_protocol::{state::CampaignV0, ID as PRISM_PROGRAM_ID},
-    prism_protocol_merkle::{create_merkle_tree, ClaimMerkleTree},
+    prism_protocol_merkle::{create_merkle_tree, ClaimTree},
     prism_protocol_sdk::{
-        address_finders::{find_campaign_address, find_cohort_v0_address, find_vault_v0_address},
         instruction_builders::{
             build_create_vault_ix, build_initialize_campaign_ix, build_initialize_cohort_ix,
         },
+        AddressFinder,
     },
     solana_sdk::{
         account::Account as SolanaAccount,
@@ -38,6 +38,7 @@ pub struct TestFixture {
     pub admin_keypair: Keypair,
     pub admin_address: Pubkey,
     pub test_fingerprint: [u8; 32],
+    pub address_finder: AddressFinder,
 }
 
 impl TestFixture {
@@ -56,6 +57,7 @@ impl TestFixture {
             admin_keypair,
             admin_address,
             test_fingerprint,
+            address_finder: AddressFinder::default(),
         }
     }
 
@@ -95,8 +97,9 @@ impl TestFixture {
 
     /// Initialize a campaign and return the campaign account data
     pub fn initialize_campaign(&mut self, mint: Pubkey) -> InitializedCampaign {
-        let (campaign_address, campaign_bump) =
-            find_campaign_address(&self.admin_address, &self.test_fingerprint);
+        let (campaign_address, campaign_bump) = self
+            .address_finder
+            .find_campaign_v0_address(&self.admin_address, &self.test_fingerprint);
 
         let (initialize_campaign_ix, _, _) = build_initialize_campaign_ix(
             self.admin_address,
@@ -211,7 +214,9 @@ impl TestFixture {
         let merkle_root = merkle_tree.root().expect("Failed to get merkle root");
 
         // Derive cohort address
-        let (cohort_address, cohort_bump) = find_cohort_v0_address(&campaign.address, &merkle_root);
+        let (cohort_address, cohort_bump) = self
+            .address_finder
+            .find_cohort_v0_address(&campaign.address, &merkle_root);
 
         // Build cohort initialization instruction
         let (initialize_cohort_ix, _, _) = build_initialize_cohort_ix(
@@ -268,7 +273,9 @@ impl TestFixture {
         vault_index: u8,
         mint_account: &SolanaAccount,
     ) -> (Pubkey, SolanaAccount) {
-        let (vault_address, _vault_bump) = find_vault_v0_address(&cohort.address, vault_index);
+        let (vault_address, _vault_bump) = self
+            .address_finder
+            .find_vault_v0_address(&cohort.address, vault_index);
 
         println!(
             "Creating vault {} at address {}",
@@ -380,6 +387,6 @@ pub struct InitializedCampaign {
 pub struct InitializedCohort {
     pub address: Pubkey,
     pub bump: u8,
-    pub merkle_tree: ClaimMerkleTree,
+    pub merkle_tree: ClaimTree,
     pub cohort_account: SolanaAccount,
 }

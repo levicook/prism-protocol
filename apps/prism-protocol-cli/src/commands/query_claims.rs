@@ -1,6 +1,6 @@
 use crate::error::{CliError, CliResult};
 use hex;
-use prism_protocol_sdk::address_finders::find_campaign_address;
+use prism_protocol_sdk::AddressFinder;
 use rusqlite::Connection;
 use solana_client::{
     rpc_client::RpcClient,
@@ -33,6 +33,8 @@ struct ClaimInfo {
 }
 
 pub fn execute(campaign_db_in: PathBuf, claimant: String, rpc_url: String) -> CliResult<()> {
+    let address_finder = AddressFinder::default();
+
     // Auto-detect whether claimant is a pubkey or keypair file
     let claimant_pubkey = if let Ok(pubkey) = Pubkey::from_str(&claimant) {
         println!("🔍 Using provided pubkey: {}", pubkey);
@@ -61,8 +63,7 @@ pub fn execute(campaign_db_in: PathBuf, claimant: String, rpc_url: String) -> Cl
     println!("   Admin: {}", campaign_info.admin);
 
     // Calculate campaign address for filtering
-    let (campaign_address, _) =
-        find_campaign_address(&campaign_info.admin, &campaign_info.fingerprint);
+    let (campaign_address, _) = address_finder.find_campaign_v0_address(&campaign_info.admin, &campaign_info.fingerprint);
     println!("🏛️  Campaign address: {}", campaign_address);
 
     // Query blockchain for claim receipts

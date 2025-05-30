@@ -1,10 +1,8 @@
 use crate::error::{CliError, CliResult};
 use csv::Reader;
 use hex;
-use prism_protocol_merkle::{create_merkle_tree, ClaimMerkleTree};
-use prism_protocol_sdk::address_finders::{
-    find_campaign_address, find_cohort_v0_address, find_vault_v0_address,
-};
+use prism_protocol_merkle::{create_merkle_tree, ClaimTree};
+use prism_protocol_sdk::AddressFinder;
 use rusqlite::Connection;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -49,7 +47,7 @@ struct CohortWithMerkle {
     amount_per_entitlement: u64,
     vault_count: usize,
     vaults: Vec<Pubkey>,
-    merkle_tree: ClaimMerkleTree,
+    merkle_tree: ClaimTree,
     merkle_root: [u8; 32],
 }
 
@@ -61,6 +59,8 @@ pub fn execute(
     claimants_per_vault: usize,
     campaign_db_out: PathBuf,
 ) -> CliResult<()> {
+    let address_finder = AddressFinder::default();
+
     println!("🚀 Generating campaign...");
     println!("Campaign file: {}", campaign_csv_in.display());
     println!("Cohorts file: {}", cohorts_csv_in.display());
@@ -148,20 +148,24 @@ pub fn execute(
 
     // Step 7: Now derive addresses using the REAL fingerprint
     println!("\n📍 Deriving addresses with real campaign fingerprint...");
-    let campaign_address = find_campaign_address(&admin_pubkey, &campaign_fingerprint);
-    
+    let (campaign_address, _) =
+        address_finder.find_campaign_v0_address(&admin_pubkey, &campaign_fingerprint);
+
     let mut cohort_data_with_merkle = Vec::new();
 
     for (cohort, merkle_tree, merkle_root) in cohort_merkle_data {
         // Now derive cohort PDA from campaign and merkle root using REAL fingerprint
-        let (cohort_address, _) = find_cohort_v0_address(&campaign_address.0, &merkle_root);
+        let (cohort_address, _) =
+            address_finder.find_cohort_v0_address(&campaign_address, &merkle_root);
 
         // Find vault PDAs for this cohort
         let vaults = find_vault_adresses(&cohort_address, cohort.vault_count);
 
         println!(
             "    ✅ Cohort: {}, Address: {}, {} vaults",
-            cohort.name, cohort_address, vaults.len()
+            cohort.name,
+            cohort_address,
+            vaults.len()
         );
 
         cohort_data_with_merkle.push(CohortWithMerkle {
@@ -327,9 +331,10 @@ fn calculate_vault_count(claimant_count: usize, claimants_per_vault: usize) -> u
 }
 
 fn find_vault_adresses(cohort_address: &Pubkey, vault_count: usize) -> Vec<Pubkey> {
+    let address_finder = AddressFinder::default();
     let mut vaults = Vec::new();
     for i in 0..vault_count {
-        let (vault_address, _) = find_vault_v0_address(cohort_address, i as u8);
+        let (vault_address, _) = address_finder.find_vault_v0_address(cohort_address, i as u8);
         vaults.push(vault_address);
     }
     vaults

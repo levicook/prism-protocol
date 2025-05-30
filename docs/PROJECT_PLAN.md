@@ -322,65 +322,101 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 
 ### Current Status & Next Steps 🎯
 
-**✅ Completed:**
+**✅ MAJOR MILESTONE: END-TO-END TOKEN CLAIMING OPERATIONAL!**
 
-- Core on-chain program with all essential instructions including vault creation
-- Complete crate separation and modular architecture
-- Comprehensive test suite with Mollusk SVM integration
-- Merkle tree utilities with security best practices
-- SDK for client-side transaction building
-- **CLI Phase 0**: Fixture generation with deterministic test data
-- **CLI Phase 1**: Complete campaign compilation with full merkle tree integration
-  - CSV processing and database creation
-  - Merkle tree generation with consistent hashing
-  - Campaign fingerprint calculation from sorted cohort roots
-  - Individual merkle proofs for all claimants
-  - Hex-encoded storage of all merkle data
-- **CLI Phase 2**: Complete on-chain deployment functionality with critical safety improvements
-  - Campaign and cohort PDA deployment
-  - Vault creation and funding with token transfers
-  - **Token Decimal Safety**: Proper mint account fetching prevents overfunding disasters
-  - **Idempotent Deployment**: Smart pre-flight checks and safe re-runs
-  - Progressive database updates with transaction signatures
-  - Pre-flight checks and comprehensive verification
-- **CLI Phase 3 (Partial)**: Query and eligibility infrastructure
-  - `check-eligibility` command with database + blockchain verification
-  - `query-claims` command with blockchain-first approach
-  - Proper token amount formatting with actual mint decimals
-  - Auto-detection of pubkey vs keypair input formats
-- **Secrets Management System**: Team-based keypair encryption/decryption
-  - Age encryption with public key management
-  - Gitignore protection for decrypted keypairs
-  - `scripts/encrypt-secrets` and `scripts/decrypt-secrets`
-- **CLI Configuration Management**: Organized Solana CLI configs
-  - Multi-network support (localnet, devnet)
-  - Automatic config generation from encrypted keypairs
-  - `scripts/generate-configs` for clean configuration management
-- **End-to-End Testing Infrastructure**: Complete deployment validation
-  - Real test validator and WSOL operations
-  - Campaign deployment with actual token transfers
-  - Database vs blockchain consistency validation
-  - Vault funding verification and balance checking
+- **🎉 Complete Working System**: From fixture generation → compilation → deployment → **successful token claiming**
+- **🔧 Critical Bug Fixed**: Vault address derivation now uses correct fingerprints
+- **🛡️ Production-Ready Security**: Double-spend protection, proper claim validation, automatic token account creation
+- **📊 Comprehensive Verification**: Database + blockchain consistency validation working
+- **🧪 Real Blockchain Testing**: Full test validator integration with actual WSOL operations
 
-**🚧 In Progress:**
+**✅ Completed Infrastructure:**
 
-- **Deployment State Management**: Architecture improvements for campaign activation logic
-- **API Server Infrastructure**: Proof serving for dApp integration
-- **Enhanced Fixture Generator**: Campaign-organized directory structure with HD wallets
+- ✅ **Core On-Chain Program**: All essential instructions (campaign, cohort, vault, claiming)
+- ✅ **Complete Crate Architecture**: Modular separation of concerns across 4 focused crates
+- ✅ **Comprehensive Test Suite**: Unit, integration, and end-to-end testing with Mollusk SVM
+- ✅ **CLI Phase 0-2 COMPLETE**: Fixture generation, campaign compilation, full deployment
+- ✅ **CLI Phase 3 PARTIAL**: Query/eligibility infrastructure with database + blockchain verification
+- ✅ **Secrets & Configuration Management**: Team-based encryption, organized CLI configs
+- ✅ **Critical Safety Features**: Token decimal safety, idempotent deployment, comprehensive pre-flight checks
 
-**📋 Next Priorities:**
+**🚨 CRITICAL FINDING: Technical Debt Blocking API Server**
 
-1. **Robust State Management**: Implement proper deployment state validation
-2. **Claiming Infrastructure**: API server and `claim-tokens` command
-3. **Production Testing**: Cross-network and large-scale validation
-4. **dApp Frontend**: User interface for claiming tokens
+**Analysis revealed extensive technical debt that MUST be addressed before API server implementation:**
 
-**🚨 Critical Achievements:**
+- **Database Connection Chaos**: **19+ redundant `Connection::open()` calls** across CLI commands
+- **RPC Client Duplication**: **6+ identical RPC client setups** with no pooling or error handling
+- **Copy-Paste Architecture**: Every command reimplements database reading, pubkey parsing, error handling
+- **Missing Abstractions**: Raw SPL token byte scanning, no transaction simulation, inconsistent logging
 
-- **Token Decimal Safety**: Fixed dangerous hardcoded decimal assumptions that could cause 1000x overfunding
-- **Idempotent Deployment**: Safe re-runs prevent accidental double-funding
-- **Comprehensive Testing**: Real blockchain testing with actual token operations
-- **Secrets Management**: Production-ready team keypair management
+**📋 UPDATED NEXT PRIORITIES (CRITICAL ORDER):**
+
+### **IMMEDIATE NEXT PRIORITIES** ⚡
+
+**🎯 Phase 3A: Infrastructure Cleanup (PRIORITY 1 - BLOCKING API SERVER)**
+
+- ✅ **CSV Schema Formalization** - **COMPLETED** ✨
+  - ✅ Created dedicated `prism-protocol-csvs` crate
+  - ✅ Authoritative schema definitions for `campaign.csv` and `cohorts.csv`
+  - ✅ Cross-CSV validation (`validate_csv_consistency()`)
+  - ✅ Type-safe serialization/deserialization with proper error handling
+  - ✅ Comprehensive test coverage with version management
+  - **Impact**: API server can now safely accept CSV uploads with guaranteed schema consistency
+
+- ⏳ **Database Connection Management** (IN PROGRESS)
+  - **Problem**: 19+ redundant `Connection::open()` calls across CLI commands
+  - **Solution**: Create unified `CampaignDatabase` interface in `prism-protocol-db` crate
+  - **Files to Refactor**: All command files with scattered database connections
+
+- ⏳ **Campaign Compilation Consolidation** (PENDING)
+  - **Problem**: Campaign compilation logic (CSV → merkle trees → SQLite) scattered across CLI commands
+  - **Solution**: Move to `prism-protocol-db` crate as factory method: `CampaignDatabase::compile_from_csvs(campaign_rows, cohorts_rows, output_path)`
+  - **Benefits**: Reusable compilation logic for CLI and future API endpoints
+
+- ⏳ **CLI CSV Integration** (PENDING)  
+  - **Problem**: CLI commands still use custom CSV parsing instead of `prism-protocol-csvs` crate
+  - **Solution**: Convert `generate-fixtures`, `compile-campaign` to use `prism_protocol_csvs::{CampaignRow, CohortsRow}` types
+  - **Files to Update**: `generate_fixtures.rs`, `compile_campaign.rs`
+
+- ⏳ **Protocol Client Library** (PENDING)
+  - **Problem**: Copy-paste RPC client code and byte scanning across commands  
+  - **Solution**: Create `prism-protocol-client` crate with clean abstractions
+  - **Include**: Token program types, account fetching, RPC connection management
+
+### **NEXT: Phase 3B - API Server Implementation**
+
+**Target: Week 2 of Next Sprint (2-3 days with clean foundation)**
+
+1. **🌐 HTTP API Server** (`prism-protocol-cli serve-api`)
+
+   - REST endpoints using shared database and client crates
+   - Proof serving for frontend dApp integration
+   - Campaign status and eligibility checking
+   - Rate limiting, security, proper error handling
+
+2. **🔗 Enhanced CLI Claim Integration**
+   - `claim-tokens` command that uses API server for proof lookup
+   - Simplified user experience with API-powered proof resolution
+
+### **LATER: Phase 4+ - Production Features**
+
+1. **🎨 dApp Frontend**: User interface for claiming tokens
+2. **🏭 Production Readiness**: Cross-network testing, large-scale validation
+3. **⚙️ Admin Operations**: Campaign management, pause/resume, token reclamation
+
+**🎯 Success Metrics:**
+
+- **Technical Debt Resolution**: Zero redundant database connections, unified RPC handling
+- **API Server Performance**: <100ms response times, proper connection pooling
+- **Developer Experience**: Clean, maintainable codebase ready for team scaling
+- **User Experience**: Smooth claiming flow from API → dApp → successful token transfer
+
+**📈 Impact of This Approach:**
+
+- **Foundation First**: Clean architecture enables rapid feature development
+- **Scalable Infrastructure**: Proper connection management handles production load
+- **Maintainable Codebase**: Shared abstractions reduce copy-paste bugs
+- **Team Velocity**: New developers can contribute without navigating technical debt
 
 ## 6. Key Design Decisions & Implementation Notes
 
@@ -416,68 +452,209 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
   - [ ] Proof generation time and memory usage
   - [ ] Consistent hashing performance
 
-## 8. Technical Debt & Code Quality Issues 🚨
+## 8. Critical Technical Debt & Code Quality Issues 🚨
 
-### Database Connection Management
+### **✅ RESOLVED: CSV Schema Definition (COMPLETED)**
 
-- **Issue**: Ad-hoc database connection handling across commands
-- **Problems**:
-  - Opening `Connection::open(db_path)` in multiple places within same function
-  - Passing `PathBuf` instead of connections, leading to repeated opens
-  - No encapsulation of common database operations
+- **Previous Issue**: Loosely defined CSV interface between `generate-fixtures` and `compile-campaign`
+- **Solution Implemented**: 
+  - ✅ Created dedicated `prism-protocol-csvs` crate with authoritative schemas
+  - ✅ Type-safe `CampaignCsvRow` and `CohortsCsvRow` definitions
+  - ✅ Cross-file validation with `validate_csv_consistency()`
+  - ✅ Version management and comprehensive test coverage
+- **Result**: API server can now safely accept CSV uploads with guaranteed consistency
+
+### **PRIORITY 1: Database Connection Management (BLOCKING API SERVER)**
+
+- **Issue**: Extremely scattered database connection handling across ALL commands
+- **Scale of Problem**:
+  - `deploy_campaign.rs`: **9 separate `Connection::open()` calls**
+  - `check_eligibility.rs`: **2 separate `Connection::open()` calls**
+  - `claim_tokens.rs`: **3 separate `Connection::open()` calls**
+  - `campaign_status.rs`: **3 separate `Connection::open()` calls**
+  - `fund_vaults.rs`: **2 separate `Connection::open()` calls**
+  - **Total: 19+ redundant database connections across codebase**
+- **Specific Problems**:
+  - Opening `Connection::open(db_path)` repeatedly within the SAME function
+  - Passing `PathBuf` instead of connections, forcing repeated opens
+  - No transaction management or connection pooling
   - Inconsistent error handling for database operations
-- **Solution Needed**:
-  - Create `CampaignDatabase` struct to encapsulate all database operations
-  - Centralized connection management and query methods
-  - Consistent error handling and connection pooling if needed
-- **Priority**: High - affects maintainability and performance
+  - **API server will amplify this problem 100x** with concurrent requests
+- **Solution Required**:
 
-### RPC Client Management
+  ```rust
+  // Create new crate: `prism-protocol-db`
+  pub struct CampaignDatabase {
+      conn: Connection,
+  }
 
-- **Issue**: Scattered RPC client creation and configuration
-- **Problems**:
-  - Creating `RpcClient::new_with_commitment()` in every command
-  - Duplicate RPC connection logic and error handling
-  - No centralized configuration for timeouts, retry logic, etc.
+  impl CampaignDatabase {
+      pub fn open(path: &Path) -> Result<Self, DbError> { /* */ }
+      pub fn read_campaign_info(&self) -> Result<CampaignInfo, DbError> { /* */ }
+      pub fn read_cohort_data(&self) -> Result<Vec<CohortData>, DbError> { /* */ }
+      pub fn read_claimant_eligibility(&self, pubkey: &Pubkey) -> Result<Vec<EligibilityInfo>, DbError> { /* */ }
+      pub fn update_vault_funding(&mut self, /* ... */) -> Result<(), DbError> { /* */ }
+      // ... all database operations
+  }
+  ```
+
+- **Priority**: **CRITICAL** - Must complete before API server work
+
+### **PRIORITY 2: RPC Client Management (BLOCKING API SERVER)**
+
+- **Issue**: Duplicated RPC client creation and configuration across ALL commands
+- **Scale of Problem**:
+  - Every command creates `RpcClient::new_with_commitment(rpc_url, CommitmentConfig::confirmed())`
+  - No centralized configuration, error handling, or retry logic
   - Missing abstraction for common blockchain operations
-- **Solution Needed**:
-  - Create `prism-protocol-client` crate with unified client interface
-  - Encapsulate common operations (get account, send transaction, etc.)
-  - Centralized RPC configuration and error handling
-  - Connection pooling and retry mechanisms
-- **Priority**: Medium-High - improves reliability and reduces duplication
+  - **API server will need shared RPC client pool** - current approach won't scale
+- **Specific Problems**:
+  - `deploy_campaign.rs`, `check_eligibility.rs`, `claim_tokens.rs`, `fund_vaults.rs`, `campaign_status.rs`, `query_claims.rs` all duplicate identical RPC setup
+  - No connection pooling, timeouts, or retry mechanisms
+  - Raw `get_account_data()` calls scattered everywhere
+  - Missing transaction simulation and logging
+- **Solution Required**:
 
-### Code Organization & Patterns
+  ```rust
+  // Create new crate: `prism-protocol-client`
+  pub struct PrismProtocolClient {
+      rpc_client: RpcClient,
+      program_id: Pubkey,
+  }
 
-- **Issue**: Command modules doing too much, mixed concerns
+  impl PrismProtocolClient {
+      pub fn new(rpc_url: String) -> Result<Self, ClientError> { /* */ }
+      pub fn get_campaign(&self, fingerprint: &[u8; 32], admin: &Pubkey) -> Result<Option<CampaignV0>, ClientError> { /* */ }
+      pub fn get_cohort(&self, campaign: &Pubkey, merkle_root: &[u8; 32]) -> Result<Option<CohortV0>, ClientError> { /* */ }
+      pub fn get_mint_info(&self, mint: &Pubkey) -> Result<MintInfo, ClientError> { /* */ }
+      pub fn get_token_account_balance(&self, address: &Pubkey) -> Result<u64, ClientError> { /* */ }
+      pub fn simulate_and_send_transaction(&self, tx: Transaction) -> Result<Signature, ClientError> { /* */ }
+      // ... all blockchain operations
+  }
+  ```
+
+- **Priority**: **CRITICAL** - Must complete before API server work
+
+### **PRIORITY 3: Sketchy SPL Token Account Handling**
+
+- **Issue**: Manual byte scanning and unsafe token account operations
+- **Specific Problems Found**:
+  - `deploy_campaign.rs:97-101`: Raw `get_account_data()` + `Mint::unpack()` for decimal fetching
+  - Hardcoded WSOL address checking: `"So11111111111111111111111111111111111111112"`
+  - No abstraction for common SPL token operations
+  - Missing proper error handling for malformed token accounts
+- **Solution Required**: Integrate into `PrismProtocolClient` with proper SPL token abstractions
+- **Priority**: **HIGH** - Needed for API server token formatting
+
+### **PRIORITY 4: Transaction Management & Observability**
+
+- **Issue**: No transaction simulation, inconsistent logging, poor debugging experience
+- **Specific Problems**:
+  - No `simulate_transaction()` calls before `send_transaction()` - failures discovered too late
+  - Transaction signatures scattered in println!() statements instead of structured logging
+  - No explorer URL generation for easy debugging
+  - Missing `--dry-run` capabilities across commands
+  - No standardized transaction building patterns
+- **Solution Required**:
+  ```rust
+  impl PrismProtocolClient {
+      pub fn simulate_and_send_transaction(&self, tx: Transaction, dry_run: bool) -> Result<TransactionResult, ClientError> {
+          if dry_run {
+              let sim_result = self.rpc_client.simulate_transaction(&tx)?;
+              return Ok(TransactionResult::Simulated(sim_result));
+          }
+
+          // Always simulate first in live mode
+          let sim_result = self.rpc_client.simulate_transaction(&tx)?;
+          if sim_result.value.err.is_some() {
+              return Err(ClientError::SimulationFailed(sim_result));
+          }
+
+          let signature = self.rpc_client.send_transaction(&tx)?;
+          println!("✅ Transaction: https://explorer.solana.com/tx/{}", signature);
+          Ok(TransactionResult::Executed(signature))
+      }
+  }
+  ```
+- **Priority**: **HIGH** - Essential for API server reliability
+
+### **PRIORITY 5: CLI Architecture Consolidation**
+
+- **Issue**: Commands doing too much, mixed concerns, copied code patterns
+- **Specific Problems**:
+  - Every command implements its own database reading logic
+  - Business logic mixed with I/O and CLI parsing
+  - Copy-pasted error handling and validation patterns
+  - No shared utilities for common operations
+- **Examples of Duplication**:
+  - Reading campaign info: `deploy_campaign.rs:383`, `check_eligibility.rs:183`, `campaign_status.rs:64`
+  - Reading cohort data: `deploy_campaign.rs:422`, `fund_vaults.rs:374`
+  - Pubkey parsing: `check_eligibility.rs:38-50`, `query_claims.rs:30-42`
+- **Solution Required**: Extract business logic into service modules, create shared utilities
+- **Priority**: **MEDIUM** - Technical debt that compounds over time
+
+### **NEW CRITICAL ISSUE: Error Handling Inconsistency**
+
+- **Issue**: Inconsistent error handling patterns across commands
 - **Problems**:
-  - Commands directly handling database operations instead of using services
-  - Mixed business logic and I/O operations
-  - Inconsistent patterns across similar commands
-  - Copy-pasted code for common operations (reading campaign data, etc.)
-- **Solution Needed**:
-  - Extract business logic into service modules
-  - Create shared utilities for common operations
-  - Consistent error handling patterns
-  - Better separation of concerns (CLI parsing vs business logic vs data access)
-- **Priority**: Medium - technical debt that will compound over time
+  - Mix of `CliError::InvalidConfig()` and direct `map_err()` calls
+  - Some errors use formatted strings, others use direct error propagation
+  - Database errors sometimes wrapped, sometimes not
+  - RPC errors handled differently across commands
+- **Solution Required**: Standardize error handling patterns, better error context
+- **Priority**: **MEDIUM-HIGH** - Will cause debugging issues in production
 
-### Transaction Management & Observability
+## **Updated Implementation Plan for API Server Success**
 
-- **Issue**: Lack of transaction simulation and comprehensive logging
-- **Problems**:
-  - No pre-flight transaction simulation to catch errors early
-  - Transaction signatures not consistently logged for explorer review
-  - Difficult to debug failed transactions without signature tracking
-  - No unified transaction building and submission pattern
-- **Solution Needed**:
-  - Implement `simulate_transaction` before all `send_transaction` calls
-  - Centralized transaction logging with explorer URLs
-  - Standardized transaction building pattern across all commands
-  - Optional `--dry-run` mode for all commands that submit transactions
-- **Priority**: High - essential for debugging and user experience
+### **Phase 3A: Infrastructure Cleanup (MUST COMPLETE FIRST)**
 
-### CLI Architecture Consolidation
+**Target: Week 1 of API Server Sprint**
+
+1. **🏗️ Create `prism-protocol-db` crate**
+
+   - Encapsulate ALL database operations
+   - Connection management and transaction support
+   - Consistent error handling
+   - **Replace all 19+ `Connection::open()` calls**
+
+2. **🌐 Create `prism-protocol-client` crate**
+
+   - Unified RPC client with connection pooling
+   - Common blockchain operations (accounts, transactions, SPL tokens)
+   - Transaction simulation and logging
+   - **Replace all 6+ duplicated RPC client creations**
+
+3. **🔧 Refactor CLI commands to use new crates**
+   - Remove all direct database and RPC code
+   - Standardize error handling patterns
+   - Add `--dry-run` support across all commands
+
+### **Phase 3B: API Server Implementation**
+
+**Target: Week 2 of API Server Sprint**
+
+1. **🌐 HTTP API Server** (`prism-protocol-cli serve-api`)
+
+   - REST endpoints using shared database and client crates
+   - Connection pooling for both database and RPC
+   - Proper error handling and logging
+   - Rate limiting and security
+
+2. **🔗 Enhanced CLI Claim Integration**
+   - `claim-tokens` command that uses API server for proof lookup
+   - Use shared client for transaction handling
+
+**Estimated Effort**:
+
+- Phase 3A (Infrastructure): **3-4 days** (critical foundation)
+- Phase 3B (API Server): **2-3 days** (straightforward with good foundation)
+
+**Why This Order Matters**:
+
+- The current codebase has **19+ database connections** and **6+ RPC clients** scattered everywhere
+- API server with concurrent requests would amplify these problems exponentially
+- Clean infrastructure makes API server implementation trivial
+- Without cleanup first, API server will inherit all current technical debt and be fragile
 
 ## 9. Documentation Checklist
 

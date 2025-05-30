@@ -1,8 +1,6 @@
 use crate::error::{CliError, CliResult};
 use hex;
-use prism_protocol_sdk::address_finders::{
-    find_campaign_address, find_claim_receipt_v0_address, find_cohort_v0_address,
-};
+use prism_protocol_sdk::AddressFinder;
 use rusqlite::Connection;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
@@ -223,6 +221,7 @@ fn query_claimant_eligibility(
     claimant: &Pubkey,
     campaign_info: &CampaignInfo,
 ) -> CliResult<Vec<EligibilityInfo>> {
+    let address_finder = AddressFinder::default();
     let conn = Connection::open(db_path)?;
 
     let mut stmt = conn.prepare(
@@ -276,12 +275,17 @@ fn query_claimant_eligibility(
             .map_err(|_| CliError::InvalidConfig("Merkle root must be 32 bytes".to_string()))?;
 
         // Calculate claim receipt address
-        let (campaign_address, _) =
-            find_campaign_address(&campaign_info.admin, &campaign_info.fingerprint);
-        let (cohort_address, _) = find_cohort_v0_address(&campaign_address, &cohort_merkle_root);
-        let (claim_receipt_address, _) = find_claim_receipt_v0_address(&cohort_address, claimant);
+        let (campaign_address, _) = address_finder
+            .find_campaign_v0_address(&campaign_info.admin, &campaign_info.fingerprint);
+
+        let (cohort_address, _) =
+            address_finder.find_cohort_v0_address(&campaign_address, &cohort_merkle_root);
+
+        let (claim_receipt_address, _) =
+            address_finder.find_claim_receipt_v0_address(&cohort_address, claimant);
 
         let total_tokens = entitlements * amount_per_entitlement;
+
         let already_claimed = claimed_at.is_some();
 
         eligibility.push(EligibilityInfo {

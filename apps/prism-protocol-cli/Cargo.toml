@@ -8,11 +8,14 @@ name = "prism-protocol"
 path = "src/main.rs"
 
 [dependencies]
+prism-protocol-client = { path = "../../crates/prism-protocol-client" }
+prism-protocol-csvs = { path = "../../crates/prism-protocol-csvs" }
+prism-protocol-db = { path = "../../crates/prism-protocol-db" }
+prism-protocol-merkle = { path = "../../crates/prism-protocol-merkle" }
+prism-protocol-sdk = { path = "../../crates/prism-protocol-sdk" }
 prism_protocol = { path = "../../programs/prism-protocol", features = [
     "no-entrypoint",
 ] }
-prism-protocol-merkle = { path = "../../crates/prism-protocol-merkle" }
-prism-protocol-sdk = { path = "../../crates/prism-protocol-sdk" }
 
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }

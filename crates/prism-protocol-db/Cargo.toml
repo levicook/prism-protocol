@@ -1,0 +1,26 @@
+[package]
+name = "prism-protocol-db"
+version = "0.1.0"
+edition = "2021"
+description = "Database management for Prism Protocol campaigns"
+
+[lib]
+name = "prism_protocol_db"
+path = "src/lib.rs"
+
+[dependencies]
+# Database
+rusqlite = { workspace = true, features = ["bundled"] }
+
+# Solana (for pubkey types in database records)
+solana-sdk = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Utilities
+hex = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -49,11 +49,11 @@ The deploy-campaign command performs these steps in order:
 use crate::error::{CliError, CliResult};
 use hex;
 use prism_protocol_sdk::{
-    address_finders::{find_campaign_address, find_cohort_v0_address, find_vault_v0_address},
     instruction_builders::{
         build_create_vault_ix, build_initialize_campaign_ix, build_initialize_cohort_ix,
         build_set_campaign_active_status_ix,
     },
+    AddressFinder,
 };
 use rusqlite::Connection;
 use solana_client::rpc_client::RpcClient;
@@ -133,6 +133,8 @@ fn calculate_actual_tokens_needed(
     cohort_data: &[CohortData],
     vault_requirements: &[VaultData],
 ) -> CliResult<u64> {
+    let address_finder = AddressFinder::default();
+
     let mut actual_tokens_needed = 0u64;
 
     for vault_req in vault_requirements {
@@ -145,11 +147,14 @@ fn calculate_actual_tokens_needed(
             })?;
 
         // Derive vault address
-        let (campaign_address, _) =
-            find_campaign_address(&campaign_data.admin, &campaign_data.fingerprint);
-        let (cohort_address, _) = find_cohort_v0_address(&campaign_address, &cohort.merkle_root);
+        let (campaign_address, _) = address_finder
+            .find_campaign_v0_address(&campaign_data.admin, &campaign_data.fingerprint);
+
+        let (cohort_address, _) =
+            address_finder.find_cohort_v0_address(&campaign_address, &cohort.merkle_root);
+
         let (vault_address, _) =
-            find_vault_v0_address(&cohort_address, vault_req.vault_index as u8);
+            address_finder.find_vault_v0_address(&cohort_address, vault_req.vault_index as u8);
 
         // Check current vault balance
         let current_balance = get_vault_token_balance(rpc_client, &vault_address).unwrap_or(0);
@@ -511,8 +516,9 @@ fn deploy_campaign_pda(
     campaign_data: &CampaignData,
     db_path: &PathBuf,
 ) -> CliResult<String> {
+    let address_finder = AddressFinder::default();
     let (campaign_address, _) =
-        find_campaign_address(&campaign_data.admin, &campaign_data.fingerprint);
+        address_finder.find_campaign_v0_address(&campaign_data.admin, &campaign_data.fingerprint);
 
     println!("  📍 Campaign PDA: {}", campaign_address);
 
@@ -582,9 +588,13 @@ fn deploy_cohort_pda(
     cohort_data: &CohortData,
     db_path: &PathBuf,
 ) -> CliResult<String> {
+    let address_finder = AddressFinder::default();
+
     let (campaign_address, _) =
-        find_campaign_address(&campaign_data.admin, &campaign_data.fingerprint);
-    let (cohort_address, _) = find_cohort_v0_address(&campaign_address, &cohort_data.merkle_root);
+        address_finder.find_campaign_v0_address(&campaign_data.admin, &campaign_data.fingerprint);
+
+    let (cohort_address, _) =
+        address_finder.find_cohort_v0_address(&campaign_address, &cohort_data.merkle_root);
 
     println!("  📦 Deploying cohort: {}", cohort_data.name);
     println!("    📍 Cohort PDA: {}", cohort_address);
@@ -689,9 +699,13 @@ fn deploy_and_fund_cohort_vaults(
     cohort_data: &CohortData,
     db_path: &PathBuf,
 ) -> CliResult<Vec<String>> {
+    let address_finder = AddressFinder::default();
+
     let (campaign_address, _) =
-        find_campaign_address(&campaign_data.admin, &campaign_data.fingerprint);
-    let (cohort_address, _) = find_cohort_v0_address(&campaign_address, &cohort_data.merkle_root);
+        address_finder.find_campaign_v0_address(&campaign_data.admin, &campaign_data.fingerprint);
+
+    let (cohort_address, _) =
+        address_finder.find_cohort_v0_address(&campaign_address, &cohort_data.merkle_root);
 
     let mut vault_signatures = Vec::new();
 
@@ -701,7 +715,8 @@ fn deploy_and_fund_cohort_vaults(
     // Process each vault: create first, then fund
     for vault_req in vault_requirements {
         let vault_index = vault_req.vault_index as u8;
-        let (vault_address, _) = find_vault_v0_address(&cohort_address, vault_index);
+
+        let (vault_address, _) = address_finder.find_vault_v0_address(&cohort_address, vault_index);
 
         println!(
             "        🏗️  Processing vault {} at {}",
@@ -767,9 +782,13 @@ fn create_vault_if_needed(
 
     println!("        📤 Creating vault {}...", vault_index);
 
+    let address_finder = AddressFinder::default();
+
     let (campaign_address, _) =
-        find_campaign_address(&campaign_data.admin, &campaign_data.fingerprint);
-    let (cohort_address, _) = find_cohort_v0_address(&campaign_address, &cohort_data.merkle_root);
+        address_finder.find_campaign_v0_address(&campaign_data.admin, &campaign_data.fingerprint);
+
+    let (cohort_address, _) =
+        address_finder.find_cohort_v0_address(&campaign_address, &cohort_data.merkle_root);
 
     // Build create vault instruction
     let (create_vault_ix, _, _) = build_create_vault_ix(
@@ -1076,8 +1095,10 @@ fn activate_campaign(
     campaign_data: &CampaignData,
     db_path: &PathBuf,
 ) -> CliResult<()> {
+    let address_finder = AddressFinder::default();
+
     let (campaign_address, _) =
-        find_campaign_address(&campaign_data.admin, &campaign_data.fingerprint);
+        address_finder.find_campaign_v0_address(&campaign_data.admin, &campaign_data.fingerprint);
 
     // Check if campaign exists
     match rpc_client.get_account(&campaign_address) {
@@ -1149,8 +1170,11 @@ fn verify_deployment(
     println!("  🔍 Verifying campaign deployment...");
 
     // Verify campaign PDA exists
+    let address_finder = AddressFinder::default();
+
     let (campaign_address, _) =
-        find_campaign_address(&campaign_data.admin, &campaign_data.fingerprint);
+        address_finder.find_campaign_v0_address(&campaign_data.admin, &campaign_data.fingerprint);
+
     match rpc_client.get_account(&campaign_address) {
         Ok(_) => println!("    ✅ Campaign PDA verified"),
         Err(_) => {
@@ -1162,7 +1186,9 @@ fn verify_deployment(
 
     // Verify all cohort PDAs exist
     for cohort in cohort_data {
-        let (cohort_address, _) = find_cohort_v0_address(&campaign_address, &cohort.merkle_root);
+        let (cohort_address, _) =
+            address_finder.find_cohort_v0_address(&campaign_address, &cohort.merkle_root);
+
         match rpc_client.get_account(&cohort_address) {
             Ok(_) => println!("    ✅ Cohort {} PDA verified", cohort.name),
             Err(_) => {
@@ -1185,10 +1211,13 @@ fn verify_deployment(
             })?;
 
         let (campaign_address, _) =
-            find_campaign_address(&campaign_data.admin, &campaign_data.fingerprint);
-        let (cohort_address, _) = find_cohort_v0_address(&campaign_address, &cohort.merkle_root);
+            address_finder.find_campaign_v0_address(&campaign_data.admin, &campaign_data.fingerprint);
+
+        let (cohort_address, _) =
+            address_finder.find_cohort_v0_address(&campaign_address, &cohort.merkle_root);
+
         let (vault_address, _) =
-            find_vault_v0_address(&cohort_address, vault_req.vault_index as u8);
+            address_finder.find_vault_v0_address(&cohort_address, vault_req.vault_index as u8);
 
         match rpc_client.get_account(&vault_address) {
             Ok(_) => {

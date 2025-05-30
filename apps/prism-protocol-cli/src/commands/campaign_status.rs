@@ -1,8 +1,6 @@
 use crate::error::{CliError, CliResult};
 use hex;
-use prism_protocol_sdk::address_finders::{
-    find_campaign_address, find_cohort_v0_address, find_vault_v0_address,
-};
+use prism_protocol_sdk::AddressFinder;
 use rusqlite::Connection;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey};
@@ -35,20 +33,21 @@ struct VaultStatus {
     vault_address: Pubkey,
     exists: bool,
     token_balance: u64,
+    #[allow(dead_code)]
     account_data_length: Option<usize>,
 }
 
 pub fn execute(campaign_db_in: PathBuf, rpc_url: String) -> CliResult<()> {
     println!("🔍 Querying campaign status on-chain...");
     println!("📊 Database: {}", campaign_db_in.display());
-    
+
     // Setup RPC client
     let rpc_client = RpcClient::new_with_commitment(rpc_url.clone(), CommitmentConfig::confirmed());
-    
+
     // Read campaign info from database
     let campaign_info = read_campaign_info(&campaign_db_in, &rpc_client)?;
     print_campaign_info(&campaign_info);
-    
+
     // Query cohorts if campaign exists
     if campaign_info.exists {
         let cohort_statuses = query_cohort_statuses(&rpc_client, &campaign_db_in, &campaign_info)?;
@@ -57,11 +56,12 @@ pub fn execute(campaign_db_in: PathBuf, rpc_url: String) -> CliResult<()> {
         println!("\n⚠️  Campaign not deployed - skipping cohort/vault checks");
         println!("   Run `deploy-campaign` to create on-chain accounts");
     }
-    
+
     Ok(())
 }
 
 fn read_campaign_info(db_path: &PathBuf, rpc_client: &RpcClient) -> CliResult<CampaignInfo> {
+    let address_finder = AddressFinder::default();
     let conn = Connection::open(db_path)?;
 
     let mut stmt = conn.prepare("SELECT fingerprint, mint, admin FROM campaign LIMIT 1")?;
@@ -88,8 +88,8 @@ fn read_campaign_info(db_path: &PathBuf, rpc_client: &RpcClient) -> CliResult<Ca
             .map_err(|e| CliError::InvalidConfig(format!("Invalid admin pubkey: {}", e)))?;
 
         // Derive campaign address and check if it exists
-        let (campaign_address, _) = find_campaign_address(&admin, &fingerprint);
-        
+        let (campaign_address, _) = address_finder.find_campaign_v0_address(&admin, &fingerprint);
+
         let (exists, account_data_length) = match rpc_client.get_account(&campaign_address) {
             Ok(account) => (true, Some(account.data.len())),
             Err(_) => (false, None),
@@ -117,15 +117,15 @@ fn query_cohort_statuses(
 ) -> CliResult<Vec<CohortStatus>> {
     let conn = Connection::open(db_path)?;
     let mut cohort_statuses = Vec::new();
-    
+
     // Get cohort info from database
     let mut stmt = conn.prepare(
         "SELECT DISTINCT c.cohort_name, h.merkle_root 
          FROM claimants c
          JOIN cohorts h ON c.cohort_name = h.cohort_name 
-         ORDER BY c.cohort_name"
+         ORDER BY c.cohort_name",
     )?;
-    
+
     let rows = stmt.query_map([], |row| {
         let cohort_name: String = row.get(0)?;
         let merkle_root_hex: String = row.get(1)?;
@@ -148,7 +148,7 @@ fn query_cohort_statuses(
             }
         }
     }
-    
+
     Ok(cohort_statuses)
 }
 
@@ -159,28 +159,29 @@ fn query_single_cohort_status(
     merkle_root: &[u8; 32],
     db_path: &PathBuf,
 ) -> CliResult<CohortStatus> {
-    let (cohort_address, _) = find_cohort_v0_address(campaign_address, merkle_root);
-    
+    let address_finder = AddressFinder::default();
+    let (cohort_address, _) = address_finder.find_cohort_v0_address(campaign_address, merkle_root);
+
     let (exists, account_data_length) = match rpc_client.get_account(&cohort_address) {
         Ok(account) => (true, Some(account.data.len())),
         Err(_) => (false, None),
     };
-    
+
     // Query vault statuses from database first
     let mut vaults = Vec::new();
-    
+
     // Get actual vault data from database
     let conn = Connection::open(db_path)?;
     let mut stmt = conn.prepare(
-        "SELECT vault_index, vault_pubkey FROM vaults WHERE cohort_name = ? ORDER BY vault_index"
+        "SELECT vault_index, vault_pubkey FROM vaults WHERE cohort_name = ? ORDER BY vault_index",
     )?;
-    
+
     let vault_rows = stmt.query_map([cohort_name], |row| {
         let vault_index: u8 = row.get::<_, i64>(0)? as u8;
         let vault_pubkey_str: String = row.get(1)?;
         Ok((vault_index, vault_pubkey_str))
     })?;
-    
+
     for vault_row in vault_rows {
         if let Ok((vault_index, vault_pubkey_str)) = vault_row {
             if let Ok(vault_address) = Pubkey::from_str(&vault_pubkey_str) {
@@ -188,12 +189,13 @@ fn query_single_cohort_status(
                     Ok(account) => {
                         let token_balance = if account.data.len() >= 72 {
                             // Token account amount is at bytes 64-72 (u64 little endian)
-                            let amount_bytes: [u8; 8] = account.data[64..72].try_into().unwrap_or([0u8; 8]);
+                            let amount_bytes: [u8; 8] =
+                                account.data[64..72].try_into().unwrap_or([0u8; 8]);
                             u64::from_le_bytes(amount_bytes)
                         } else {
                             0
                         };
-                        
+
                         vaults.push(VaultStatus {
                             index: vault_index,
                             vault_address,
@@ -215,7 +217,7 @@ fn query_single_cohort_status(
             }
         }
     }
-    
+
     Ok(CohortStatus {
         name: cohort_name.to_string(),
         merkle_root: *merkle_root,
@@ -232,7 +234,7 @@ fn print_campaign_info(info: &CampaignInfo) {
     println!("   Admin: {}", info.admin);
     println!("   Mint: {}", info.mint);
     println!("   Address: {}", info.campaign_address);
-    
+
     if info.exists {
         println!("   ✅ Status: EXISTS");
         if let Some(len) = info.account_data_length {
@@ -249,14 +251,14 @@ fn print_cohort_statuses(cohorts: &[CohortStatus]) {
         println!("\n📂 No cohorts found in campaign database");
         return;
     }
-    
+
     println!("\n📂 Cohorts ({}):", cohorts.len());
-    
+
     for (i, cohort) in cohorts.iter().enumerate() {
         println!("\n   {}. Cohort: {}", i + 1, cohort.name);
         println!("      Address: {}", cohort.cohort_address);
         println!("      Merkle Root: {}", hex::encode(cohort.merkle_root));
-        
+
         if cohort.exists {
             println!("      ✅ Status: EXISTS");
             if let Some(len) = cohort.account_data_length {
@@ -265,7 +267,7 @@ fn print_cohort_statuses(cohorts: &[CohortStatus]) {
         } else {
             println!("      ❌ Status: NOT FOUND");
         }
-        
+
         // Print vault statuses
         if !cohort.vaults.is_empty() {
             println!("      💰 Vaults:");
@@ -273,15 +275,12 @@ fn print_cohort_statuses(cohorts: &[CohortStatus]) {
                 if vault.exists {
                     println!(
                         "         Vault {}: ✅ EXISTS - {} tokens ({})",
-                        vault.index,
-                        vault.token_balance,
-                        vault.vault_address
+                        vault.index, vault.token_balance, vault.vault_address
                     );
                 } else {
                     println!(
                         "         Vault {}: ❌ NOT FOUND ({})",
-                        vault.index,
-                        vault.vault_address
+                        vault.index, vault.vault_address
                     );
                 }
             }
