@@ -1,0 +1,289 @@
+/*!
+# CSV Validation & I/O
+
+This module provides validation functions for CSV files that ensure consistency
+between `generate-fixtures` and `compile-campaign` operations.
+*/
+
+use crate::{
+    errors::{CsvError, CsvResult},
+    schemas::{CampaignRow, CohortsRow, CAMPAIGN_CSV_HEADERS, COHORTS_CSV_HEADERS},
+};
+use csv::{Reader, Writer};
+use std::collections::HashMap;
+use std::fs::File;
+use std::path::Path;
+
+// ================================================================================================
+// CSV Reading with Validation
+// ================================================================================================
+
+/// Read and validate a campaign CSV file
+pub fn read_campaign_csv<P: AsRef<Path>>(path: P) -> CsvResult<Vec<CampaignRow>> {
+    let file = File::open(path)?;
+    let mut rdr = Reader::from_reader(file);
+
+    // Validate headers
+    let headers = rdr.headers()?;
+    validate_headers(headers.iter(), CAMPAIGN_CSV_HEADERS, "campaign.csv")?;
+
+    // Read and deserialize rows
+    let mut rows = Vec::new();
+    for result in rdr.deserialize() {
+        let row: CampaignRow = result?;
+        rows.push(row);
+    }
+
+    if rows.is_empty() {
+        return Err(CsvError::SchemaValidation(
+            "Campaign CSV file is empty".to_string(),
+        ));
+    }
+
+    Ok(rows)
+}
+
+/// Read and validate a cohorts CSV file
+pub fn read_cohorts_csv<P: AsRef<Path>>(path: P) -> CsvResult<Vec<CohortsRow>> {
+    let file = File::open(path)?;
+    let mut rdr = Reader::from_reader(file);
+
+    // Validate headers
+    let headers = rdr.headers()?;
+    validate_headers(headers.iter(), COHORTS_CSV_HEADERS, "cohorts.csv")?;
+
+    // Read and deserialize rows
+    let mut rows = Vec::new();
+    for result in rdr.deserialize() {
+        let row: CohortsRow = result?;
+        rows.push(row);
+    }
+
+    if rows.is_empty() {
+        return Err(CsvError::SchemaValidation(
+            "Cohorts CSV file is empty".to_string(),
+        ));
+    }
+
+    Ok(rows)
+}
+
+// ================================================================================================
+// CSV Writing
+// ================================================================================================
+
+/// Write campaign CSV with proper headers and validation
+pub fn write_campaign_csv<P: AsRef<Path>>(path: P, rows: &[CampaignRow]) -> CsvResult<()> {
+    let file = File::create(path)?;
+    let mut wtr = Writer::from_writer(file);
+
+    // Write data rows (csv crate automatically writes headers)
+    for row in rows {
+        wtr.serialize(row)?;
+    }
+
+    wtr.flush()?;
+    Ok(())
+}
+
+/// Write cohorts CSV with proper headers and validation
+pub fn write_cohorts_csv<P: AsRef<Path>>(path: P, rows: &[CohortsRow]) -> CsvResult<()> {
+    let file = File::create(path)?;
+    let mut wtr = Writer::from_writer(file);
+
+    // Write data rows (csv crate automatically writes headers)
+    for row in rows {
+        wtr.serialize(row)?;
+    }
+
+    wtr.flush()?;
+    Ok(())
+}
+
+// ================================================================================================
+// Cross-CSV Validation
+// ================================================================================================
+
+/// Validate consistency between campaign and cohorts CSV files
+///
+/// Ensures:
+/// - All cohorts referenced in campaign.csv exist in cohorts.csv
+/// - Total entitlements in cohorts.csv match actual totals from campaign.csv
+/// - No orphaned cohorts (cohorts defined but not used)
+pub fn validate_csv_consistency(
+    campaign_rows: &[CampaignRow],
+    cohorts_rows: &[CohortsRow],
+) -> CsvResult<()> {
+    // Build maps for efficient lookups
+    let cohorts_map: HashMap<String, &CohortsRow> = cohorts_rows
+        .iter()
+        .map(|row| (row.cohort.clone(), row))
+        .collect();
+
+    let mut campaign_cohorts = HashMap::new();
+    let mut campaign_totals: HashMap<String, u64> = HashMap::new();
+
+    // Aggregate campaign data by cohort
+    for row in campaign_rows {
+        campaign_cohorts.insert(row.cohort.clone(), ());
+        *campaign_totals.entry(row.cohort.clone()).or_insert(0) += row.entitlements;
+    }
+
+    // Check 1: All campaign cohorts must exist in cohorts.csv
+    for cohort in campaign_cohorts.keys() {
+        if !cohorts_map.contains_key(cohort) {
+            return Err(CsvError::DataInconsistency(format!(
+                "Cohort '{}' referenced in campaign.csv but not defined in cohorts.csv",
+                cohort
+            )));
+        }
+    }
+
+    // Check 2: Total entitlements must match
+    for (cohort, cohort_row) in &cohorts_map {
+        if let Some(&campaign_total) = campaign_totals.get(cohort) {
+            if cohort_row.total_entitlements != campaign_total {
+                return Err(CsvError::DataInconsistency(format!(
+                    "Cohort '{}': total_entitlements in cohorts.csv ({}) doesn't match actual total from campaign.csv ({})",
+                    cohort, cohort_row.total_entitlements, campaign_total
+                )));
+            }
+        } else {
+            return Err(CsvError::DataInconsistency(format!(
+                "Cohort '{}' defined in cohorts.csv but has no claimants in campaign.csv",
+                cohort
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+// ================================================================================================
+// Header Validation
+// ================================================================================================
+
+fn validate_headers<'a, I>(actual: I, expected: &[&str], file_type: &str) -> CsvResult<()>
+where
+    I: Iterator<Item = &'a str>,
+{
+    let actual_headers: Vec<&str> = actual.collect();
+
+    if actual_headers.len() != expected.len() {
+        return Err(CsvError::SchemaValidation(format!(
+            "{}: expected {} headers, found {}",
+            file_type,
+            expected.len(),
+            actual_headers.len()
+        )));
+    }
+
+    for (i, (actual, expected)) in actual_headers.iter().zip(expected.iter()).enumerate() {
+        if actual != expected {
+            return Err(CsvError::SchemaValidation(format!(
+                "{}: header {} should be '{}', found '{}'",
+                file_type,
+                i + 1,
+                expected,
+                actual
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+// ================================================================================================
+// Tests
+// ================================================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use solana_sdk::pubkey::Pubkey;
+    use std::str::FromStr;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_write_and_read_campaign_csv() {
+        let rows = vec![
+            CampaignRow {
+                cohort: "earlyAdopters".to_string(),
+                claimant: Pubkey::from_str("11111111111111111111111111111112").unwrap(),
+                entitlements: 100,
+            },
+            CampaignRow {
+                cohort: "powerUsers".to_string(),
+                claimant: Pubkey::from_str("11111111111111111111111111111113").unwrap(),
+                entitlements: 200,
+            },
+        ];
+
+        let temp_file = NamedTempFile::new().unwrap();
+        write_campaign_csv(temp_file.path(), &rows).unwrap();
+        let read_rows = read_campaign_csv(temp_file.path()).unwrap();
+
+        assert_eq!(rows, read_rows);
+    }
+
+    #[test]
+    fn test_write_and_read_cohorts_csv() {
+        let rows = vec![
+            CohortsRow {
+                cohort: "earlyAdopters".to_string(),
+                merkle_root: [1u8; 32],
+                total_entitlements: 100,
+            },
+            CohortsRow {
+                cohort: "powerUsers".to_string(),
+                merkle_root: [2u8; 32],
+                total_entitlements: 200,
+            },
+        ];
+
+        let temp_file = NamedTempFile::new().unwrap();
+        write_cohorts_csv(temp_file.path(), &rows).unwrap();
+        let read_rows = read_cohorts_csv(temp_file.path()).unwrap();
+
+        assert_eq!(rows, read_rows);
+    }
+
+    #[test]
+    fn test_csv_consistency_validation() {
+        let campaign_rows = vec![
+            CampaignRow {
+                cohort: "earlyAdopters".to_string(),
+                claimant: Pubkey::from_str("11111111111111111111111111111112").unwrap(),
+                entitlements: 50,
+            },
+            CampaignRow {
+                cohort: "earlyAdopters".to_string(),
+                claimant: Pubkey::from_str("11111111111111111111111111111113").unwrap(),
+                entitlements: 50,
+            },
+        ];
+
+        let cohorts_rows = vec![CohortsRow {
+            cohort: "earlyAdopters".to_string(),
+            merkle_root: [1u8; 32],
+            total_entitlements: 100,
+        }];
+
+        // Should pass validation
+        validate_csv_consistency(&campaign_rows, &cohorts_rows).unwrap();
+
+        // Should fail with wrong total
+        let bad_cohorts_rows = vec![CohortsRow {
+            cohort: "earlyAdopters".to_string(),
+            merkle_root: [1u8; 32],
+            total_entitlements: 99, // Wrong total
+        }];
+
+        let result = validate_csv_consistency(&campaign_rows, &bad_cohorts_rows);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("doesn't match actual total"));
+    }
+}

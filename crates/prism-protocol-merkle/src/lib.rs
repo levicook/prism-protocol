@@ -2,7 +2,7 @@ pub mod builder;
 pub mod hasher;
 pub mod proof;
 
-pub use builder::{create_merkle_tree, ClaimMerkleTree};
+pub use builder::{create_merkle_tree, ClaimTree};
 pub use hasher::PrismHasher;
 pub use proof::{
     batch_verify_proofs, extract_root_from_proof, generate_proof_for_leaf, verify_claim_proof,

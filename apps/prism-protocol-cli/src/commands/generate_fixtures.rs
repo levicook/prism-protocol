@@ -80,7 +80,7 @@ pub fn execute(
 
     // Save individual keypair files
     println!("\n🔑 Saving individual keypair files...");
-    save_claimant_keypairs(&keypairs_dir, &claimant_data, &campaign_slug)?;
+    save_claimant_keypairs(&keypairs_dir, &claimant_data)?;
     println!("✅ Saved {} keypair files", claimant_data.len());
 
     println!("\n🎉 Enhanced fixture generation completed!");
@@ -108,6 +108,7 @@ fn slugify(name: &str) -> String {
 
 /// Data structure for claimant information with keypair
 #[derive(Debug)]
+#[allow(dead_code)]
 struct ClaimantData {
     index: u64,
     keypair: Keypair,
@@ -179,11 +180,7 @@ fn generate_campaign_csv_with_keypairs(
 }
 
 /// Save individual keypair files
-fn save_claimant_keypairs(
-    keypairs_dir: &PathBuf,
-    claimant_data: &[ClaimantData],
-    campaign_slug: &str,
-) -> CliResult<()> {
+fn save_claimant_keypairs(keypairs_dir: &PathBuf, claimant_data: &[ClaimantData]) -> CliResult<()> {
     for data in claimant_data {
         let filename = format!("claimant-{:04}.json", data.index + 1);
         let keypair_path = keypairs_dir.join(&filename);
