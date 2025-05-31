@@ -10,6 +10,15 @@ path = "src/lib.rs"
 [dependencies]
 anchor-lang = { workspace = true }
 anchor-spl = { workspace = true }
+csv = { workspace = true }
+hex = { workspace = true }
+prism-protocol-csvs = { path = "../prism-protocol-csvs" }
+prism-protocol-db = { path = "../prism-protocol-db" }
+prism-protocol-merkle = { path = "../prism-protocol-merkle" }
 prism_protocol = { path = "../../programs/prism-protocol", features = [
     "no-entrypoint",
 ] }
+serde = { workspace = true }
+sha2 = { workspace = true }
+solana-sdk = { workspace = true }
+thiserror = { workspace = true }

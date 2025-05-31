@@ -9,18 +9,12 @@ name = "prism_protocol_db"
 path = "src/lib.rs"
 
 [dependencies]
-# Database
-rusqlite = { workspace = true, features = ["bundled"] }
-
-# Solana (for pubkey types in database records)
-solana-sdk = { workspace = true }
-
-# Error handling
-thiserror = { workspace = true }
-
-# Utilities
-hex = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
+hex = { workspace = true }
+rusqlite = { workspace = true, features = ["backup", "bundled"] }
+solana-sdk = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
