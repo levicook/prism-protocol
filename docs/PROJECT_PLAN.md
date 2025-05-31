@@ -4,6 +4,94 @@
 
 To enable efficient, scalable, and verifiable token distribution on Solana, minimizing write contention and optimizing on-chain resources. (See `README.md` for full details).
 
+## 🎯 **STRATEGIC PRIORITIES & USER EXPERIENCE ARCHITECTURE**
+
+### **Current Status: Strong Foundations, Need User-Focused Strategy**
+
+After one week of development, we've built incredibly solid technical foundations:
+- ✅ **Financial Safety**: Precise decimal math eliminates funding errors
+- ✅ **Infrastructure**: Clean abstractions, comprehensive testing, production-ready CLI
+- ✅ **Protocol Design**: Campaign fingerprints, merkle proofs, vault distribution
+
+**Critical Gap**: We've optimized for developers, not end users. Need clear user experience strategy.
+
+### **User Experience Priority Ranking**
+
+**Primary Users (95% of usage):**
+1. **dApp Users** - Campaign deployers uploading CSVs, claimants connecting wallets
+2. **CLI Users** - Technical campaign deployers comfortable with command-line tools
+
+**Secondary Users (5% of usage):**
+3. **SDK Integrators** - Developers building custom dApps/services
+4. **API Consumers** - Programmatic access for data/automation
+
+### **v0 vs v1 Performance Strategy**
+
+**Current v0 (Proof of Concept):**
+- ✅ Full merkle proofs (~32 bytes × tree depth)
+- ✅ Individual transactions per operation
+- ⚠️ **Performance claims unvalidated** - need concrete measurements
+
+**Planned v1 (Production Optimization):**
+- 🎯 **Trunk optimization**: Store intermediate tree levels on cohorts → shorter proofs
+- 🎯 **CU optimization**: Measured compute unit consumption with accurate cost estimation
+- 🎯 **Batch operations**: Transaction packing for deployment efficiency
+- 🎯 **Priority fee strategy**: Optimal fee calculation for reliable execution
+
+### **Performance Validation Requirements**
+
+**Critical Measurements Needed:**
+- **CU Consumption**: Exact compute units per instruction (claim, deploy, etc.)
+- **Transaction Sizes**: Bytes consumed under various scenarios (1K vs 100K claimants)
+- **Write Contention**: Actual concurrent claim performance testing
+- **Proof Sizes**: Current vs optimized merkle proof bandwidth requirements
+- **On-chain Storage**: Account rent costs at scale (campaigns, cohorts, receipts)
+
+**Validation Methodology:**
+- Mollusk SVM benchmarking with realistic datasets
+- Devnet stress testing with concurrent users
+- Cost modeling for different campaign sizes
+- Comparison with naive airdrop approaches
+
+### **User Experience Architecture (Critical Path)**
+
+**Campaign Deployer Journey:**
+```
+CSV Upload → dApp Validation → Budget Calculation → Deploy → Monitor
+     ↓              ↓               ↓              ↓         ↓
+   (or CLI)    Fee Estimation   Vault Funding    Status   Claims
+```
+
+**Claimant Journey:**
+```
+Connect Wallet → Check Eligibility → Claim Tokens → View History
+      ↓               ↓                  ↓             ↓
+   (instant)    (database query)   (merkle proof)  (receipts)
+```
+
+**Missing Components:**
+- 🚨 **dApp Frontend**: Primary user interface (most critical gap)
+- 🚨 **CSV Upload Interface**: Campaign creation without CLI knowledge
+- 🚨 **Claim Status Dashboard**: User-friendly claim tracking
+- ⚠️ **dApp Template**: Next.js template for forks (mono-repo issue)
+
+### **Immediate Strategic Priorities**
+
+1. **Performance Validation Sprint** (1 week)
+   - Measure actual CU consumption, transaction sizes, write contention
+   - Validate or refine performance claims with concrete data
+   - Document optimization opportunities for v1
+
+2. **User Experience Definition** (1 week)
+   - Design primary user journeys (campaign deployer + claimant)
+   - Define dApp requirements and architecture
+   - Resolve mono-repo vs template strategy
+
+3. **v1 Optimization Planning** (ongoing)
+   - Trunk optimization specification for shorter proofs
+   - CU optimization roadmap with priority fee strategy
+   - Batch operation enhancement beyond current transaction packing
+
 ## 2. Core Components - Implementation Checklist
 
 ### On-Chain Program (`programs/prism-protocol/src/`)
