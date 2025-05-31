@@ -55,7 +55,7 @@ pub mod validation;
 
 // Re-export main types for convenience
 pub use errors::{CsvError, CsvResult};
-pub use schemas::{CampaignRow, CohortsRow, CURRENT_SCHEMA_VERSION};
+pub use schemas::{CampaignCsvRow, CohortsCsvRow, CURRENT_SCHEMA_VERSION};
 pub use validation::{
     read_campaign_csv, read_cohorts_csv, validate_csv_consistency, write_campaign_csv,
     write_cohorts_csv,

@@ -36,7 +36,7 @@ pub const CAMPAIGN_CSV_HEADERS: &[&str] = &["cohort", "claimant", "entitlements"
 /// **Producer**: `generate-fixtures` command
 /// **Consumers**: `compile-campaign` command, future API endpoints
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct CampaignRow {
+pub struct CampaignCsvRow {
     /// Cohort identifier (e.g., "earlyAdopters", "powerUsers")
     pub cohort: String,
 
@@ -65,7 +65,7 @@ pub const COHORTS_CSV_HEADERS: &[&str] = &["cohort", "amount_per_entitlement"];
 /// **Producer**: `generate-fixtures` command or manual creation
 /// **Consumers**: `compile-campaign` command
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct CohortsRow {
+pub struct CohortsCsvRow {
     /// Cohort identifier - must match cohorts referenced in campaign.csv
     pub cohort: String,
 
@@ -104,7 +104,7 @@ mod tests {
 
     #[test]
     fn test_campaign_csv_row_serialization() {
-        let row = CampaignRow {
+        let row = CampaignCsvRow {
             cohort: "earlyAdopters".to_string(),
             claimant: Pubkey::from_str("11111111111111111111111111111112").unwrap(),
             entitlements: 100,
@@ -116,7 +116,7 @@ mod tests {
         let csv_data = String::from_utf8(wtr.into_inner().unwrap()).unwrap();
 
         let mut rdr = csv::Reader::from_reader(csv_data.as_bytes());
-        let deserialized: CampaignRow = rdr.deserialize().next().unwrap().unwrap();
+        let deserialized: CampaignCsvRow = rdr.deserialize().next().unwrap().unwrap();
 
         assert_eq!(row, deserialized);
     }

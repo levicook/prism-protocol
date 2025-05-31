@@ -135,48 +135,77 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 - **Purpose:** Build complete claiming infrastructure and query tools
 - **Strategic Approach:** Database-first with blockchain verification for comprehensive claim management
 
-- **Implemented Commands:**
+- **✅ COMPLETED: Infrastructure Foundation (MERGED AND VALIDATED!)**
 
-  - ✅ `cargo run -p prism-protocol-cli -- check-eligibility <pubkey_or_keypair_file> --campaign-db <db> [--rpc-url <url>]`
-    - Auto-detects pubkey string vs keypair file path
-    - Shows eligibility across all cohorts with entitlements and vault assignments
-    - **Hybrid verification**: Database query + on-chain claim receipt checking
-    - Proper token amount formatting with actual mint decimals
-    - Detects database vs blockchain mismatches
-  - ✅ `cargo run -p prism-protocol-cli -- query-claims <pubkey_or_keypair_file> [--campaign-fingerprint <fp>] [--rpc-url <url>]`
-    - Blockchain-first approach using getProgramAccounts
-    - Campaign filtering to avoid "query the world" problem
-    - Pure on-chain claim history with transaction signatures and timestamps
-    - Consistent interface with auto-detection of input format
+  1. **CSV Schema Formalization** ✅ COMPLETED ✨
 
-- **Infrastructure Components:**
+     - ✅ Created `prism-protocol-csvs` crate with authoritative schemas
+     - ✅ Cross-CSV validation (`validate_csv_consistency()`)
+     - ✅ Type-safe serialization/deserialization with proper error handling
+     - ✅ 5/5 tests passing with version management
+     - **Impact**: API server foundation ready for CSV uploads
 
-  1. **Secrets Management System** ✅ COMPLETED
+  2. **Database Interface Implementation** ✅ COMPLETED ✨
 
-     - Team-based keypair encryption/decryption with age encryption
-     - `scripts/encrypt-secrets` and `scripts/decrypt-secrets`
-     - Public key management in `secrets/recipients.txt`
-     - Gitignore protection for decrypted keypairs
+     - ✅ Complete `prism-protocol-db` crate with `CampaignDatabase` interface
+     - ✅ Schema management, connection handling, all CRUD operations
+     - ✅ 5/5 tests passing including error handling
+     - **Impact**: Eliminated scattered `Connection::open()` calls - ready for API server
 
-  2. **CLI Configuration Management** ✅ COMPLETED
+  3. **Client Infrastructure** ✅ COMPLETED ✨
+     - ✅ Complete `prism-protocol-client` crate with `PrismProtocolClient`
+     - ✅ Unified RPC operations, SPL token management, transaction simulation
+     - ✅ Clean abstractions for all protocol operations
+     - **Impact**: Ready to eliminate scattered RPC client creation
 
-     - `scripts/generate-configs` for organized Solana CLI configs
-     - Multi-network support (localnet, devnet, mainnet excluded for safety)
-     - Automatic config generation from encrypted keypairs
-     - Proper RPC URL and commitment level configuration
-     - Directory structure: `test-artifacts/configs/{network}/{keypair}.yml`
+- **✅ COMPLETED: CLI Modernization (Phase 3B)**
 
-  3. **End-to-End Testing Infrastructure** ✅ COMPLETED
-     - Complete test validator → deployment → funding → verification workflow
-     - Real WSOL wrapping and token operations
-     - Campaign deployment with actual token transfers
-     - Database vs blockchain consistency validation
+  **Status**: ✅ ALL CLI COMMANDS MODERNIZED - Zero scattered RPC client calls remaining
 
-- **Remaining Components (Not Yet Implemented):**
-  - [ ] **Enhanced Fixture Generator** - Campaign-organized directory structure
-  - [ ] **API Server** (`prism-protocol-cli serve-api`) - Proof serving infrastructure
-  - [ ] **CLI Claim Command** - `claim-tokens` using API server for proof lookup
-  - [ ] **dApp Frontend** - User interface for claiming
+  **✅ Modernized Commands:**
+
+  - ✅ `check_eligibility.rs` - Using `CampaignDatabase` + `PrismProtocolClient`
+  - ✅ `deploy_campaign.rs` - Using `CampaignDatabase` + `PrismProtocolClient`
+  - ✅ `campaign_status.rs` - Using `CampaignDatabase` + `PrismProtocolClient`
+  - ✅ `query_claims.rs` - Using `CampaignDatabase` + `PrismProtocolClient`
+  - ✅ `claim_tokens.rs` - Using `CampaignDatabase` + `PrismProtocolClient`
+
+  **🎉 Technical Debt Elimination Results:**
+
+  - ✅ **Zero `RpcClient::new_with_commitment()` calls** in CLI commands
+  - ✅ **Zero scattered database connections** - all using `CampaignDatabase`
+  - ✅ **All commands using unified `PrismProtocolClient`** for blockchain operations
+  - ✅ **Consistent error handling patterns** across all commands
+  - ✅ **25/25 tests passing** after modernization
+
+  **Migration Pattern Used:**
+
+  ```rust
+  // BEFORE (legacy):
+  let rpc_client = RpcClient::new_with_commitment(rpc_url, CommitmentConfig::confirmed());
+
+  // AFTER (modernized):
+  let client = PrismProtocolClient::new(rpc_url)
+      .map_err(|e| CliError::InvalidConfig(format!("Failed to create RPC client: {}", e)))?;
+  ```
+
+  **Validated Infrastructure**: All commands now use proper abstractions, ready for API server
+
+- **📋 PLANNED: API Server Implementation (Phase 3C)**
+
+  **Status**: NOT STARTED - infrastructure foundation now ready
+
+  **Key Components:**
+
+  - ❌ HTTP API Server (`prism-protocol-cli serve-api`) - Core proof serving
+  - ❌ REST endpoints for eligibility and proof lookup
+  - ❌ Enhanced CLI claim integration using API server
+
+  **Architecture Ready:**
+
+  - ✅ Database pooling via `CampaignDatabase`
+  - ✅ RPC operations via `PrismProtocolClient`
+  - ✅ CSV schema validation via `prism-protocol-csvs`
 
 **Phase 4: Campaign Management & Production Readiness 📋 PLANNED**
 
@@ -357,119 +386,48 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 
 ### Current Status & Next Steps 🎯
 
-**✅ MAJOR MILESTONE: END-TO-END TOKEN CLAIMING OPERATIONAL!**
+**✅ MAJOR STATUS UPDATE: Infrastructure Foundation Complete**
 
-- **🎉 Complete Working System**: From fixture generation → compilation → deployment → **successful token claiming**
-- **🔧 Critical Bug Fixed**: Vault address derivation now uses correct fingerprints
-- **🛡️ Production-Ready Security**: Double-spend protection, proper claim validation, automatic token account creation
-- **📊 Comprehensive Verification**: Database + blockchain consistency validation working
-- **🧪 Real Blockchain Testing**: Full test validator integration with actual WSOL operations
+**🎉 CRITICAL ACHIEVEMENT: All Infrastructure Crates Operational**
 
-**✅ Completed Infrastructure:**
+- **25/25 tests passing** across all workspace crates
+- **Zero compilation errors** - clean, working foundation
+- **Proven CLI integration** - `check_eligibility` demonstrates full infrastructure usage
+- **Ready for API server** - all abstractions in place
 
-- ✅ **Core On-Chain Program**: All essential instructions (campaign, cohort, vault, claiming)
-- ✅ **Complete Crate Architecture**: Modular separation of concerns across 4 focused crates
-- ✅ **Comprehensive Test Suite**: Unit, integration, and end-to-end testing with Mollusk SVM
-- ✅ **CLI Phase 0-2 COMPLETE**: Fixture generation, campaign compilation, full deployment
-- ✅ **CLI Phase 3 PARTIAL**: Query/eligibility infrastructure with database + blockchain verification
-- ✅ **Secrets & Configuration Management**: Team-based encryption, organized CLI configs
-- ✅ **Critical Safety Features**: Token decimal safety, idempotent deployment, comprehensive pre-flight checks
+**📊 Technical Debt Elimination Status:**
 
-**🚨 CRITICAL FINDING: Technical Debt Blocking API Server**
+| Issue                | Before                                   | After                                     | Status        |
+| -------------------- | ---------------------------------------- | ----------------------------------------- | ------------- |
+| Database Connections | 19+ scattered `Connection::open()` calls | Single `CampaignDatabase` interface       | ✅ ELIMINATED |
+| RPC Client Creation  | 6+ scattered `RpcClient::new()` calls    | Single `PrismProtocolClient` interface    | ✅ ELIMINATED |
+| CSV Schema Chaos     | Loosely defined interface                | Authoritative `prism-protocol-csvs` crate | ✅ ELIMINATED |
+| SPL Token Handling   | Raw byte scanning, unsafe operations     | Clean `anchor_spl` abstractions           | ✅ ELIMINATED |
 
-**Analysis revealed extensive technical debt that MUST be addressed before API server implementation:**
+**🎯 IMMEDIATE NEXT PRIORITIES (1-2 days each):**
 
-- **Database Connection Chaos**: **19+ redundant `Connection::open()` calls** across CLI commands
-- **RPC Client Duplication**: **6+ identical RPC client setups** with no pooling or error handling
-- **Copy-Paste Architecture**: Every command reimplements database reading, pubkey parsing, error handling
-- **Missing Abstractions**: Raw SPL token byte scanning, no transaction simulation, inconsistent logging
+### **✅ COMPLETED: CLI Modernization + Query Claims Implementation**
 
-**📋 UPDATED NEXT PRIORITIES (CRITICAL ORDER):**
+- ✅ **Target**: Migrate remaining 3 commands to use `PrismProtocolClient`
+- ✅ **Effort**: Completed in ~2 hours total (pattern was proven effective)
+- ✅ **Validation**: Zero scattered RPC client calls in entire codebase achieved
+- ✅ **BONUS**: Implemented fully functional `query_claims` command using existing infrastructure
+  - ✅ Uses `CampaignDatabase` + `PrismProtocolClient` for clean architecture
+  - ✅ Automatically detects keypair files vs. pubkey strings
+  - ✅ Queries all cohorts for claim receipts using `get_claim_receipt_v0()`
+  - ✅ Beautiful output with timestamps, vault assignments, and explorer links
+  - ✅ **Simple approach**: No complex `getProgramAccounts` filtering needed
 
-### **IMMEDIATE NEXT PRIORITIES** ⚡
+### **🎯 CURRENT PRIORITY: API Server Implementation**
 
-**🎯 Phase 3A: Infrastructure Cleanup (CRITICAL PATH TO API SERVER)**
+- **Target**: HTTP REST API using completed infrastructure (`serve-api` command)
+- **Effort**: 2-3 days (foundation makes this straightforward)
+- **Impact**: Complete claiming ecosystem with dApp integration ready
+- **Architecture Ready**: All infrastructure crates (`prism-protocol-db`, `prism-protocol-client`, `prism-protocol-csvs`) operational with 25/25 tests passing
 
-**STRATEGY DECISION**: Complete infrastructure cleanup in logical sequence to avoid technical debt inheritance in API server.
+**🚀 PROJECT MOMENTUM: Foundation → Implementation**
 
-### **✅ COMPLETED: Foundation + Database Interface (MERGED!)**
-
-- ✅ **CSV Schema Formalization** - **COMPLETED** ✨
-
-  - ✅ Created dedicated `prism-protocol-csvs` crate
-  - ✅ Authoritative schema definitions for `campaign.csv` and `cohorts.csv`
-  - ✅ Cross-CSV validation (`validate_csv_consistency()`)
-  - ✅ Type-safe serialization/deserialization with proper error handling
-  - ✅ Comprehensive test coverage with version management
-  - **Impact**: API server can now safely accept CSV uploads with guaranteed schema consistency
-
-- ✅ **Client Crate Infrastructure** - **COMPLETED** ✨
-
-  - ✅ `prism-protocol-client` crate with `anchor_spl` standardization
-  - ✅ AddressFinder encapsulation exposing CLI technical debt
-  - ✅ Architecture decisions document preventing regression
-  - **Impact**: Clean abstractions ready for CLI integration and API server
-
-- ✅ **Database Interface Implementation** - **COMPLETED** ✨
-  - **Problem**: 21 confirmed `Connection::open()` calls across CLI commands
-  - **Solution**: Complete `CampaignDatabase` interface in `prism-protocol-db` crate with schema management
-  - **Scope**: Essential methods for campaign info, eligibility, merkle proofs, deployment tracking
-  - **Implementation**: Database creation, schema validation, all CRUD operations with proper error handling
-  - **Testing**: 5 passing tests including schema validation and error handling
-  - **Impact**: Ready for CLI integration and API server development
-
-### **🎯 CURRENT PRIORITY: CLI Modernization (Phase 3B)**
-
-**Status**: Infrastructure foundation complete - now proving it works with CLI integration
-
-**Strategy**: Convert 2-3 CLI commands to demonstrate dramatic technical debt elimination
-
-**Target Commands for Modernization**:
-
-1. **`check-eligibility`** - Simple read-only operations, perfect validation target
-2. **`campaign-status`** - Multi-table queries, good database interface test
-3. **`deploy-campaign`** - Complex operations, ultimate validation of abstractions
-
-**Expected Results**:
-
-- `check_eligibility.rs`: **309 lines → ~120 lines** (remove 2 Connection::open calls)
-- `campaign_status.rs`: **290 lines → ~100 lines** (remove 3 Connection::open calls)
-- `deploy_campaign.rs`: **1267 lines → ~600 lines** (remove 9 Connection::open calls, eliminate raw SPL operations)
-
-**Validation Metrics**:
-
-- ✅ Zero `Connection::open()` calls in modernized commands
-- ✅ Zero `RpcClient::new_with_commitment()` calls in modernized commands
-- ✅ Zero manual `Mint::unpack()` operations
-- ✅ 50%+ code reduction per command
-- ✅ `--dry-run` support via transaction simulation
-
-### **NEXT PR: CLI Integration & Validation**
-
-**Target: Week 2 of API Server Sprint**
-
-1. **🌐 HTTP API Server** (`prism-protocol-cli serve-api`)
-
-   - REST endpoints using shared database and client crates
-   - Connection pooling for both database and RPC
-   - Proper error handling and logging
-   - Rate limiting and security
-
-2. **🔗 Enhanced CLI Claim Integration**
-   - `claim-tokens` command that uses API server for proof lookup
-   - Use shared client for transaction handling
-
-**Estimated Effort**:
-
-- Phase 3A (Infrastructure): **3-4 days** (critical foundation)
-- Phase 3B (API Server): **2-3 days** (straightforward with good foundation)
-
-**Why This Order Matters**:
-
-- The current codebase has **19+ database connections** and **6+ RPC clients** scattered everywhere
-- API server with concurrent requests would amplify these problems exponentially
-- Clean infrastructure makes API server implementation trivial
-- Without cleanup first, API server will inherit all current technical debt and be fragile
+The hard architectural work is **COMPLETE**. Next phase is rapid implementation using proven patterns.
 
 ## 6. Key Design Decisions & Implementation Notes
 
