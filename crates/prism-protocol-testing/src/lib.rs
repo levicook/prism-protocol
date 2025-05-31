@@ -5,9 +5,7 @@ use {
     prism_protocol::{state::CampaignV0, ID as PRISM_PROGRAM_ID},
     prism_protocol_merkle::{create_merkle_tree, ClaimTree},
     prism_protocol_sdk::{
-        instruction_builders::{
-            build_create_vault_ix, build_initialize_campaign_ix, build_initialize_cohort_ix,
-        },
+        build_create_vault_ix, build_initialize_campaign_ix, build_initialize_cohort_ix,
         AddressFinder,
     },
     solana_sdk::{
@@ -163,14 +161,13 @@ impl TestFixture {
 
     /// Activate a campaign (set is_active to true)
     pub fn activate_campaign(&mut self, campaign: &mut InitializedCampaign) {
-        let (set_active_ix, _, _) =
-            prism_protocol_sdk::instruction_builders::build_set_campaign_active_status_ix(
-                self.admin_address,
-                campaign.address,
-                self.test_fingerprint,
-                true, // Set to active
-            )
-            .expect("Failed to build set_campaign_active_status instruction");
+        let (set_active_ix, _, _) = prism_protocol_sdk::build_set_campaign_active_status_ix(
+            self.admin_address,
+            campaign.address,
+            self.test_fingerprint,
+            true, // Set to active
+        )
+        .expect("Failed to build set_campaign_active_status instruction");
 
         let result = self.mollusk.process_and_validate_instruction(
             &set_active_ix,

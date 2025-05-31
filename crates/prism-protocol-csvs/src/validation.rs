@@ -108,7 +108,6 @@ pub fn write_cohorts_csv<P: AsRef<Path>>(path: P, rows: &[CohortsRow]) -> CsvRes
 ///
 /// Ensures:
 /// - All cohorts referenced in campaign.csv exist in cohorts.csv
-/// - Total entitlements in cohorts.csv match actual totals from campaign.csv
 /// - No orphaned cohorts (cohorts defined but not used)
 pub fn validate_csv_consistency(
     campaign_rows: &[CampaignRow],
@@ -121,12 +120,10 @@ pub fn validate_csv_consistency(
         .collect();
 
     let mut campaign_cohorts = HashMap::new();
-    let mut campaign_totals: HashMap<String, u64> = HashMap::new();
 
-    // Aggregate campaign data by cohort
+    // Collect campaign cohorts
     for row in campaign_rows {
         campaign_cohorts.insert(row.cohort.clone(), ());
-        *campaign_totals.entry(row.cohort.clone()).or_insert(0) += row.entitlements;
     }
 
     // Check 1: All campaign cohorts must exist in cohorts.csv
@@ -139,16 +136,9 @@ pub fn validate_csv_consistency(
         }
     }
 
-    // Check 2: Total entitlements must match
-    for (cohort, cohort_row) in &cohorts_map {
-        if let Some(&campaign_total) = campaign_totals.get(cohort) {
-            if cohort_row.total_entitlements != campaign_total {
-                return Err(CsvError::DataInconsistency(format!(
-                    "Cohort '{}': total_entitlements in cohorts.csv ({}) doesn't match actual total from campaign.csv ({})",
-                    cohort, cohort_row.total_entitlements, campaign_total
-                )));
-            }
-        } else {
+    // Check 2: No orphaned cohorts in config
+    for cohort in cohorts_map.keys() {
+        if !campaign_cohorts.contains_key(cohort) {
             return Err(CsvError::DataInconsistency(format!(
                 "Cohort '{}' defined in cohorts.csv but has no claimants in campaign.csv",
                 cohort
@@ -231,13 +221,11 @@ mod tests {
         let rows = vec![
             CohortsRow {
                 cohort: "earlyAdopters".to_string(),
-                merkle_root: [1u8; 32],
-                total_entitlements: 100,
+                amount_per_entitlement: 1000,
             },
             CohortsRow {
                 cohort: "powerUsers".to_string(),
-                merkle_root: [2u8; 32],
-                total_entitlements: 200,
+                amount_per_entitlement: 2000,
             },
         ];
 
@@ -263,27 +251,31 @@ mod tests {
             },
         ];
 
-        let cohorts_rows = vec![CohortsRow {
+        let cohort_config_rows = vec![CohortsRow {
             cohort: "earlyAdopters".to_string(),
-            merkle_root: [1u8; 32],
-            total_entitlements: 100,
+            amount_per_entitlement: 1000,
         }];
 
         // Should pass validation
-        validate_csv_consistency(&campaign_rows, &cohorts_rows).unwrap();
+        validate_csv_consistency(&campaign_rows, &cohort_config_rows).unwrap();
 
-        // Should fail with wrong total
-        let bad_cohorts_rows = vec![CohortsRow {
-            cohort: "earlyAdopters".to_string(),
-            merkle_root: [1u8; 32],
-            total_entitlements: 99, // Wrong total
-        }];
+        // Should fail with orphaned cohort in config
+        let bad_config_rows = vec![
+            CohortsRow {
+                cohort: "earlyAdopters".to_string(),
+                amount_per_entitlement: 1000,
+            },
+            CohortsRow {
+                cohort: "orphanedCohort".to_string(),
+                amount_per_entitlement: 2000,
+            },
+        ];
 
-        let result = validate_csv_consistency(&campaign_rows, &bad_cohorts_rows);
+        let result = validate_csv_consistency(&campaign_rows, &bad_config_rows);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("doesn't match actual total"));
+            .contains("has no claimants in campaign.csv"));
     }
 }

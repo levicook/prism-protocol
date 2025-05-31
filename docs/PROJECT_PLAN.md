@@ -181,27 +181,62 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 **Phase 4: Campaign Management & Production Readiness 📋 PLANNED**
 
 - **Purpose:** Administrative operations, production deployment, and campaign creation tools
-- **Strategic Components:**
 
-  1. **Campaign Admin dApp** (New Strategic Component)
+- **🚀 STRATEGIC ENHANCEMENT: Transaction Packing Optimization**
 
-     - Web UI for campaign operators to define campaigns (replaces manual CSV creation)
-     - Visual cohort configuration and claimant list management
-     - Export to CLI-compatible formats
-     - Campaign preview and validation
-     - Integration with secrets management for secure admin operations
+  - **Current Problem**: Deployment creates 50+ individual transactions (1 campaign + 5+ cohorts + 20+ vaults + 20+ funding + 1 activation)
+  - **Solution**: Leverage `build_multi_instruction_tx()` for intelligent transaction batching
+  - **Approach**: Intelligently batch by transaction size limits while preserving instruction order
+  - **Expected Impact**:
+    - **50+ transactions → 3-5 transactions**
+    - **~60 seconds → ~10 seconds deployment time**
+    - **~$1.25 → ~$0.15 in transaction fees**
+  - **Implementation**: Split instructions by size limits, maintain execution order, batch cohort/vault operations
 
-  2. **CLI Administrative Operations**
+- **🔧 ARCHITECTURAL IMPROVEMENTS NEEDED:**
 
-     - `cargo run -p prism-protocol-cli -- pause-campaign <fingerprint> --admin-keypair <admin.json>`
-     - `cargo run -p prism-protocol-cli -- resume-campaign <fingerprint> --admin-keypair <admin.json>`
-     - `cargo run -p prism-protocol-cli -- reclaim-tokens <fingerprint> <cohort-root> --admin-keypair <admin.json>`
+  **Instruction Naming Consistency & Versioning**
 
-  3. **Production Infrastructure**
-     - Docker containerization for full stack
-     - API rate limiting and security
-     - Performance optimization for 100K+ claimants
-     - Monitoring and alerting
+  - **Problem**: Inconsistent command/instruction naming patterns
+  - **Current**: `set_campaign_blah_blah_blah`, `pause_campaign`, `resume_campaign`
+  - **Target**: `pause_campaign_v0`, `resume_campaign_v0`, `set_campaign_status_v0`
+  - **Rationale**: Consistent versioning for future upgrades, cleaner CLI patterns
+
+  **Campaign Activation Validation**
+
+  - **Problem**: Currently possible to activate campaign without all prerequisites ready
+  - **Risk**: Activated campaigns with unfunded vaults, missing cohorts, etc.
+  - **Required Pre-activation Checks**:
+    - ✅ All cohorts created and initialized
+    - ✅ All vaults created for all cohorts
+    - ✅ All vaults adequately funded (>= expected total entitlements)
+    - ✅ Campaign configuration validated
+    - ✅ Merkle trees properly constructed and stored
+  - **Implementation**: Add comprehensive `validate_campaign_ready_for_activation()` function
+  - **UX**: Clear error messages explaining what prerequisites are missing
+
+  **Claim Transaction Building Consolidation**
+
+  - **Problem**: Claim transaction logic scattered in CLI command (272 lines)
+  - **Solution**: Move to SDK with `build_claim_transactions_for_claimant()` function
+  - **Benefits**:
+    - **CLI command reduction**: 272 lines → ~150 lines
+    - **API server reuse**: Zero duplication of claim logic
+    - **Consistent behavior**: Same transaction building across all interfaces
+  - **Implementation**: Extract to `prism-protocol-sdk` with database + RPC abstractions
+
+  **Multi-Cohort Claim Transaction Packing**
+
+  - **Problem**: Claimants with multiple cohorts create separate transactions per cohort
+  - **Current**: 5 eligible cohorts = 5 separate transactions
+  - **Solution**: Leverage `build_multi_instruction_tx()` for intelligent claim batching
+  - **Expected Impact**:
+    - **5+ transactions → 1-2 transactions** for multi-cohort claimants
+    - **~$1.25 → ~$0.30** in transaction fees for 5-cohort claims
+    - **Faster claiming**: Single transaction confirmation vs multiple
+  - **Implementation**: Group claim instructions by transaction size limits, preserve execution order
+
+- **Key Operations:**
 
 **Phase 5: Advanced Features (Future)**
 
@@ -357,8 +392,10 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 
 **STRATEGY DECISION**: Complete infrastructure cleanup in logical sequence to avoid technical debt inheritance in API server.
 
-### **CURRENT PR: Foundation + Database Interface** 
+### **✅ COMPLETED: Foundation + Database Interface (MERGED!)**
+
 - ✅ **CSV Schema Formalization** - **COMPLETED** ✨
+
   - ✅ Created dedicated `prism-protocol-csvs` crate
   - ✅ Authoritative schema definitions for `campaign.csv` and `cohorts.csv`
   - ✅ Cross-CSV validation (`validate_csv_consistency()`)
@@ -367,46 +404,72 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
   - **Impact**: API server can now safely accept CSV uploads with guaranteed schema consistency
 
 - ✅ **Client Crate Infrastructure** - **COMPLETED** ✨
+
   - ✅ `prism-protocol-client` crate with `anchor_spl` standardization
   - ✅ AddressFinder encapsulation exposing CLI technical debt
   - ✅ Architecture decisions document preventing regression
   - **Impact**: Clean abstractions ready for CLI integration and API server
 
 - ✅ **Database Interface Implementation** - **COMPLETED** ✨
-  - **Problem**: 21 confirmed `Connection::open()` calls across CLI commands  
+  - **Problem**: 21 confirmed `Connection::open()` calls across CLI commands
   - **Solution**: Complete `CampaignDatabase` interface in `prism-protocol-db` crate with schema management
   - **Scope**: Essential methods for campaign info, eligibility, merkle proofs, deployment tracking
   - **Implementation**: Database creation, schema validation, all CRUD operations with proper error handling
   - **Testing**: 5 passing tests including schema validation and error handling
   - **Impact**: Ready for CLI integration and API server development
 
+### **🎯 CURRENT PRIORITY: CLI Modernization (Phase 3B)**
+
+**Status**: Infrastructure foundation complete - now proving it works with CLI integration
+
+**Strategy**: Convert 2-3 CLI commands to demonstrate dramatic technical debt elimination
+
+**Target Commands for Modernization**:
+
+1. **`check-eligibility`** - Simple read-only operations, perfect validation target
+2. **`campaign-status`** - Multi-table queries, good database interface test
+3. **`deploy-campaign`** - Complex operations, ultimate validation of abstractions
+
+**Expected Results**:
+
+- `check_eligibility.rs`: **309 lines → ~120 lines** (remove 2 Connection::open calls)
+- `campaign_status.rs`: **290 lines → ~100 lines** (remove 3 Connection::open calls)
+- `deploy_campaign.rs`: **1267 lines → ~600 lines** (remove 9 Connection::open calls, eliminate raw SPL operations)
+
+**Validation Metrics**:
+
+- ✅ Zero `Connection::open()` calls in modernized commands
+- ✅ Zero `RpcClient::new_with_commitment()` calls in modernized commands
+- ✅ Zero manual `Mint::unpack()` operations
+- ✅ 50%+ code reduction per command
+- ✅ `--dry-run` support via transaction simulation
+
 ### **NEXT PR: CLI Integration & Validation**
-- 🔄 **CLI Modernization** - **PLANNED**
-  - Convert 2-3 CLI commands to use `CampaignDatabase` + `PrismProtocolClient`
-  - Prove new abstractions work in practice
-  - Remove manual SPL token operations (`Mint::unpack()` in `deploy_campaign.rs`)
-  - Add `--dry-run` support using client transaction simulation
-  - **Validation**: Confirm infrastructure cleanup removes technical debt
 
-### **FOLLOWING PR: API Server Implementation**  
-- 🌐 **HTTP API Server** - **READY AFTER CLI INTEGRATION**
-  - REST endpoints using proven `CampaignDatabase` + `PrismProtocolClient`
-  - Connection pooling for both database and RPC (no 21-connections-per-request)
-  - Proof serving for frontend dApp integration  
-  - Rate limiting, security, proper error handling
-  - **Benefit**: Clean foundation = rapid, reliable development
+**Target: Week 2 of API Server Sprint**
 
-**REVISED TIMELINE:**
-- **Current PR (Database Foundation)**: 1-2 days
-- **CLI Integration PR**: 2-3 days  
-- **API Server PR**: 2-3 days (straightforward with clean foundation)
-- **Total**: ~1 week for complete infrastructure + API server
+1. **🌐 HTTP API Server** (`prism-protocol-cli serve-api`)
 
-**WHY THIS SEQUENCE:**
-- ✅ **Avoids Technical Debt Inheritance**: API server built on clean foundation
-- ✅ **Validates Abstractions**: CLI integration proves database interface works
-- ✅ **Logical Progression**: Foundation → Integration → Production Feature
-- ✅ **Risk Mitigation**: Issues caught during CLI integration, not API server development
+   - REST endpoints using shared database and client crates
+   - Connection pooling for both database and RPC
+   - Proper error handling and logging
+   - Rate limiting and security
+
+2. **🔗 Enhanced CLI Claim Integration**
+   - `claim-tokens` command that uses API server for proof lookup
+   - Use shared client for transaction handling
+
+**Estimated Effort**:
+
+- Phase 3A (Infrastructure): **3-4 days** (critical foundation)
+- Phase 3B (API Server): **2-3 days** (straightforward with good foundation)
+
+**Why This Order Matters**:
+
+- The current codebase has **19+ database connections** and **6+ RPC clients** scattered everywhere
+- API server with concurrent requests would amplify these problems exponentially
+- Clean infrastructure makes API server implementation trivial
+- Without cleanup first, API server will inherit all current technical debt and be fragile
 
 ## 6. Key Design Decisions & Implementation Notes
 
@@ -447,7 +510,7 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 ### **✅ RESOLVED: CSV Schema Definition (COMPLETED)**
 
 - **Previous Issue**: Loosely defined CSV interface between `generate-fixtures` and `compile-campaign`
-- **Solution Implemented**: 
+- **Solution Implemented**:
   - ✅ Created dedicated `prism-protocol-csvs` crate with authoritative schemas
   - ✅ Type-safe `CampaignCsvRow` and `CohortsCsvRow` definitions
   - ✅ Cross-file validation with `validate_csv_consistency()`
@@ -546,6 +609,7 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
   - Missing `--dry-run` capabilities across commands
   - No standardized transaction building patterns
 - **Solution Required**:
+
   ```rust
   impl PrismProtocolClient {
       pub fn simulate_and_send_transaction(&self, tx: Transaction, dry_run: bool) -> Result<TransactionResult, ClientError> {
@@ -566,6 +630,7 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
       }
   }
   ```
+
 - **Priority**: **HIGH** - Essential for API server reliability
 
 ### **PRIORITY 5: CLI Architecture Consolidation**
@@ -645,7 +710,3 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 - API server with concurrent requests would amplify these problems exponentially
 - Clean infrastructure makes API server implementation trivial
 - Without cleanup first, API server will inherit all current technical debt and be fragile
-
-## 9. Documentation Checklist
-
-- [x] `

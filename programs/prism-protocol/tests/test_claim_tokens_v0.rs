@@ -7,7 +7,7 @@ use {
         token::{spl_token, TokenAccount, ID as TOKEN_PROGRAM_ID},
     },
     mollusk_svm::{program::keyed_account_for_system_program, result::Check, sysvar::Sysvars},
-    prism_protocol_sdk::instruction_builders::build_claim_tokens_ix,
+    prism_protocol_sdk::build_claim_tokens_ix,
     prism_protocol_testing::{TestFixture, TEST_AMOUNT_PER_ENTITLEMENT},
     solana_sdk::{
         account::Account as SolanaAccount, signature::Signer,

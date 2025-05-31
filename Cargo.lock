@@ -2976,6 +2976,7 @@ dependencies = [
  "chrono",
  "hex",
  "rusqlite",
+ "serde",
  "solana-sdk",
  "tempfile",
  "thiserror 1.0.69",
@@ -2996,7 +2997,16 @@ version = "0.1.0"
 dependencies = [
  "anchor-lang",
  "anchor-spl",
+ "csv",
+ "hex",
+ "prism-protocol-csvs",
+ "prism-protocol-db",
+ "prism-protocol-merkle",
  "prism_protocol",
+ "serde",
+ "sha2 0.10.9",
+ "solana-sdk",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
