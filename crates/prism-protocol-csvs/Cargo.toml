@@ -9,19 +9,13 @@ name = "prism_protocol_csvs"
 path = "src/lib.rs"
 
 [dependencies]
-# Serialization & CSV
-serde = { workspace = true, features = ["derive"] }
-csv = { workspace = true }
-
-# Solana (for pubkey types)
-solana-sdk = { workspace = true }
-
-# Error handling
-thiserror = { workspace = true }
-
-# Utilities
-hex = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
+csv = { workspace = true }
+hex = { workspace = true }
+rust_decimal = { workspace = true, features = ["serde-str"] }
+serde = { workspace = true, features = ["derive"] }
+solana-sdk = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

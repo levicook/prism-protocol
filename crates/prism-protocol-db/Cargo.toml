@@ -14,7 +14,8 @@ hex = { workspace = true }
 rusqlite = { workspace = true, features = ["backup", "bundled"] }
 solana-sdk = { workspace = true }
 thiserror = { workspace = true }
-serde = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+rust_decimal = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

@@ -25,6 +25,9 @@ pub enum CliError {
     #[error("Solana client error: {0}")]
     SolanaClient(#[from] solana_client::client_error::ClientError),
 
+    #[error("Prism Protocol client error: {0}")]
+    PrismClient(#[from] prism_protocol_client::ClientError),
+
     #[error("Solana program error: {0}")]
     SolanaProgram(#[from] solana_sdk::program_error::ProgramError),
 

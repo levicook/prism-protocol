@@ -211,79 +211,181 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
 
 - **Purpose:** Administrative operations, production deployment, and campaign creation tools
 
-- **🚀 STRATEGIC ENHANCEMENT: Transaction Packing Optimization**
+- **🚀 CRITICAL ARCHITECTURAL IMPROVEMENTS NEEDED**
 
-  - **Current Problem**: Deployment creates 50+ individual transactions (1 campaign + 5+ cohorts + 20+ vaults + 20+ funding + 1 activation)
-  - **Solution**: Leverage `build_multi_instruction_tx()` for intelligent transaction batching
-  - **Approach**: Intelligently batch by transaction size limits while preserving instruction order
-  - **Expected Impact**:
-    - **50+ transactions → 3-5 transactions**
-    - **~60 seconds → ~10 seconds deployment time**
-    - **~$1.25 → ~$0.15 in transaction fees**
-  - **Implementation**: Split instructions by size limits, maintain execution order, batch cohort/vault operations
+  **Transaction Architecture Overhaul**
 
-- **🔧 ARCHITECTURAL IMPROVEMENTS NEEDED:**
+  _Current Problem_: Deploy command creates 50+ individual transactions with scattered transaction building/sending logic:
 
-  **Instruction Naming Consistency & Versioning**
+  - 1 campaign initialization
+  - 5+ cohort initializations
+  - 20+ vault creations
+  - 20+ vault funding operations
+  - 1 campaign activation
+  - **Total: ~60 seconds deployment time, ~$1.25 in fees**
 
-  - **Problem**: Inconsistent command/instruction naming patterns
-  - **Current**: `set_campaign_blah_blah_blah`, `pause_campaign`, `resume_campaign`
-  - **Target**: `pause_campaign_v0`, `resume_campaign_v0`, `set_campaign_status_v0`
-  - **Rationale**: Consistent versioning for future upgrades, cleaner CLI patterns
+  _Required Components_:
 
-  **Campaign Activation Validation**
+  1. **Deploy Planner Abstraction** 📋 NEW
 
-  - **Problem**: Currently possible to activate campaign without all prerequisites ready
-  - **Risk**: Activated campaigns with unfunded vaults, missing cohorts, etc.
-  - **Required Pre-activation Checks**:
-    - ✅ All cohorts created and initialized
-    - ✅ All vaults created for all cohorts
-    - ✅ All vaults adequately funded (>= expected total entitlements)
-    - ✅ Campaign configuration validated
-    - ✅ Merkle trees properly constructed and stored
-  - **Implementation**: Add comprehensive `validate_campaign_ready_for_activation()` function
-  - **UX**: Clear error messages explaining what prerequisites are missing
+     - **Purpose**: Determine what instructions need to be built based on DB signatures and on-chain state
+     - **Inputs**: `CampaignDatabase`, `PrismProtocolClient`, campaign fingerprint
+     - **Logic**:
+       - Check DB for existing deployment signatures
+       - Cross-reference with actual on-chain account existence (surgical `get_account` calls)
+       - Generate instruction plan for missing/incomplete deployments
+       - Support for partial deployment recovery (handle failed mid-deployment scenarios)
+     - **Outputs**: `Vec<DeploymentStep>` with instruction builders and dependencies
+     - **Benefits**: Idempotent deployments, clear deployment state visibility
 
-  **Claim Transaction Building Consolidation**
+  2. **Generic Instruction/Transaction Packer** 📋 CONFIRMED IN PLAN
 
-  - **Problem**: Claim transaction logic scattered in CLI command (272 lines)
-  - **Solution**: Move to SDK with `build_claim_transactions_for_claimant()` function
-  - **Benefits**:
-    - **CLI command reduction**: 272 lines → ~150 lines
-    - **API server reuse**: Zero duplication of claim logic
-    - **Consistent behavior**: Same transaction building across all interfaces
-  - **Implementation**: Extract to `prism-protocol-sdk` with database + RPC abstractions
+     - **Purpose**: Pack instructions into optimally-sized transactions
+     - **Inputs**: `Vec<Instruction>`, `&Keypair` (admin signer), transaction size limits
+     - **Logic**:
+       - Respect instruction dependencies and execution order
+       - Pack by transaction size limits (not arbitrary batching)
+       - Handle cross-instruction account dependencies
+       - Generate multiple transactions when size limits exceeded
+     - **Outputs**: `Vec<Transaction>` ready for transmission
+     - **Generic Usage**: Useful for deploy, claim batching, any multi-instruction operations
 
-  **Multi-Cohort Claim Transaction Packing**
+  3. **Unified Transaction Retry Utility** 📋 NEW
 
-  - **Problem**: Claimants with multiple cohorts create separate transactions per cohort
-  - **Current**: 5 eligible cohorts = 5 separate transactions
-  - **Solution**: Leverage `build_multi_instruction_tx()` for intelligent claim batching
-  - **Expected Impact**:
-    - **5+ transactions → 1-2 transactions** for multi-cohort claimants
-    - **~$1.25 → ~$0.30** in transaction fees for 5-cohort claims
-    - **Faster claiming**: Single transaction confirmation vs multiple
-  - **Implementation**: Group claim instructions by transaction size limits, preserve execution order
+     - **Purpose**: Single retry mechanism with proper re-signing
+     - **Inputs**: `Vec<Transaction>`, `&Keypair`, `&RpcClient`, retry config
+     - **Logic**:
+       - Fresh blockhash fetching for each retry attempt
+       - Re-signing with admin keypair (critical for retry success)
+       - Exponential backoff with jitter
+       - Transaction confirmation waiting
+       - Detailed error logging with explorer URLs
+     - **Benefits**: Consistent retry behavior, proper error handling
 
-- **Key Operations:**
+  4. **Database Deployment Coordinator** 📋 NEW
+     - **Purpose**: Track deployment signatures and state in DB
+     - **Operations**:
+       - `mark_campaign_deployed(signature)`
+       - `mark_cohort_deployed(cohort_name, signature)`
+       - `mark_vault_created(cohort, vault_index, signature)`
+       - `mark_vault_funded(cohort, vault_index, signature, amount)`
+       - `mark_campaign_activated(signature)`
+     - **State Queries**: `get_deployment_status()` for resume/retry scenarios
+     - **Benefits**: Full deployment auditability, recovery from partial failures
 
-**Phase 5: Advanced Features (Future)**
+  _Expected Impact_:
 
-- **Purpose:** Enhanced functionality for complex use cases
-- **Architectural Improvements:**
-  - **Robust Deployment State Management** - Implement proper state validation before campaign activation
-  - **Multi-Admin Coordination** - Support for distributed campaign deployment
-  - **Enhanced Error Recovery** - Rollback and retry mechanisms for failed deployments
-- **Potential Commands:**
-  - `prism-protocol-cli validate-campaign <config.yaml>` (dry-run validation)
-  - `prism-protocol-cli estimate-costs <config.yaml>` (rent and transaction cost estimation)
-  - `prism-protocol-cli export-proofs <fingerprint> --format <json|api>` (proof serving formats)
-  - `prism-protocol-cli benchmark <config.yaml>` (performance testing)
-- **Advanced Features:**
-  - Jito bundle building for MEV protection
-  - Claim status tracking and analytics
-  - Horizontal scaling support
-  - Campaign templates and batch operations
+  - **50+ transactions → 3-5 transactions** (intelligent batching)
+  - **~60 seconds → ~10 seconds** deployment time
+  - **~$1.25 → ~$0.15** in transaction fees
+  - **Robust failure recovery** with clear deployment state tracking
+
+- **🔧 CRITICAL CLIENT IMPROVEMENTS (Anemic Client Issues)**
+
+  **Current Problem**: PrismProtocolClient is anemic - CLI commands resort to raw RPC client for many operations
+
+  _Specific Raw RPC Usage Identified_:
+
+  - **Blockhash Operations**: `rpc_client.get_latest_blockhash()` (used 8+ times in deploy_campaign.rs)
+  - **Transaction Sending**: `rpc_client.send_and_confirm_transaction_with_spinner_and_config()` (used 6+ times)
+  - **Account Existence Checks**: `rpc_client.get_account(vault_address).is_ok()` for vault detection
+  - **Balance Queries**: `rpc_client.get_balance(&admin_pubkey)` for SOL balance checking
+  - **Connection Testing**: `rpc_client.get_slot()` for RPC stability verification
+  - **Admin Token Balance**: Manual ATA address derivation + raw token account fetching
+
+  _Required Client Enhancements_:
+
+  ```rust
+  impl PrismProtocolClient {
+      // Transaction Management
+      pub fn build_and_send_transaction(&self, instructions: Vec<Instruction>, signers: &[&dyn Signer]) -> ClientResult<Signature>
+      pub fn simulate_transaction(&self, instructions: &[Instruction]) -> ClientResult<SimulationResult>
+      pub fn send_transaction_with_retry(&self, tx: Transaction, max_retries: u8) -> ClientResult<Signature>
+
+      // Account Existence & State Checking
+      pub fn account_exists(&self, address: &Pubkey) -> ClientResult<bool>
+      pub fn get_sol_balance(&self, address: &Pubkey) -> ClientResult<u64>
+      pub fn get_token_balance(&self, owner: &Pubkey, mint: &Pubkey) -> ClientResult<u64>
+
+      // Campaign State Verification
+      pub fn verify_campaign_ready_for_activation(&self, fingerprint: &[u8; 32]) -> ClientResult<ActivationStatus>
+      pub fn get_campaign_deployment_status(&self, fingerprint: &[u8; 32]) -> ClientResult<DeploymentStatus>
+
+      // Batch Operations
+      pub fn get_multiple_accounts(&self, addresses: &[Pubkey]) -> ClientResult<Vec<Option<Account>>>
+      pub fn check_vault_funding_status(&self, cohort: &Pubkey, vault_count: u8) -> ClientResult<Vec<VaultStatus>>
+  }
+  ```
+
+  _Benefits_:
+
+  - **Eliminate all raw RPC usage** in CLI commands
+  - **Consistent error handling** across all blockchain operations
+  - **Built-in retry logic** with proper re-signing
+  - **Campaign-aware operations** that understand protocol semantics
+  - **Batch optimizations** for multi-account queries
+
+- **🔄 CAMPAIGN BUDGET & SAFE MATH STATUS** 📋 IN PROGRESS
+
+  **Current Implementation Status**:
+
+  - ✅ **Decimal Math Foundation**: `rust_decimal::Decimal` integrated in fixture generator
+  - ✅ **Precise CSV Generation**: Percentages sum to exactly 100.0% in cohorts.csv
+  - ✅ **Budget Parsing**: CLI accepts human-readable token amounts (e.g., "1000.5")
+  - ✅ **Base Unit Conversion**: Proper multiplication by 10^decimals for mint operations
+  - ⚠️ **Partial Integration**: Only fixture generator uses `Decimal`, compile_campaign still uses approximations
+
+  **Remaining Work Required**:
+
+  1. **Complete `compile_campaign.rs` Integration** 📋 HIGH PRIORITY
+
+     ```rust
+     // CURRENT (problematic):
+     let budget_f64: f64 = budget.parse()?;
+     let budget_base_units = (budget_f64 * (10_u64.pow(mint_decimals as u32) as f64)) as u64;
+
+     // REQUIRED (precise):
+     let budget_decimal = Decimal::from_str(&budget)?;
+     let base_unit_multiplier = Decimal::from(10_u64.pow(mint_decimals as u32));
+     let budget_base_units = budget_decimal.checked_mul(base_unit_multiplier)?.to_u64()?;
+     ```
+
+  2. **Database Schema Updates** 📋 MEDIUM PRIORITY
+
+     - Store budget amounts as precise decimal strings (not floating point)
+     - Add mint decimals to campaign_info table for validation
+     - Update vault requirements calculation to use precise math
+
+  3. **Validation Layer** 📋 MEDIUM PRIORITY
+     - Verify budget × cohort percentages = expected total allocations
+     - Cross-check mint decimals between CLI input and blockchain state
+     - Add overflow protection for large token amounts
+
+  **Financial Safety Impact**:
+
+  - **Current Risk**: Floating point errors can cause 0.1% funding discrepancies
+  - **With Complete Integration**: Mathematically precise token allocations
+  - **Example**: 1M USDC campaign difference: $1,000 error vs. $0 error
+
+- **🎯 IMMEDIATE NEXT PRIORITIES**
+
+  1. **Complete Campaign Budget Integration** (1-2 days)
+
+     - Fix `compile_campaign.rs` to use `Decimal` throughout
+     - Update database schema for precise storage
+     - Add validation layer for budget consistency
+
+  2. **Transaction Architecture Implementation** (3-4 days)
+
+     - Deploy planner abstraction
+     - Generic instruction/transaction packer
+     - Unified retry utility
+     - Database deployment coordinator
+
+  3. **Enhanced PrismProtocolClient** (2-3 days)
+     - Add all missing abstractions to eliminate raw RPC usage
+     - Campaign-aware operations and state checking
+     - Batch optimization capabilities
 
 ## 5. Testing Infrastructure & Coverage Analysis
 

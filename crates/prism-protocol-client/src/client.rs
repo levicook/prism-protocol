@@ -4,6 +4,8 @@
 Main client providing unified access to Prism Protocol operations with proper versioning.
 */
 
+use std::sync::Arc;
+
 use crate::{
     errors::{ClientError, ClientResult},
     types::{SimulationResult, TransactionResult},
@@ -15,10 +17,7 @@ use solana_client::{
     rpc_client::RpcClient,
     rpc_config::{RpcSendTransactionConfig, RpcSimulateTransactionConfig},
 };
-use solana_sdk::{
-    commitment_config::CommitmentConfig, pubkey::Pubkey, signature::Signature,
-    transaction::Transaction,
-};
+use solana_sdk::{pubkey::Pubkey, signature::Signature, transaction::Transaction};
 
 // Re-export the actual program types via SDK (with versioning)
 pub use prism_protocol_sdk::{CampaignV0, ClaimReceiptV0, CohortV0};
@@ -27,33 +26,27 @@ pub use prism_protocol_sdk::{CampaignV0, ClaimReceiptV0, CohortV0};
 pub use anchor_spl::token::{Mint as MintAccount, TokenAccount as TokenAccountInfo};
 
 /// Unified client for Prism Protocol RPC operations
+#[derive(Clone)]
 pub struct PrismProtocolClient {
-    address_finder: AddressFinder,
-    rpc_client: RpcClient,
+    address_finder: Arc<AddressFinder>,
+    rpc_client: Arc<RpcClient>,
 }
 
 impl PrismProtocolClient {
-    /// Create new client with default commitment (confirmed)
-    pub fn new(rpc_url: String) -> ClientResult<Self> {
-        Self::new_with_address_finder_and_commitment(
-            rpc_url,
-            AddressFinder::default(),
-            CommitmentConfig::confirmed(),
-        )
+    /// Create new client with RpcClient
+    pub fn new(rpc_client: Arc<RpcClient>) -> Self {
+        Self::new_with_address_finder(rpc_client, AddressFinder::default())
     }
 
-    /// Create new client with specific commitment level
-    pub fn new_with_address_finder_and_commitment(
-        rpc_url: String,
+    /// Create new client with custom AddressFinder (for advanced usage)
+    pub fn new_with_address_finder(
+        rpc_client: Arc<RpcClient>,
         address_finder: AddressFinder,
-        commitment: CommitmentConfig,
-    ) -> ClientResult<Self> {
-        let rpc_client = RpcClient::new_with_commitment(rpc_url, commitment);
-
-        Ok(Self {
+    ) -> Self {
+        Self {
             rpc_client,
-            address_finder,
-        })
+            address_finder: Arc::new(address_finder),
+        }
     }
 
     // ================================================================================================
@@ -355,10 +348,5 @@ impl PrismProtocolClient {
     /// Get the program ID
     pub fn program_id(&self) -> &Pubkey {
         self.address_finder.program_id()
-    }
-
-    /// Get the RPC client (for advanced operations)
-    pub fn rpc_client(&self) -> &RpcClient {
-        &self.rpc_client
     }
 }

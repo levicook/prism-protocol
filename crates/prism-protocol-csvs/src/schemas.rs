@@ -12,6 +12,7 @@ These schemas serve as the contract between:
 Each schema includes version information to handle evolution over time.
 */
 
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
@@ -56,21 +57,23 @@ pub struct CampaignCsvRow {
 // ================================================================================================
 
 /// Expected headers for cohorts CSV in exact order
-pub const COHORTS_CSV_HEADERS: &[&str] = &["cohort", "amount_per_entitlement"];
+pub const COHORTS_CSV_HEADERS: &[&str] = &["cohort", "share_percentage"];
 
 /// Row structure for cohorts.csv
 ///
 /// **File**: `cohorts.csv`
-/// **Purpose**: Contains cohort configuration parameters
+/// **Purpose**: Contains cohort share percentages for budget allocation
 /// **Producer**: `generate-fixtures` command or manual creation
-/// **Consumers**: `compile-campaign` command
+/// **Consumers**: `compile-campaign` command (with --budget parameter)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CohortsCsvRow {
     /// Cohort identifier - must match cohorts referenced in campaign.csv
     pub cohort: String,
 
-    /// Amount of tokens per entitlement for this cohort
-    pub amount_per_entitlement: u64,
+    /// Percentage share of campaign budget allocated to this cohort
+    /// Must be between 0.0 and 100.0, and all cohorts must sum to 100.0
+    /// Uses Decimal for precise calculations (e.g., "60.5", "25.25")
+    pub share_percentage: Decimal,
 }
 
 // ================================================================================================

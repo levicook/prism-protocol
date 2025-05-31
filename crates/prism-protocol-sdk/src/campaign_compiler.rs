@@ -12,12 +12,14 @@ from CSV inputs and generating the structured data needed for on-chain deploymen
 - Return populated in-memory database ready for use
 */
 
+use crate::budget_allocation::{AllocationError, BudgetAllocator};
 use crate::AddressFinder;
 use prism_protocol_csvs::{
     read_campaign_csv, read_cohorts_csv, validate_csv_consistency, CampaignCsvRow, CohortsCsvRow,
 };
 use prism_protocol_db::CampaignDatabase;
 use prism_protocol_merkle::{create_merkle_tree, ClaimTree};
+use rust_decimal::{prelude::ToPrimitive, Decimal};
 use sha2::{Digest, Sha256};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
@@ -34,6 +36,9 @@ pub enum CompilerError {
 
     #[error("Merkle tree generation failed: {0}")]
     MerkleTree(String),
+
+    #[error("Budget allocation failed: {0}")]
+    BudgetAllocation(#[from] AllocationError),
 }
 
 pub type CompilerResult<T> = Result<T, CompilerError>;
@@ -45,7 +50,8 @@ type ClaimantData = (Pubkey, u64);
 #[derive(Debug)]
 struct CohortData {
     name: String,
-    amount_per_entitlement: u64,
+    amount_per_entitlement: Decimal,
+    amount_per_entitlement_humane: String,
     claimants: Vec<ClaimantData>,
     vault_count: usize,
 }
@@ -53,7 +59,8 @@ struct CohortData {
 /// Compiled cohort with all derived data
 pub struct CompiledCohort {
     pub name: String,
-    pub amount_per_entitlement: u64,
+    pub amount_per_entitlement: Decimal,
+    pub amount_per_entitlement_humane: String,
     pub vault_count: usize,
     pub vaults: Vec<Pubkey>,
     pub merkle_tree: ClaimTree,
@@ -65,7 +72,9 @@ pub struct CompiledCohort {
 /// Complete compilation result ready for database storage
 pub struct CompilationResult {
     pub mint: Pubkey,
+    pub mint_decimals: u8,
     pub admin: Pubkey,
+    pub budget: Decimal,
     pub campaign_fingerprint: [u8; 32],
     #[allow(dead_code)] // Will be useful for check-campaign CLI
     pub campaign_address: Pubkey,
@@ -76,23 +85,24 @@ pub struct CompilationResult {
     pub total_vaults: usize,
 }
 
-/// Compile campaign from CSV files into a populated database
-///
-/// This is the main API for campaign compilation. Takes all parameters and returns
-/// a ready-to-use in-memory database. Use db.save_to_file() if you need persistence.
+/// Compile campaign from CSV files with precise budget allocation
 ///
 /// # Arguments
 /// * `address_finder` - For deriving protocol addresses
 /// * `campaign_csv` - Path to campaign.csv (cohort, claimant, entitlements)
-/// * `cohorts_csv` - Path to cohorts.csv (cohort, amount_per_entitlement)  
+/// * `cohorts_csv` - Path to cohorts.csv (cohort, share_percentage)
+/// * `budget` - Total campaign budget in human-readable tokens (e.g., "1000.5" SOL)
 /// * `mint` - SPL token mint for the campaign
+/// * `mint_decimals` - Number of decimals for the token mint (e.g., 9 for SOL, 6 for USDC)
 /// * `admin` - Campaign admin pubkey
 /// * `claimants_per_vault` - How many claimants per vault (affects gas costs)
 pub fn compile_campaign(
     address_finder: AddressFinder,
     campaign_csv: &Path,
     cohorts_csv: &Path,
+    budget: Decimal,
     mint: Pubkey,
+    mint_decimals: u8,
     admin: Pubkey,
     claimants_per_vault: usize,
 ) -> CompilerResult<CampaignDatabase> {
@@ -103,8 +113,14 @@ pub fn compile_campaign(
     // Step 2: Validate CSV consistency
     validate_csv_consistency(&campaign_rows, &cohorts_rows)?;
 
-    // Step 3: Process cohorts and calculate vault counts
-    let cohort_data = process_cohorts(&campaign_rows, &cohorts_rows, claimants_per_vault)?;
+    // Step 3: Process cohorts and calculate vault counts + token amounts using BudgetAllocator
+    let cohort_data = process_cohorts(
+        &campaign_rows,
+        &cohorts_rows,
+        budget,
+        mint_decimals,
+        claimants_per_vault,
+    )?;
 
     // Step 4: Generate merkle trees
     let cohort_merkle_data = generate_merkle_trees(cohort_data)?;
@@ -132,7 +148,9 @@ pub fn compile_campaign(
 
     let compilation_result = CompilationResult {
         mint,
+        mint_decimals,
         admin,
+        budget,
         campaign_fingerprint,
         campaign_address,
         cohorts: compiled_cohorts,
@@ -149,12 +167,17 @@ pub fn compile_campaign(
     Ok(db)
 }
 
-/// Process cohorts: group claimants and calculate vault counts
+/// Process cohorts: group claimants, calculate vault counts, and convert percentages to token amounts using BudgetAllocator
 fn process_cohorts(
     campaign_rows: &[CampaignCsvRow],
     cohorts_rows: &[CohortsCsvRow],
+    budget: Decimal,
+    mint_decimals: u8,
     claimants_per_vault: usize,
 ) -> CompilerResult<Vec<CohortData>> {
+    // Create budget allocator with mint constraints
+    let allocator = BudgetAllocator::new(budget, mint_decimals)?;
+
     // Create config lookup
     let config_map: HashMap<String, &CohortsCsvRow> = cohorts_rows
         .iter()
@@ -173,7 +196,7 @@ fn process_cohorts(
             .push(claimant_data);
     }
 
-    // Convert to CohortData with vault counts
+    // Convert to CohortData with vault counts and calculated token amounts using BudgetAllocator
     let mut cohort_data = Vec::new();
     for (cohort_name, claimants) in cohort_groups {
         let config = config_map.get(&cohort_name).ok_or_else(|| {
@@ -183,9 +206,24 @@ fn process_cohorts(
         // Calculate vault count needed
         let vault_count = (claimants.len() + claimants_per_vault - 1) / claimants_per_vault;
 
+        // Calculate total entitlements for this cohort
+        let total_entitlements: u64 = claimants.iter().map(|(_, entitlements)| entitlements).sum();
+
+        if total_entitlements == 0 {
+            return Err(CompilerError::InvalidConfig(format!(
+                "Cohort '{}' has zero total entitlements",
+                cohort_name
+            )));
+        }
+
+        // Use BudgetAllocator for safe, precise calculations
+        let allocation =
+            allocator.calculate_cohort_allocation(config.share_percentage, total_entitlements)?;
+
         cohort_data.push(CohortData {
-            name: cohort_name,
-            amount_per_entitlement: config.amount_per_entitlement,
+            name: cohort_name.clone(),
+            amount_per_entitlement: allocation.amount_per_entitlement,
+            amount_per_entitlement_humane: allocation.amount_per_entitlement_humane,
             claimants,
             vault_count,
         });
@@ -248,6 +286,7 @@ fn derive_addresses_and_finalize(
         compiled_cohorts.push(CompiledCohort {
             name: cohort.name,
             amount_per_entitlement: cohort.amount_per_entitlement,
+            amount_per_entitlement_humane: cohort.amount_per_entitlement_humane,
             vault_count: cohort.vault_count,
             vaults,
             merkle_tree,
@@ -278,21 +317,36 @@ fn populate_database(
     db: &mut CampaignDatabase,
     compilation_result: &CompilationResult,
 ) -> CompilerResult<()> {
-    // Insert campaign info
+    // Insert campaign info with budget and mint decimals
     db.insert_campaign(
         compilation_result.campaign_fingerprint,
         compilation_result.mint,
+        compilation_result.mint_decimals,
         compilation_result.admin,
+        compilation_result.budget,
     )
     .map_err(|e| CompilerError::InvalidConfig(format!("Failed to insert campaign: {}", e)))?;
 
     // Insert cohorts and related data
     for cohort in &compilation_result.cohorts {
+        // Convert Decimal to u64 for database storage - fail fast if overflow
+        let amount_per_entitlement_u64 = cohort
+            .amount_per_entitlement
+            .floor()
+            .to_u64()
+            .ok_or_else(|| {
+                CompilerError::InvalidConfig(format!(
+                    "Amount per entitlement overflow for cohort '{}': {}",
+                    cohort.name, cohort.amount_per_entitlement
+                ))
+            })?;
+
         // Insert cohort
         db.insert_cohort(
             &cohort.name,
             cohort.merkle_root,
-            cohort.amount_per_entitlement,
+            amount_per_entitlement_u64,
+            &cohort.amount_per_entitlement_humane,
         )
         .map_err(|e| CompilerError::InvalidConfig(format!("Failed to insert cohort: {}", e)))?;
 
@@ -317,12 +371,23 @@ fn populate_database(
         }
 
         // Calculate and insert vault requirements
-        let total_tokens_for_cohort: u64 = cohort
+        let total_tokens_for_cohort_decimal: Decimal = cohort
             .merkle_tree
             .leaves
             .iter()
-            .map(|leaf| leaf.entitlements * cohort.amount_per_entitlement)
+            .map(|leaf| Decimal::from(leaf.entitlements) * cohort.amount_per_entitlement)
             .sum();
+
+        // Convert to u64 only for database storage (truncate to be conservative)
+        let total_tokens_for_cohort = total_tokens_for_cohort_decimal
+            .floor()
+            .to_u64()
+            .ok_or_else(|| {
+                CompilerError::InvalidConfig(format!(
+                    "Total tokens calculation overflow for cohort '{}'",
+                    cohort.name
+                ))
+            })?;
 
         // Distribute tokens across vaults
         let tokens_per_vault = total_tokens_for_cohort / cohort.vault_count as u64;
