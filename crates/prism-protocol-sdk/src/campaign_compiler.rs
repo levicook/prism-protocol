@@ -14,7 +14,7 @@ from CSV inputs and generating the structured data needed for on-chain deploymen
 
 use crate::AddressFinder;
 use prism_protocol_csvs::{
-    read_campaign_csv, read_cohorts_csv, validate_csv_consistency, CampaignRow, CohortsRow,
+    read_campaign_csv, read_cohorts_csv, validate_csv_consistency, CampaignCsvRow, CohortsCsvRow,
 };
 use prism_protocol_db::CampaignDatabase;
 use prism_protocol_merkle::{create_merkle_tree, ClaimTree};
@@ -151,12 +151,12 @@ pub fn compile_campaign(
 
 /// Process cohorts: group claimants and calculate vault counts
 fn process_cohorts(
-    campaign_rows: &[CampaignRow],
-    cohorts_rows: &[CohortsRow],
+    campaign_rows: &[CampaignCsvRow],
+    cohorts_rows: &[CohortsCsvRow],
     claimants_per_vault: usize,
 ) -> CompilerResult<Vec<CohortData>> {
     // Create config lookup
-    let config_map: HashMap<String, &CohortsRow> = cohorts_rows
+    let config_map: HashMap<String, &CohortsCsvRow> = cohorts_rows
         .iter()
         .map(|config| (config.cohort.clone(), config))
         .collect();

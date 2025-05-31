@@ -1,9 +1,8 @@
 use crate::error::{CliError, CliResult};
 use hex;
+use prism_protocol_client::PrismProtocolClient;
 use prism_protocol_db::CampaignDatabase;
-use prism_protocol_sdk::AddressFinder;
-use solana_client::rpc_client::RpcClient;
-use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey};
+use solana_sdk::pubkey::Pubkey;
 use std::path::PathBuf;
 
 #[derive(Debug)]
@@ -47,13 +46,14 @@ pub fn execute(campaign_db_path: PathBuf, rpc_url: String) -> CliResult<()> {
     println!("🔍 Querying campaign status on-chain...");
     println!("📊 Database: {}", campaign_db_path.display());
 
-    // Open database and RPC client
+    // Open database and create unified client
     let db = CampaignDatabase::open(&campaign_db_path)
         .map_err(|e| CliError::InvalidConfig(format!("Failed to open database: {}", e)))?;
-    let rpc_client = RpcClient::new_with_commitment(rpc_url, CommitmentConfig::confirmed());
+    let client = PrismProtocolClient::new(rpc_url)
+        .map_err(|e| CliError::InvalidConfig(format!("Failed to create RPC client: {}", e)))?;
 
     // Generate status report
-    let report = generate_status_report(&db, &rpc_client)?;
+    let report = generate_status_report(&db, &client)?;
 
     // Print results
     print_status_report(&report);
@@ -63,22 +63,24 @@ pub fn execute(campaign_db_path: PathBuf, rpc_url: String) -> CliResult<()> {
 
 fn generate_status_report(
     db: &CampaignDatabase,
-    rpc_client: &RpcClient,
+    client: &PrismProtocolClient,
 ) -> CliResult<CampaignStatusReport> {
     // Get campaign info from database
     let campaign_data = db
         .read_campaign_info()
         .map_err(|e| CliError::InvalidConfig(format!("Failed to read campaign: {}", e)))?;
 
-    let address_finder = AddressFinder::default();
-    let (campaign_address, _) =
-        address_finder.find_campaign_v0_address(&campaign_data.admin, &campaign_data.fingerprint);
+    let (campaign_address, _) = client
+        .address_finder()
+        .find_campaign_v0_address(&campaign_data.admin, &campaign_data.fingerprint);
 
-    // Check if campaign exists on-chain
-    let (exists, account_data_length) = match rpc_client.get_account(&campaign_address) {
-        Ok(account) => (true, Some(account.data.len())),
-        Err(_) => (false, None),
-    };
+    // Check if campaign exists on-chain using the client's typed method
+    let campaign_account = client
+        .get_campaign_v0(&campaign_data.fingerprint, &campaign_data.admin)
+        .map_err(|e| CliError::InvalidConfig(format!("Failed to query campaign: {}", e)))?;
+
+    let exists = campaign_account.is_some();
+    let account_data_length = if exists { Some(0) } else { None }; // We don't need raw data length anymore
 
     let campaign_info = CampaignInfo {
         fingerprint: campaign_data.fingerprint,
@@ -91,7 +93,7 @@ fn generate_status_report(
 
     // Get cohort statuses
     let cohorts = if exists {
-        generate_cohort_statuses(db, rpc_client, &campaign_address)?
+        generate_cohort_statuses(db, client, &campaign_address)?
     } else {
         Vec::new()
     };
@@ -104,10 +106,9 @@ fn generate_status_report(
 
 fn generate_cohort_statuses(
     db: &CampaignDatabase,
-    rpc_client: &RpcClient,
+    client: &PrismProtocolClient,
     campaign_address: &Pubkey,
 ) -> CliResult<Vec<CohortStatus>> {
-    let address_finder = AddressFinder::default();
     let mut cohorts = Vec::new();
 
     // Get cohort info from database
@@ -116,17 +117,21 @@ fn generate_cohort_statuses(
         .map_err(|e| CliError::InvalidConfig(format!("Failed to read cohorts: {}", e)))?;
 
     for cohort in cohort_data {
-        let (cohort_address, _) =
-            address_finder.find_cohort_v0_address(campaign_address, &cohort.merkle_root);
+        let (cohort_address, _) = client
+            .address_finder()
+            .find_cohort_v0_address(campaign_address, &cohort.merkle_root);
 
-        // Check if cohort exists on-chain
-        let (exists, account_data_length) = match rpc_client.get_account(&cohort_address) {
-            Ok(account) => (true, Some(account.data.len())),
-            Err(_) => (false, None),
-        };
+        // Check if cohort exists on-chain using the client's typed method
+        let cohort_account = client
+            .get_cohort_v0(campaign_address, &cohort.merkle_root)
+            .map_err(|e| CliError::InvalidConfig(format!("Failed to query cohort: {}", e)))?;
 
-        // Get vault statuses for this cohort - use the vaults from cohort data
-        let vaults = generate_vault_statuses_from_addresses(rpc_client, &cohort.vaults)?;
+        let exists = cohort_account.is_some();
+        let account_data_length = if exists { Some(0) } else { None }; // We don't need raw data length anymore
+
+        // Get vault statuses for this cohort using the client's typed methods
+        let vaults =
+            generate_vault_statuses_from_addresses(client, &cohort_address, &cohort.vaults)?;
 
         cohorts.push(CohortStatus {
             name: cohort.name,
@@ -142,39 +147,34 @@ fn generate_cohort_statuses(
 }
 
 fn generate_vault_statuses_from_addresses(
-    rpc_client: &RpcClient,
+    client: &PrismProtocolClient,
+    _cohort_address: &Pubkey,
     vault_addresses: &[Pubkey],
 ) -> CliResult<Vec<VaultStatus>> {
     let mut vaults = Vec::new();
 
     for (index, &vault_address) in vault_addresses.iter().enumerate() {
-        match rpc_client.get_account(&vault_address) {
-            Ok(account) => {
-                // Parse token account balance (SPL token account format)
-                let token_balance = if account.data.len() >= 72 {
-                    let amount_bytes: [u8; 8] = account.data[64..72].try_into().unwrap_or([0u8; 8]);
-                    u64::from_le_bytes(amount_bytes)
-                } else {
-                    0
-                };
+        // Use the client's typed token account method
+        let token_account = client
+            .get_token_account(&vault_address)
+            .map_err(|e| CliError::InvalidConfig(format!("Failed to query vault: {}", e)))?;
 
-                vaults.push(VaultStatus {
-                    index: index as u8,
-                    vault_address,
-                    exists: true,
-                    token_balance,
-                    account_data_length: Some(account.data.len()),
-                });
-            }
-            Err(_) => {
-                vaults.push(VaultStatus {
-                    index: index as u8,
-                    vault_address,
-                    exists: false,
-                    token_balance: 0,
-                    account_data_length: None,
-                });
-            }
+        if let Some(account) = token_account {
+            vaults.push(VaultStatus {
+                index: index as u8,
+                vault_address,
+                exists: true,
+                token_balance: account.amount,
+                account_data_length: Some(0), // We don't need raw data length anymore
+            });
+        } else {
+            vaults.push(VaultStatus {
+                index: index as u8,
+                vault_address,
+                exists: false,
+                token_balance: 0,
+                account_data_length: None,
+            });
         }
     }
 
