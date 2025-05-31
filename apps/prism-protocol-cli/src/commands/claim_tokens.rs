@@ -1,11 +1,9 @@
 use crate::error::{CliError, CliResult};
 use hex;
+use prism_protocol_client::PrismProtocolClient;
 use prism_protocol_db::{CampaignDatabase, EligibilityInfo};
-use prism_protocol_sdk::{build_claim_tokens_ix, AddressFinder};
-use solana_client::rpc_client::RpcClient;
-use solana_client::rpc_config::RpcSendTransactionConfig;
+use prism_protocol_sdk::build_claim_tokens_ix;
 use solana_sdk::{
-    commitment_config::{CommitmentConfig, CommitmentLevel},
     instruction::Instruction,
     message::Message,
     pubkey::Pubkey,
@@ -30,10 +28,11 @@ pub fn execute(
 ) -> CliResult<()> {
     println!("🎯 Starting token claim process...");
 
-    // Open database and RPC client
+    // Open database and create unified client
     let mut db = CampaignDatabase::open(&campaign_db_path)
         .map_err(|e| CliError::InvalidConfig(format!("Failed to open database: {}", e)))?;
-    let rpc_client = RpcClient::new_with_commitment(rpc_url, CommitmentConfig::confirmed());
+    let client = PrismProtocolClient::new(rpc_url)
+        .map_err(|e| CliError::InvalidConfig(format!("Failed to create RPC client: {}", e)))?;
 
     // Load claimant keypair
     println!("🔑 Loading claimant keypair...");
@@ -95,7 +94,7 @@ pub fn execute(
     println!("🔨 Building claim transactions...");
     let claim_transactions = build_claim_transactions(
         &db,
-        &rpc_client,
+        &client,
         &campaign_info,
         &claimant_pubkey,
         &claimant_token_account,
@@ -114,7 +113,7 @@ pub fn execute(
         );
         println!("   Cohort: {}", claim_tx.eligibility.cohort_name);
 
-        match execute_claim_transaction(&rpc_client, &claimant_keypair, claim_tx, dry_run) {
+        match execute_claim_transaction(&client, &claimant_keypair, claim_tx, dry_run) {
             Ok(signature) => {
                 successful_claims += 1;
                 total_tokens_claimed += claim_tx.expected_tokens;
@@ -168,13 +167,12 @@ pub fn execute(
 
 fn build_claim_transactions(
     db: &CampaignDatabase,
-    rpc_client: &RpcClient,
+    client: &PrismProtocolClient,
     campaign_info: &prism_protocol_db::CampaignInfo,
     claimant: &Pubkey,
     claimant_token_account: &Pubkey,
     pending_claims: &[&EligibilityInfo],
 ) -> CliResult<Vec<ClaimTransaction>> {
-    let address_finder = AddressFinder::default();
     let mut transactions = Vec::new();
 
     for eligibility in pending_claims {
@@ -183,18 +181,25 @@ fn build_claim_transactions(
             .read_merkle_proof(claimant, &eligibility.cohort_name)
             .map_err(|e| CliError::InvalidConfig(format!("Failed to read merkle proof: {}", e)))?;
 
-        // Calculate addresses
-        let (campaign_address, _) = address_finder
+        // Calculate addresses using the client's address finder
+        let (campaign_address, _) = client
+            .address_finder()
             .find_campaign_v0_address(&campaign_info.admin, &campaign_info.fingerprint);
 
-        let (cohort_address, _) = address_finder
+        let (cohort_address, _) = client
+            .address_finder()
             .find_cohort_v0_address(&campaign_address, &eligibility.cohort_merkle_root);
 
-        let (claim_receipt_address, _) =
-            address_finder.find_claim_receipt_v0_address(&cohort_address, claimant);
+        let (claim_receipt_address, _) = client
+            .address_finder()
+            .find_claim_receipt_v0_address(&cohort_address, claimant);
 
-        // Check if already claimed on-chain (double-check against database)
-        if rpc_client.get_account(&claim_receipt_address).is_ok() {
+        // Check if already claimed on-chain using the client's typed method
+        if client
+            .get_claim_receipt_v0(&cohort_address, claimant)
+            .map_err(|e| CliError::InvalidConfig(format!("Failed to check claim receipt: {}", e)))?
+            .is_some()
+        {
             println!(
                 "⚠️  Cohort {} already claimed on-chain, skipping",
                 eligibility.cohort_name
@@ -254,7 +259,7 @@ fn build_claim_transactions(
 }
 
 fn execute_claim_transaction(
-    rpc_client: &RpcClient,
+    client: &PrismProtocolClient,
     claimant_keypair: &Keypair,
     claim_tx: &ClaimTransaction,
     dry_run: bool,
@@ -268,7 +273,7 @@ fn execute_claim_transaction(
     }
 
     // Build transaction using Message API for proper structure
-    let recent_blockhash = rpc_client.get_latest_blockhash()?;
+    let recent_blockhash = client.rpc_client().get_latest_blockhash()?;
     let message = Message::new(
         &[claim_tx.claim_ix.clone()],
         Some(&claimant_keypair.pubkey()),
@@ -279,20 +284,10 @@ fn execute_claim_transaction(
     // Sign transaction
     transaction.sign(&[claimant_keypair], recent_blockhash);
 
-    // Submit transaction with proper configuration
-    let config = RpcSendTransactionConfig {
-        skip_preflight: false,
-        preflight_commitment: Some(CommitmentLevel::Confirmed),
-        encoding: None,
-        max_retries: Some(5),
-        min_context_slot: None,
-    };
-
-    let signature = rpc_client.send_and_confirm_transaction_with_spinner_and_config(
-        &transaction,
-        CommitmentConfig::confirmed(),
-        config,
-    )?;
+    // Use the client's transaction sending capabilities
+    let signature = client
+        .send_transaction(&transaction)
+        .map_err(|e| CliError::InvalidConfig(format!("Failed to send transaction: {}", e)))?;
 
     println!("   Transaction signature: {}", signature);
     Ok(signature.to_string())

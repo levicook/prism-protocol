@@ -7,7 +7,7 @@ between `generate-fixtures` and `compile-campaign` operations.
 
 use crate::{
     errors::{CsvError, CsvResult},
-    schemas::{CampaignRow, CohortsRow, CAMPAIGN_CSV_HEADERS, COHORTS_CSV_HEADERS},
+    schemas::{CampaignCsvRow, CohortsCsvRow, CAMPAIGN_CSV_HEADERS, COHORTS_CSV_HEADERS},
 };
 use csv::{Reader, Writer};
 use std::collections::HashMap;
@@ -19,7 +19,7 @@ use std::path::Path;
 // ================================================================================================
 
 /// Read and validate a campaign CSV file
-pub fn read_campaign_csv<P: AsRef<Path>>(path: P) -> CsvResult<Vec<CampaignRow>> {
+pub fn read_campaign_csv<P: AsRef<Path>>(path: P) -> CsvResult<Vec<CampaignCsvRow>> {
     let file = File::open(path)?;
     let mut rdr = Reader::from_reader(file);
 
@@ -30,7 +30,7 @@ pub fn read_campaign_csv<P: AsRef<Path>>(path: P) -> CsvResult<Vec<CampaignRow>>
     // Read and deserialize rows
     let mut rows = Vec::new();
     for result in rdr.deserialize() {
-        let row: CampaignRow = result?;
+        let row: CampaignCsvRow = result?;
         rows.push(row);
     }
 
@@ -44,7 +44,7 @@ pub fn read_campaign_csv<P: AsRef<Path>>(path: P) -> CsvResult<Vec<CampaignRow>>
 }
 
 /// Read and validate a cohorts CSV file
-pub fn read_cohorts_csv<P: AsRef<Path>>(path: P) -> CsvResult<Vec<CohortsRow>> {
+pub fn read_cohorts_csv<P: AsRef<Path>>(path: P) -> CsvResult<Vec<CohortsCsvRow>> {
     let file = File::open(path)?;
     let mut rdr = Reader::from_reader(file);
 
@@ -55,7 +55,7 @@ pub fn read_cohorts_csv<P: AsRef<Path>>(path: P) -> CsvResult<Vec<CohortsRow>> {
     // Read and deserialize rows
     let mut rows = Vec::new();
     for result in rdr.deserialize() {
-        let row: CohortsRow = result?;
+        let row: CohortsCsvRow = result?;
         rows.push(row);
     }
 
@@ -73,7 +73,7 @@ pub fn read_cohorts_csv<P: AsRef<Path>>(path: P) -> CsvResult<Vec<CohortsRow>> {
 // ================================================================================================
 
 /// Write campaign CSV with proper headers and validation
-pub fn write_campaign_csv<P: AsRef<Path>>(path: P, rows: &[CampaignRow]) -> CsvResult<()> {
+pub fn write_campaign_csv<P: AsRef<Path>>(path: P, rows: &[CampaignCsvRow]) -> CsvResult<()> {
     let file = File::create(path)?;
     let mut wtr = Writer::from_writer(file);
 
@@ -87,7 +87,7 @@ pub fn write_campaign_csv<P: AsRef<Path>>(path: P, rows: &[CampaignRow]) -> CsvR
 }
 
 /// Write cohorts CSV with proper headers and validation
-pub fn write_cohorts_csv<P: AsRef<Path>>(path: P, rows: &[CohortsRow]) -> CsvResult<()> {
+pub fn write_cohorts_csv<P: AsRef<Path>>(path: P, rows: &[CohortsCsvRow]) -> CsvResult<()> {
     let file = File::create(path)?;
     let mut wtr = Writer::from_writer(file);
 
@@ -110,11 +110,11 @@ pub fn write_cohorts_csv<P: AsRef<Path>>(path: P, rows: &[CohortsRow]) -> CsvRes
 /// - All cohorts referenced in campaign.csv exist in cohorts.csv
 /// - No orphaned cohorts (cohorts defined but not used)
 pub fn validate_csv_consistency(
-    campaign_rows: &[CampaignRow],
-    cohorts_rows: &[CohortsRow],
+    campaign_rows: &[CampaignCsvRow],
+    cohorts_rows: &[CohortsCsvRow],
 ) -> CsvResult<()> {
     // Build maps for efficient lookups
-    let cohorts_map: HashMap<String, &CohortsRow> = cohorts_rows
+    let cohorts_map: HashMap<String, &CohortsCsvRow> = cohorts_rows
         .iter()
         .map(|row| (row.cohort.clone(), row))
         .collect();
@@ -197,12 +197,12 @@ mod tests {
     #[test]
     fn test_write_and_read_campaign_csv() {
         let rows = vec![
-            CampaignRow {
+            CampaignCsvRow {
                 cohort: "earlyAdopters".to_string(),
                 claimant: Pubkey::from_str("11111111111111111111111111111112").unwrap(),
                 entitlements: 100,
             },
-            CampaignRow {
+            CampaignCsvRow {
                 cohort: "powerUsers".to_string(),
                 claimant: Pubkey::from_str("11111111111111111111111111111113").unwrap(),
                 entitlements: 200,
@@ -219,11 +219,11 @@ mod tests {
     #[test]
     fn test_write_and_read_cohorts_csv() {
         let rows = vec![
-            CohortsRow {
+            CohortsCsvRow {
                 cohort: "earlyAdopters".to_string(),
                 amount_per_entitlement: 1000,
             },
-            CohortsRow {
+            CohortsCsvRow {
                 cohort: "powerUsers".to_string(),
                 amount_per_entitlement: 2000,
             },
@@ -239,19 +239,19 @@ mod tests {
     #[test]
     fn test_csv_consistency_validation() {
         let campaign_rows = vec![
-            CampaignRow {
+            CampaignCsvRow {
                 cohort: "earlyAdopters".to_string(),
                 claimant: Pubkey::from_str("11111111111111111111111111111112").unwrap(),
                 entitlements: 50,
             },
-            CampaignRow {
+            CampaignCsvRow {
                 cohort: "earlyAdopters".to_string(),
                 claimant: Pubkey::from_str("11111111111111111111111111111113").unwrap(),
                 entitlements: 50,
             },
         ];
 
-        let cohort_config_rows = vec![CohortsRow {
+        let cohort_config_rows = vec![CohortsCsvRow {
             cohort: "earlyAdopters".to_string(),
             amount_per_entitlement: 1000,
         }];
@@ -261,11 +261,11 @@ mod tests {
 
         // Should fail with orphaned cohort in config
         let bad_config_rows = vec![
-            CohortsRow {
+            CohortsCsvRow {
                 cohort: "earlyAdopters".to_string(),
                 amount_per_entitlement: 1000,
             },
-            CohortsRow {
+            CohortsCsvRow {
                 cohort: "orphanedCohort".to_string(),
                 amount_per_entitlement: 2000,
             },
