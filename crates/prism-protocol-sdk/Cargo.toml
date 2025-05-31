@@ -18,6 +18,7 @@ prism-protocol-merkle = { path = "../prism-protocol-merkle" }
 prism_protocol = { path = "../../programs/prism-protocol", features = [
     "no-entrypoint",
 ] }
+rust_decimal = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
 solana-sdk = { workspace = true }

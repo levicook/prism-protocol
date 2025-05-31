@@ -10,6 +10,7 @@ use crate::{
     schemas::{CampaignCsvRow, CohortsCsvRow, CAMPAIGN_CSV_HEADERS, COHORTS_CSV_HEADERS},
 };
 use csv::{Reader, Writer};
+use rust_decimal::Decimal;
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::Path;
@@ -109,6 +110,7 @@ pub fn write_cohorts_csv<P: AsRef<Path>>(path: P, rows: &[CohortsCsvRow]) -> Csv
 /// Ensures:
 /// - All cohorts referenced in campaign.csv exist in cohorts.csv
 /// - No orphaned cohorts (cohorts defined but not used)
+/// - Share percentages are valid (0.0-100.0) and sum to 100.0
 pub fn validate_csv_consistency(
     campaign_rows: &[CampaignCsvRow],
     cohorts_rows: &[CohortsCsvRow],
@@ -144,6 +146,37 @@ pub fn validate_csv_consistency(
                 cohort
             )));
         }
+    }
+
+    // Check 3: Validate share percentages
+    validate_share_percentages(cohorts_rows)?;
+
+    Ok(())
+}
+
+/// Validate that share percentages are valid and sum to 100%
+pub fn validate_share_percentages(cohorts_rows: &[CohortsCsvRow]) -> CsvResult<()> {
+    let mut total_percentage = Decimal::ZERO;
+    let hundred = Decimal::from(100);
+
+    for row in cohorts_rows {
+        // Check individual percentage range
+        if row.share_percentage < Decimal::ZERO || row.share_percentage > hundred {
+            return Err(CsvError::InvalidFormat(format!(
+                "Cohort '{}' has invalid share percentage: {}%. Must be between 0% and 100%",
+                row.cohort, row.share_percentage
+            )));
+        }
+
+        total_percentage += row.share_percentage;
+    }
+
+    // Check that total equals exactly 100%
+    if total_percentage != hundred {
+        return Err(CsvError::InvalidFormat(format!(
+            "Share percentages must sum to exactly 100%, but got {}%",
+            total_percentage
+        )));
     }
 
     Ok(())
@@ -221,11 +254,11 @@ mod tests {
         let rows = vec![
             CohortsCsvRow {
                 cohort: "earlyAdopters".to_string(),
-                amount_per_entitlement: 1000,
+                share_percentage: Decimal::from(60),
             },
             CohortsCsvRow {
                 cohort: "powerUsers".to_string(),
-                amount_per_entitlement: 2000,
+                share_percentage: Decimal::from(40),
             },
         ];
 
@@ -253,7 +286,7 @@ mod tests {
 
         let cohort_config_rows = vec![CohortsCsvRow {
             cohort: "earlyAdopters".to_string(),
-            amount_per_entitlement: 1000,
+            share_percentage: Decimal::from(100),
         }];
 
         // Should pass validation
@@ -263,11 +296,11 @@ mod tests {
         let bad_config_rows = vec![
             CohortsCsvRow {
                 cohort: "earlyAdopters".to_string(),
-                amount_per_entitlement: 1000,
+                share_percentage: Decimal::from(60),
             },
             CohortsCsvRow {
                 cohort: "orphanedCohort".to_string(),
-                amount_per_entitlement: 2000,
+                share_percentage: Decimal::from(40),
             },
         ];
 
@@ -277,5 +310,69 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("has no claimants in campaign.csv"));
+    }
+
+    #[test]
+    fn test_share_percentage_validation() {
+        let valid_rows = vec![
+            CohortsCsvRow {
+                cohort: "early".to_string(),
+                share_percentage: Decimal::from(70),
+            },
+            CohortsCsvRow {
+                cohort: "power".to_string(),
+                share_percentage: Decimal::from(30),
+            },
+        ];
+
+        // Should pass - sums to 100%
+        validate_share_percentages(&valid_rows).unwrap();
+
+        // Test precise decimal values
+        let precise_rows = vec![
+            CohortsCsvRow {
+                cohort: "early".to_string(),
+                share_percentage: Decimal::from_str("60.5").unwrap(),
+            },
+            CohortsCsvRow {
+                cohort: "power".to_string(),
+                share_percentage: Decimal::from_str("39.5").unwrap(),
+            },
+        ];
+
+        // Should pass - precise decimals sum to exactly 100%
+        validate_share_percentages(&precise_rows).unwrap();
+
+        // Should fail - doesn't sum to 100%
+        let invalid_sum_rows = vec![
+            CohortsCsvRow {
+                cohort: "early".to_string(),
+                share_percentage: Decimal::from(70),
+            },
+            CohortsCsvRow {
+                cohort: "power".to_string(),
+                share_percentage: Decimal::from(40), // Total = 110%
+            },
+        ];
+
+        let result = validate_share_percentages(&invalid_sum_rows);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("must sum to exactly 100%"));
+
+        // Should fail - invalid range
+        let invalid_range_rows = vec![CohortsCsvRow {
+            cohort: "invalid".to_string(),
+            share_percentage: Decimal::from(150), // > 100%
+        }];
+
+        let result = validate_share_percentages(&invalid_range_rows);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Must be between 0% and 100%"));
     }
 }

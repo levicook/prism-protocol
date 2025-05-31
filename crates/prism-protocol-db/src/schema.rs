@@ -20,7 +20,9 @@ pub fn initialize_database(conn: &Connection) -> DbResult<()> {
         CREATE TABLE campaign (
             fingerprint TEXT PRIMARY KEY,
             mint TEXT NOT NULL,
+            mint_decimals INTEGER NOT NULL, -- number of decimals for the token (e.g., 9 for SOL)
             admin TEXT NOT NULL,
+            budget TEXT NOT NULL, -- campaign budget as Decimal string (e.g., "1000.5")
             created_at INTEGER NOT NULL,
             deployed_at INTEGER,
             deployed_signature TEXT, -- transaction signature for campaign deployment
@@ -32,7 +34,8 @@ pub fn initialize_database(conn: &Connection) -> DbResult<()> {
         CREATE TABLE cohorts (
             cohort_name TEXT PRIMARY KEY,
             merkle_root TEXT NOT NULL, -- hex-encoded [u8; 32]
-            amount_per_entitlement INTEGER NOT NULL,
+            amount_per_entitlement TEXT NOT NULL, -- u64 as string to support full range (e.g., "1000000000")
+            amount_per_entitlement_humane TEXT NOT NULL, -- human-readable amount (e.g., "0.001")
             vault_count INTEGER NOT NULL,
             claimant_count INTEGER NOT NULL,
             total_tokens_required INTEGER NOT NULL,

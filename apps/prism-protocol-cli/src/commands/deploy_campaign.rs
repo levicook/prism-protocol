@@ -54,7 +54,7 @@ use prism_protocol_sdk::{
     build_create_vault_ix, build_initialize_campaign_ix, build_initialize_cohort_ix,
     build_set_campaign_active_status_ix,
 };
-use solana_client::rpc_config::RpcSendTransactionConfig;
+use solana_client::{rpc_client::RpcClient, rpc_config::RpcSendTransactionConfig};
 use solana_sdk::{
     commitment_config::{CommitmentConfig, CommitmentLevel},
     pubkey::Pubkey,
@@ -62,7 +62,7 @@ use solana_sdk::{
     transaction::Transaction,
 };
 use spl_associated_token_account::get_associated_token_address;
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 pub fn execute(campaign_db_in: PathBuf, admin_keypair: PathBuf, rpc_url: String) -> CliResult<()> {
     println!("🚀 Deploying campaign on-chain...");
@@ -79,12 +79,16 @@ pub fn execute(campaign_db_in: PathBuf, admin_keypair: PathBuf, rpc_url: String)
 
     // Step 2: Create client and database connections using our new abstractions
     println!("\n🌐 Connecting to Solana RPC...");
-    let client = PrismProtocolClient::new(rpc_url.clone())
-        .map_err(|e| CliError::InvalidConfig(format!("Failed to create RPC client: {}", e)))?;
+
+    let rpc_client = Arc::new(RpcClient::new_with_commitment(
+        &rpc_url,
+        CommitmentConfig::confirmed(),
+    ));
+
+    let client = PrismProtocolClient::new(rpc_client.clone());
 
     // Test connection
-    let _version = client
-        .rpc_client()
+    let _version = rpc_client
         .get_version()
         .map_err(|e| CliError::InvalidConfig(format!("Failed to connect to RPC: {}", e)))?;
     println!("✅ Connected to Solana RPC: {}", rpc_url);
@@ -196,11 +200,23 @@ pub fn execute(campaign_db_in: PathBuf, admin_keypair: PathBuf, rpc_url: String)
         );
     }
 
-    perform_preflight_checks(&client, &admin_keypair, &campaign_info, total_tokens_needed)?;
+    perform_preflight_checks(
+        &rpc_client,
+        &client,
+        &admin_keypair,
+        &campaign_info,
+        total_tokens_needed,
+    )?;
 
     // Step 7: Deploy campaign PDA
     println!("\n🏗️  Deploying campaign PDA...");
-    let campaign_signature = deploy_campaign_pda(&client, &admin_keypair, &campaign_info, &mut db)?;
+    let campaign_signature = deploy_campaign_pda(
+        &rpc_client,
+        &client,
+        &admin_keypair,
+        &campaign_info,
+        &mut db,
+    )?;
 
     // Step 8: Deploy all cohort PDAs and their vaults
     println!("\n🏗️  Deploying cohort PDAs and vaults...");
@@ -209,7 +225,8 @@ pub fn execute(campaign_db_in: PathBuf, admin_keypair: PathBuf, rpc_url: String)
 
     for (index, cohort) in cohort_data.iter().enumerate() {
         // Deploy cohort PDA
-        let cohort_signature = deploy_cohort_pda(&client, &admin_keypair, &campaign_info, cohort)?;
+        let cohort_signature =
+            deploy_cohort_pda(&rpc_client, &client, &admin_keypair, &campaign_info, cohort)?;
         if !cohort_signature.is_empty() {
             cohort_signatures.push((cohort.name.clone(), cohort_signature));
         }
@@ -220,6 +237,7 @@ pub fn execute(campaign_db_in: PathBuf, admin_keypair: PathBuf, rpc_url: String)
             cohort.name
         );
         let vault_signatures = deploy_and_fund_cohort_vaults(
+            &rpc_client,
             &client,
             &admin_keypair,
             &campaign_info,
@@ -249,7 +267,13 @@ pub fn execute(campaign_db_in: PathBuf, admin_keypair: PathBuf, rpc_url: String)
 
     // Step 9: Activate campaign
     println!("\n🎯 Activating campaign...");
-    activate_campaign(&client, &admin_keypair, &campaign_info, &mut db)?;
+    activate_campaign(
+        &rpc_client,
+        &client,
+        &admin_keypair,
+        &campaign_info,
+        &mut db,
+    )?;
 
     // Step 10: Final verification
     println!("\n✅ Performing final verification...");
@@ -327,6 +351,7 @@ fn calculate_actual_tokens_needed(
 }
 
 fn perform_preflight_checks(
+    rpc_client: &RpcClient,
     client: &PrismProtocolClient,
     admin_keypair: &dyn Signer,
     campaign_info: &prism_protocol_db::CampaignInfo,
@@ -336,8 +361,7 @@ fn perform_preflight_checks(
 
     // Check 1: Admin SOL balance for rent costs
     println!("  💰 Checking admin SOL balance...");
-    let admin_balance = client
-        .rpc_client()
+    let admin_balance = rpc_client
         .get_balance(&admin_pubkey)
         .map_err(|e| CliError::InvalidConfig(format!("Failed to get admin balance: {}", e)))?;
 
@@ -387,8 +411,7 @@ fn perform_preflight_checks(
 
     // Check 3: RPC connection stability
     println!("  🌐 Verifying RPC connection...");
-    let _slot = client
-        .rpc_client()
+    let _slot = rpc_client
         .get_slot()
         .map_err(|e| CliError::InvalidConfig(format!("RPC connection unstable: {}", e)))?;
     println!("    ✅ RPC connection stable");
@@ -398,6 +421,7 @@ fn perform_preflight_checks(
 }
 
 fn deploy_campaign_pda(
+    rpc_client: &RpcClient,
     client: &PrismProtocolClient,
     admin_keypair: &dyn Signer,
     campaign_info: &prism_protocol_db::CampaignInfo,
@@ -426,8 +450,7 @@ fn deploy_campaign_pda(
 
     // Create and send transaction with enhanced retry logic
     println!("  🔄 Getting recent blockhash...");
-    let recent_blockhash = client
-        .rpc_client()
+    let recent_blockhash = rpc_client
         .get_latest_blockhash()
         .map_err(|e| CliError::InvalidConfig(format!("Failed to get blockhash: {}", e)))?;
 
@@ -448,8 +471,7 @@ fn deploy_campaign_pda(
         min_context_slot: None,
     };
 
-    let signature = client
-        .rpc_client()
+    let signature = rpc_client
         .send_and_confirm_transaction_with_spinner_and_config(
             &transaction,
             CommitmentConfig::confirmed(),
@@ -468,6 +490,7 @@ fn deploy_campaign_pda(
 }
 
 fn deploy_cohort_pda(
+    rpc_client: &RpcClient,
     client: &PrismProtocolClient,
     admin_keypair: &dyn Signer,
     campaign_info: &prism_protocol_db::CampaignInfo,
@@ -503,8 +526,7 @@ fn deploy_cohort_pda(
     .map_err(|e| CliError::InvalidConfig(format!("Failed to build cohort instruction: {}", e)))?;
 
     // Create and send transaction
-    let recent_blockhash = client
-        .rpc_client()
+    let recent_blockhash = rpc_client
         .get_latest_blockhash()
         .map_err(|e| CliError::InvalidConfig(format!("Failed to get blockhash: {}", e)))?;
 
@@ -525,8 +547,7 @@ fn deploy_cohort_pda(
         min_context_slot: None,
     };
 
-    let signature = client
-        .rpc_client()
+    let signature = rpc_client
         .send_and_confirm_transaction_with_spinner_and_config(
             &transaction,
             CommitmentConfig::confirmed(),
@@ -543,6 +564,7 @@ fn deploy_cohort_pda(
 }
 
 fn deploy_and_fund_cohort_vaults(
+    rpc_client: &RpcClient,
     client: &PrismProtocolClient,
     admin_keypair: &dyn Signer,
     campaign_info: &prism_protocol_db::CampaignInfo,
@@ -582,6 +604,7 @@ fn deploy_and_fund_cohort_vaults(
 
         // Step 1: Create vault if it doesn't exist
         let creation_signature = create_vault_if_needed(
+            rpc_client,
             client,
             admin_keypair,
             campaign_info,
@@ -597,6 +620,7 @@ fn deploy_and_fund_cohort_vaults(
         // Step 2: Fund vault if it needs tokens
         if vault_req.required_tokens > 0 {
             fund_vault_if_needed(
+                rpc_client,
                 client,
                 admin_keypair,
                 &campaign_info.mint,
@@ -613,6 +637,7 @@ fn deploy_and_fund_cohort_vaults(
 }
 
 fn create_vault_if_needed(
+    rpc_client: &RpcClient,
     client: &PrismProtocolClient,
     admin_keypair: &dyn Signer,
     campaign_info: &prism_protocol_db::CampaignInfo,
@@ -621,7 +646,7 @@ fn create_vault_if_needed(
     vault_index: u8,
 ) -> CliResult<String> {
     // Check if vault already exists using client
-    let vault_exists = client.rpc_client().get_account(vault_address).is_ok();
+    let vault_exists = rpc_client.get_account(vault_address).is_ok();
 
     if vault_exists {
         println!(
@@ -657,8 +682,7 @@ fn create_vault_if_needed(
     })?;
 
     // Create and send transaction
-    let recent_blockhash = client
-        .rpc_client()
+    let recent_blockhash = rpc_client
         .get_latest_blockhash()
         .map_err(|e| CliError::InvalidConfig(format!("Failed to get blockhash: {}", e)))?;
 
@@ -677,8 +701,7 @@ fn create_vault_if_needed(
         min_context_slot: None,
     };
 
-    let signature = client
-        .rpc_client()
+    let signature = rpc_client
         .send_and_confirm_transaction_with_spinner_and_config(
             &transaction,
             CommitmentConfig::confirmed(),
@@ -700,6 +723,7 @@ fn create_vault_if_needed(
 }
 
 fn fund_vault_if_needed(
+    rpc_client: &RpcClient,
     client: &PrismProtocolClient,
     admin_keypair: &dyn Signer,
     mint: &Pubkey,
@@ -742,8 +766,7 @@ fn fund_vault_if_needed(
     )
     .map_err(|e| CliError::InvalidConfig(format!("Failed to build transfer instruction: {}", e)))?;
 
-    let recent_blockhash = client
-        .rpc_client()
+    let recent_blockhash = rpc_client
         .get_latest_blockhash()
         .map_err(|e| CliError::InvalidConfig(format!("Failed to get blockhash: {}", e)))?;
 
@@ -754,8 +777,7 @@ fn fund_vault_if_needed(
         recent_blockhash,
     );
 
-    let signature = client
-        .rpc_client()
+    let signature = rpc_client
         .send_and_confirm_transaction_with_spinner(&transaction)
         .map_err(|e| CliError::InvalidConfig(format!("Failed to fund vault: {}", e)))?;
 
@@ -777,6 +799,7 @@ fn fund_vault_if_needed(
 }
 
 fn activate_campaign(
+    rpc_client: &RpcClient,
     client: &PrismProtocolClient,
     admin_keypair: &dyn Signer,
     campaign_info: &prism_protocol_db::CampaignInfo,
@@ -803,8 +826,7 @@ fn activate_campaign(
             })?;
 
             // Send activation transaction
-            let recent_blockhash = client
-                .rpc_client()
+            let recent_blockhash = rpc_client
                 .get_latest_blockhash()
                 .map_err(|e| CliError::InvalidConfig(format!("Failed to get blockhash: {}", e)))?;
 
@@ -823,8 +845,7 @@ fn activate_campaign(
                 min_context_slot: None,
             };
 
-            let signature = client
-                .rpc_client()
+            let signature = rpc_client
                 .send_and_confirm_transaction_with_spinner_and_config(
                     &transaction,
                     CommitmentConfig::confirmed(),

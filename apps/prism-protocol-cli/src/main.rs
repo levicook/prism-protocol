@@ -19,7 +19,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Generate test fixtures for benchmarking and development
+    /// Generate test fixtures for benchmarking and development (on clusters with airdrops)
     GenerateFixtures {
         /// Campaign name (will be slugified for directory structure)
         #[arg(long)]
@@ -29,11 +29,11 @@ enum Commands {
         #[arg(long, default_value = "test-artifacts/fixtures/")]
         output_dir: PathBuf,
 
-        /// Number of claimants to generate
+        /// Number of claimants to generate with real keypairs
         #[arg(long, default_value = "1000")]
-        count: u64,
+        claimant_count: u64,
 
-        /// Distribution type
+        /// Distribution type for entitlements
         #[arg(long, default_value = "uniform")]
         distribution: String,
 
@@ -49,13 +49,17 @@ enum Commands {
         #[arg(long, default_value = "3")]
         cohort_count: usize,
 
-        /// Minimum amount per entitlement (in token base units)
-        #[arg(long, default_value = "1000000")]
-        min_amount_per_entitlement: u64,
+        /// Token mint decimals (0-9, affects precision testing)
+        #[arg(long, default_value = "9")]
+        mint_decimals: u8,
 
-        /// Maximum amount per entitlement (in token base units)
-        #[arg(long, default_value = "10000000")]
-        max_amount_per_entitlement: u64,
+        /// Test budget in human-readable tokens (will be minted for admin)
+        #[arg(long, default_value = "10000.0")]
+        budget: String,
+
+        /// Solana RPC URL for mint creation and admin funding
+        #[arg(long, default_value = "http://127.0.0.1:8899")]
+        rpc_url: String,
     },
 
     /// Compile campaign from CSV files into deployment-ready database
@@ -64,13 +68,17 @@ enum Commands {
         #[arg(long)]
         campaign_csv_in: PathBuf,
 
-        /// Input cohorts CSV file path (cohort,amount_per_entitlement)
+        /// Input cohorts CSV file path (cohort,share_percentage)
         #[arg(long)]
         cohorts_csv_in: PathBuf,
 
         /// SPL token mint that will be distributed
         #[arg(long)]
         mint: Pubkey,
+
+        /// Campaign budget in human-readable tokens (e.g., "1000.5" for 1000.5 SOL)
+        #[arg(long)]
+        budget: String,
 
         /// Path to admin keypair file
         #[arg(long)]
@@ -83,6 +91,10 @@ enum Commands {
         /// Output path for campaign database
         #[arg(long)]
         campaign_db_out: PathBuf,
+
+        /// Solana RPC URL for mint metadata discovery
+        #[arg(long, default_value = "http://127.0.0.1:8899")]
+        rpc_url: String,
     },
 
     /// Deploy campaign on-chain
@@ -213,39 +225,45 @@ fn main() -> CliResult<()> {
         Commands::GenerateFixtures {
             campaign_name,
             output_dir,
-            count,
+            claimant_count,
             distribution,
             min_entitlements,
             max_entitlements,
             cohort_count,
-            min_amount_per_entitlement,
-            max_amount_per_entitlement,
+            mint_decimals,
+            budget,
+            rpc_url,
         } => commands::generate_fixtures::execute(
             campaign_name,
             output_dir,
-            count,
+            claimant_count,
             distribution,
             min_entitlements,
             max_entitlements,
             cohort_count,
-            min_amount_per_entitlement,
-            max_amount_per_entitlement,
+            mint_decimals,
+            budget,
+            rpc_url,
         ),
 
         Commands::CompileCampaign {
             campaign_csv_in,
             cohorts_csv_in,
             mint,
+            budget,
             admin_keypair,
             claimants_per_vault,
             campaign_db_out,
+            rpc_url,
         } => commands::compile_campaign::execute(
             campaign_csv_in,
             cohorts_csv_in,
             mint,
+            budget,
             admin_keypair,
             claimants_per_vault,
             campaign_db_out,
+            rpc_url,
         ),
 
         Commands::DeployCampaign {
