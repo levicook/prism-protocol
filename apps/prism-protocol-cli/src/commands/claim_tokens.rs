@@ -3,7 +3,9 @@ use hex;
 use prism_protocol_client::PrismProtocolClient;
 use prism_protocol_db::{CampaignDatabase, EligibilityInfo};
 use prism_protocol_sdk::build_claim_tokens_ix;
+use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
+    commitment_config::CommitmentConfig,
     instruction::Instruction,
     message::Message,
     pubkey::Pubkey,
@@ -11,7 +13,7 @@ use solana_sdk::{
     transaction::Transaction,
 };
 use spl_associated_token_account::get_associated_token_address;
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 #[derive(Debug)]
 struct ClaimTransaction {
@@ -28,11 +30,15 @@ pub fn execute(
 ) -> CliResult<()> {
     println!("🎯 Starting token claim process...");
 
-    // Open database and create unified client
     let mut db = CampaignDatabase::open(&campaign_db_path)
         .map_err(|e| CliError::InvalidConfig(format!("Failed to open database: {}", e)))?;
-    let client = PrismProtocolClient::new(rpc_url)
-        .map_err(|e| CliError::InvalidConfig(format!("Failed to create RPC client: {}", e)))?;
+
+    let rpc_client = Arc::new(RpcClient::new_with_commitment(
+        &rpc_url,
+        CommitmentConfig::confirmed(),
+    ));
+
+    let client = PrismProtocolClient::new(rpc_client.clone());
 
     // Load claimant keypair
     println!("🔑 Loading claimant keypair...");
@@ -113,7 +119,8 @@ pub fn execute(
         );
         println!("   Cohort: {}", claim_tx.eligibility.cohort_name);
 
-        match execute_claim_transaction(&client, &claimant_keypair, claim_tx, dry_run) {
+        match execute_claim_transaction(&client, &rpc_client, &claimant_keypair, claim_tx, dry_run)
+        {
             Ok(signature) => {
                 successful_claims += 1;
                 total_tokens_claimed += claim_tx.expected_tokens;
@@ -260,6 +267,7 @@ fn build_claim_transactions(
 
 fn execute_claim_transaction(
     client: &PrismProtocolClient,
+    rpc_client: &RpcClient,
     claimant_keypair: &Keypair,
     claim_tx: &ClaimTransaction,
     dry_run: bool,
@@ -273,7 +281,7 @@ fn execute_claim_transaction(
     }
 
     // Build transaction using Message API for proper structure
-    let recent_blockhash = client.rpc_client().get_latest_blockhash()?;
+    let recent_blockhash = rpc_client.get_latest_blockhash()?;
     let message = Message::new(
         &[claim_tx.claim_ix.clone()],
         Some(&claimant_keypair.pubkey()),

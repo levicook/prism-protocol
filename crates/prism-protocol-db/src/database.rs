@@ -11,6 +11,7 @@ use crate::{
 };
 use hex;
 use rusqlite::{params, Connection};
+use rust_decimal::Decimal;
 use solana_sdk::pubkey::Pubkey;
 use std::path::Path;
 use std::str::FromStr;
@@ -20,7 +21,9 @@ use std::str::FromStr;
 pub struct CampaignInfo {
     pub fingerprint: [u8; 32],
     pub mint: Pubkey,
+    pub mint_decimals: u8,
     pub admin: Pubkey,
+    pub budget: Decimal,
 }
 
 /// Cohort information with merkle data
@@ -28,7 +31,8 @@ pub struct CampaignInfo {
 pub struct CohortInfo {
     pub name: String,
     pub merkle_root: [u8; 32],
-    pub amount_per_entitlement: u64,
+    pub amount_per_entitlement: u64, // Final u64 base units for instructions
+    pub amount_per_entitlement_humane: String, // Human-readable amount (e.g., "0.001")
     pub vaults: Vec<Pubkey>,
     pub vault_count: usize,
 }
@@ -176,20 +180,29 @@ impl CampaignDatabase {
     pub fn read_campaign_info(&self) -> DbResult<CampaignInfo> {
         let mut stmt = self
             .conn
-            .prepare("SELECT fingerprint, mint, admin FROM campaign LIMIT 1")
+            .prepare("SELECT fingerprint, mint, mint_decimals, admin, budget FROM campaign LIMIT 1")
             .map_err(|e| DbError::Database(e))?;
 
         let mut rows = stmt
             .query_map([], |row| {
                 let fingerprint_hex: String = row.get(0)?;
                 let mint_str: String = row.get(1)?;
-                let admin_str: String = row.get(2)?;
-                Ok((fingerprint_hex, mint_str, admin_str))
+                let mint_decimals: u8 = row.get(2)?;
+                let admin_str: String = row.get(3)?;
+                let budget_str: String = row.get(4)?;
+                Ok((
+                    fingerprint_hex,
+                    mint_str,
+                    mint_decimals,
+                    admin_str,
+                    budget_str,
+                ))
             })
             .map_err(|e| DbError::Database(e))?;
 
         if let Some(row) = rows.next() {
-            let (fingerprint_hex, mint_str, admin_str) = row.map_err(|e| DbError::Database(e))?;
+            let (fingerprint_hex, mint_str, mint_decimals, admin_str, budget_str) =
+                row.map_err(|e| DbError::Database(e))?;
 
             let fingerprint_bytes = hex::decode(fingerprint_hex)
                 .map_err(|e| DbError::Serialization(format!("Invalid fingerprint hex: {}", e)))?;
@@ -203,10 +216,15 @@ impl CampaignDatabase {
             let admin = Pubkey::from_str(&admin_str)
                 .map_err(|e| DbError::InvalidPubkey(format!("Invalid admin pubkey: {}", e)))?;
 
+            let budget = Decimal::from_str(&budget_str)
+                .map_err(|e| DbError::Serialization(format!("Invalid budget: {}", e)))?;
+
             Ok(CampaignInfo {
                 fingerprint,
                 mint,
+                mint_decimals,
                 admin,
+                budget,
             })
         } else {
             Err(DbError::InvalidConfig(
@@ -219,22 +237,28 @@ impl CampaignDatabase {
     pub fn read_cohorts(&self) -> DbResult<Vec<CohortInfo>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT cohort_name, merkle_root, amount_per_entitlement FROM cohorts")
+            .prepare("SELECT cohort_name, merkle_root, amount_per_entitlement, amount_per_entitlement_humane FROM cohorts")
             .map_err(|e| DbError::Database(e))?;
 
         let cohort_rows = stmt
             .query_map([], |row| {
                 let name: String = row.get(0)?;
                 let merkle_root_hex: String = row.get(1)?;
-                let amount_per_entitlement: u64 = row.get(2)?;
-                Ok((name, merkle_root_hex, amount_per_entitlement))
+                let amount_per_entitlement_str: String = row.get(2)?;
+                let amount_per_entitlement_humane: String = row.get(3)?;
+                Ok((
+                    name,
+                    merkle_root_hex,
+                    amount_per_entitlement_str,
+                    amount_per_entitlement_humane,
+                ))
             })
             .map_err(|e| DbError::Database(e))?;
 
         let mut cohorts = Vec::new();
 
         for row in cohort_rows {
-            let (name, merkle_root_hex, amount_per_entitlement) =
+            let (name, merkle_root_hex, amount_per_entitlement_str, amount_per_entitlement_humane) =
                 row.map_err(|e| DbError::Database(e))?;
 
             let merkle_root_bytes = hex::decode(merkle_root_hex)
@@ -242,6 +266,12 @@ impl CampaignDatabase {
             let merkle_root: [u8; 32] = merkle_root_bytes
                 .try_into()
                 .map_err(|_| DbError::Serialization("Merkle root must be 32 bytes".to_string()))?;
+
+            // Parse u64 from string to fully support u64 range
+            let amount_per_entitlement =
+                amount_per_entitlement_str.parse::<u64>().map_err(|e| {
+                    DbError::Serialization(format!("Invalid amount_per_entitlement u64: {}", e))
+                })?;
 
             // Get vaults for this cohort
             let mut vault_stmt = self
@@ -271,6 +301,7 @@ impl CampaignDatabase {
                 name,
                 merkle_root,
                 amount_per_entitlement,
+                amount_per_entitlement_humane,
                 vaults,
                 vault_count,
             });
@@ -539,7 +570,9 @@ impl CampaignDatabase {
         &mut self,
         fingerprint: [u8; 32],
         mint: Pubkey,
+        mint_decimals: u8,
         admin: Pubkey,
+        budget: Decimal,
     ) -> DbResult<()> {
         let tx = self
             .conn
@@ -547,11 +580,13 @@ impl CampaignDatabase {
             .map_err(|e| DbError::Transaction(format!("Failed to start transaction: {}", e)))?;
 
         tx.execute(
-            "INSERT INTO campaign (fingerprint, mint, admin) VALUES (?, ?, ?)",
+            "INSERT INTO campaign (fingerprint, mint, mint_decimals, admin, budget) VALUES (?, ?, ?, ?, ?)",
             params![
                 hex::encode(fingerprint),
                 mint.to_string(),
-                admin.to_string()
+                mint_decimals,
+                admin.to_string(),
+                budget.to_string()
             ],
         )
         .map_err(|e| DbError::Database(e))?;
@@ -568,6 +603,7 @@ impl CampaignDatabase {
         name: &str,
         merkle_root: [u8; 32],
         amount_per_entitlement: u64,
+        amount_per_entitlement_humane: &str,
     ) -> DbResult<()> {
         let tx = self
             .conn
@@ -575,11 +611,12 @@ impl CampaignDatabase {
             .map_err(|e| DbError::Transaction(format!("Failed to start transaction: {}", e)))?;
 
         tx.execute(
-            "INSERT INTO cohorts (cohort_name, merkle_root, amount_per_entitlement) VALUES (?, ?, ?)",
+            "INSERT INTO cohorts (cohort_name, merkle_root, amount_per_entitlement, amount_per_entitlement_humane) VALUES (?, ?, ?, ?)",
             params![
                 name,
                 hex::encode(merkle_root),
-                amount_per_entitlement
+                amount_per_entitlement.to_string(),
+                amount_per_entitlement_humane
             ],
         ).map_err(|e| DbError::Database(e))?;
 

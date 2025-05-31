@@ -3,12 +3,14 @@ use chrono;
 use hex;
 use prism_protocol_client::PrismProtocolClient;
 use prism_protocol_db::CampaignDatabase;
+use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
+    commitment_config::CommitmentConfig,
     pubkey::Pubkey,
     signature::{read_keypair_file, Signer},
 };
-use std::path::PathBuf;
 use std::str::FromStr;
+use std::{path::PathBuf, sync::Arc};
 
 #[derive(Debug)]
 struct ClaimInfo {
@@ -26,8 +28,13 @@ pub fn execute(campaign_db_path: PathBuf, claimant: String, rpc_url: String) -> 
     // Open database and create unified client
     let db = CampaignDatabase::open(&campaign_db_path)
         .map_err(|e| CliError::InvalidConfig(format!("Failed to open database: {}", e)))?;
-    let client = PrismProtocolClient::new(rpc_url)
-        .map_err(|e| CliError::InvalidConfig(format!("Failed to create RPC client: {}", e)))?;
+
+    let rpc_client = Arc::new(RpcClient::new_with_commitment(
+        &rpc_url,
+        CommitmentConfig::confirmed(),
+    ));
+
+    let client = PrismProtocolClient::new(rpc_client.clone());
 
     // Auto-detect whether claimant is a pubkey or keypair file
     let claimant_pubkey = parse_claimant_input(&claimant)?;

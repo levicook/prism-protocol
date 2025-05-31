@@ -2,12 +2,14 @@ use crate::error::{CliError, CliResult};
 use hex;
 use prism_protocol_client::PrismProtocolClient;
 use prism_protocol_db::CampaignDatabase;
+use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
+    commitment_config::CommitmentConfig,
     pubkey::Pubkey,
     signature::{read_keypair_file, Signer},
 };
-use std::path::PathBuf;
 use std::str::FromStr;
+use std::{path::PathBuf, sync::Arc};
 
 // Extended eligibility info with on-chain state
 #[derive(Debug)]
@@ -74,8 +76,13 @@ pub fn execute(campaign_db_in: PathBuf, claimant: String, rpc_url: String) -> Cl
 
     // Create RPC client using our new interface
     println!("🌐 Verifying on-chain claim status...");
-    let client = PrismProtocolClient::new(rpc_url)
-        .map_err(|e| CliError::InvalidConfig(format!("Failed to create RPC client: {}", e)))?;
+
+    let rpc_client = Arc::new(RpcClient::new_with_commitment(
+        &rpc_url,
+        CommitmentConfig::confirmed(),
+    ));
+
+    let client = PrismProtocolClient::new(rpc_client.clone());
 
     // Convert database eligibility to extended format with on-chain verification
     let mut eligibility: Vec<EligibilityInfo> = Vec::new();

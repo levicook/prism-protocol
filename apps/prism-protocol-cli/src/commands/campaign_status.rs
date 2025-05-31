@@ -2,8 +2,9 @@ use crate::error::{CliError, CliResult};
 use hex;
 use prism_protocol_client::PrismProtocolClient;
 use prism_protocol_db::CampaignDatabase;
-use solana_sdk::pubkey::Pubkey;
-use std::path::PathBuf;
+use solana_client::rpc_client::RpcClient;
+use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey};
+use std::{path::PathBuf, sync::Arc};
 
 #[derive(Debug)]
 struct CampaignStatusReport {
@@ -49,8 +50,9 @@ pub fn execute(campaign_db_path: PathBuf, rpc_url: String) -> CliResult<()> {
     // Open database and create unified client
     let db = CampaignDatabase::open(&campaign_db_path)
         .map_err(|e| CliError::InvalidConfig(format!("Failed to open database: {}", e)))?;
-    let client = PrismProtocolClient::new(rpc_url)
-        .map_err(|e| CliError::InvalidConfig(format!("Failed to create RPC client: {}", e)))?;
+
+    let rpc_client = RpcClient::new_with_commitment(&rpc_url, CommitmentConfig::confirmed());
+    let client = PrismProtocolClient::new(Arc::new(rpc_client));
 
     // Generate status report
     let report = generate_status_report(&db, &client)?;
