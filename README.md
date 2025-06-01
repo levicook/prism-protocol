@@ -11,6 +11,30 @@ Prism Protocol enables scalable, verifiable token distribution on Solana by solv
 - **Precise Financial Math**: Zero floating-point errors using `rust_decimal` for exact calculations
 - **Immutable Campaigns**: Campaign fingerprints ensure verifiable, unchangeable distribution rules
 
+## Trust & Verification
+
+**Prism Protocol solves fundamental trust problems** in token distribution that traditional airdrop platforms ignore:
+
+### **Campaign Creator Protection**
+
+- **"How do I know you didn't inject your own wallets?"** - Deterministic compilation means same CSV always produces same campaign fingerprint
+- **"Can I verify the deployed campaign matches my data?"** - `verify-campaign` command locally regenerates and compares against on-chain state
+- **"What if I don't trust your platform?"** - Self-host everything with local CLI tools
+
+### **Claimant Protection**
+
+- **"How do I know these amounts are real?"** - Client-side merkle proof validation against on-chain campaign roots
+- **"Can I verify I'm getting the right tokens?"** - All eligibility data cryptographically tied to immutable on-chain fingerprints
+- **"What if the platform goes down?"** - Anyone can generate their own claimant lookup from campaign databases
+
+### **Auditor Verification**
+
+- **"Can I independently verify campaign integrity?"** - Reproduce entire campaign locally from original CSV data
+- **"Are all distributions mathematically sound?"** - Precise decimal math with complete audit trails
+- **"Can I validate merkle tree construction?"** - All proofs verifiable against deterministic algorithm
+
+**Result**: Trust-minimized token distribution where all participants can cryptographically verify what they see.
+
 ## Quick Start
 
 ### Installation
@@ -61,24 +85,28 @@ cargo run -p prism-protocol-cli -- claim-tokens \
 ## Key Features
 
 ### 🔒 **Financial Safety**
+
 - **Precise decimal math** using `rust_decimal` eliminates floating-point errors
 - **Mint-aware calculations** respect token decimal constraints (SOL: 9, USDC: 6, etc.)
 - **Conservative allocation** rounds down to prevent over-allocation, tracks dust
 - **Example**: 1M USDC campaign has $0 error (vs potential $1,000 floating-point error)
 
 ### ⚡ **Performance**
+
 - **Minimal write contention** through vault distribution and claim receipts
 - **Optimized account usage** reduces rent costs and simplifies state management
 - **Batch operations** for efficient deployment and claiming
 - **Scalable architecture** handles 100K+ claimants efficiently
 
 ### 🔍 **Verifiability**
+
 - **Campaign fingerprints** cryptographically tie campaigns to exact distribution rules
 - **Merkle proofs** enable transparent eligibility verification
 - **Immutable on-chain state** prevents tampering with distribution parameters
 - **Complete audit trail** with deployment signatures and claim receipts
 
 ### 🏗️ **Developer Experience**
+
 - **Modular architecture** with clean separation between on-chain and off-chain components
 - **Comprehensive CLI** for campaign operators
 - **Reusable SDK** for integration into dApps and services
@@ -105,6 +133,7 @@ cargo run -p prism-protocol-cli -- claim-tokens \
 ## CLI Commands
 
 ### Campaign Management
+
 ```bash
 # Generate test fixtures with organized directory structure
 generate-fixtures --campaign-name <NAME> --claimant-count <COUNT> --budget <AMOUNT>
@@ -120,6 +149,7 @@ campaign-status --campaign-db-in <DB>
 ```
 
 ### Claiming Operations
+
 ```bash
 # Check claimant eligibility across all cohorts
 check-eligibility --campaign-db-in <DB> --claimant <PUBKEY>
@@ -132,6 +162,7 @@ query-claims --campaign-db-in <DB> --claimant <PUBKEY>
 ```
 
 ### Administrative
+
 ```bash
 # Pause/resume campaigns
 pause-campaign <FINGERPRINT> --keypair <JSON>
@@ -144,6 +175,7 @@ reclaim-tokens <CAMPAIGN> <COHORT> --keypair <JSON>
 ## Testing
 
 ### Quick Development
+
 ```bash
 make smoke-test    # Fast validation (30s)
 make dev-test      # CLI integration tests (1-2 min)
@@ -151,11 +183,13 @@ make test-all      # Complete test suite
 ```
 
 ### Performance Benchmarks
+
 ```bash
 make test-performance  # Benchmark with 1K-100K datasets
 ```
 
 The test suite includes:
+
 - **Unit tests** across all workspace crates
 - **CLI integration tests** with real command execution
 - **Anchor program tests** for on-chain functionality
@@ -165,17 +199,20 @@ The test suite includes:
 ## Development
 
 ### Building
+
 ```bash
 cargo build --release
 ```
 
 ### Testing
+
 ```bash
 cargo test
 anchor test  # Requires Solana CLI and Anchor framework
 ```
 
 ### Documentation
+
 ```bash
 cargo doc --open
 ```
@@ -183,12 +220,15 @@ cargo doc --open
 ## Configuration
 
 ### Network Configuration
+
 The CLI supports multiple Solana networks:
+
 - **Localnet**: `http://127.0.0.1:8899` (default)
 - **Devnet**: `https://api.devnet.solana.com`
 - **Mainnet**: `https://api.mainnet-beta.solana.com`
 
 ### Token Support
+
 - **SOL** (9 decimals): Native Solana token
 - **USDC** (6 decimals): USD Coin
 - **Custom SPL tokens**: Any token mint with proper decimal configuration
@@ -196,6 +236,7 @@ The CLI supports multiple Solana networks:
 ## Examples
 
 ### Small Campaign (1K claimants)
+
 ```bash
 # Generate fixtures
 cargo run -p prism-protocol-cli -- generate-fixtures \
@@ -218,6 +259,7 @@ cargo run -p prism-protocol-cli -- deploy-campaign \
 ```
 
 ### Large Campaign (100K claimants)
+
 ```bash
 # Generate large dataset with exponential distribution
 cargo run -p prism-protocol-cli -- generate-fixtures \
