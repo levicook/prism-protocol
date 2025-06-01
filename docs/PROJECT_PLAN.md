@@ -4,6 +4,103 @@
 
 To enable efficient, scalable, and verifiable token distribution on Solana, minimizing write contention and optimizing on-chain resources. (See `README.md` for full details).
 
+## 🎯 **STRATEGIC PRIORITIES & USER EXPERIENCE ARCHITECTURE**
+
+### **Current Status: Strong Foundations, Need User-Focused Strategy**
+
+After one week of development, we've built incredibly solid technical foundations:
+
+- ✅ **Financial Safety**: Precise decimal math eliminates funding errors
+- ✅ **Infrastructure**: Clean abstractions, comprehensive testing, production-ready CLI
+- ✅ **Protocol Design**: Campaign fingerprints, merkle proofs, vault distribution
+
+**Critical Gap**: We've optimized for developers, not end users. Need clear user experience strategy.
+
+### **User Experience Priority Ranking**
+
+**Primary Users (95% of usage):**
+
+1. **dApp Users** - Campaign deployers uploading CSVs, claimants connecting wallets
+2. **CLI Users** - Technical campaign deployers comfortable with command-line tools
+
+**Secondary Users (5% of usage):** 3. **SDK Integrators** - Developers building custom dApps/services 4. **API Consumers** - Programmatic access for data/automation
+
+### **v0 vs v1 Performance Strategy**
+
+**Current v0 (Proof of Concept):**
+
+- ✅ Full merkle proofs (~32 bytes × tree depth)
+- ✅ Individual transactions per operation
+- ⚠️ **Performance claims unvalidated** - need concrete measurements
+
+**Planned v1 (Production Optimization):**
+
+- 🎯 **Trunk optimization**: Store intermediate tree levels on cohorts → shorter proofs
+- 🎯 **CU optimization**: Measured compute unit consumption with accurate cost estimation
+- 🎯 **Batch operations**: Transaction packing for deployment efficiency
+- 🎯 **Priority fee strategy**: Optimal fee calculation for reliable execution
+
+### **Performance Validation Requirements**
+
+**Critical Measurements Needed:**
+
+- **CU Consumption**: Exact compute units per instruction (claim, deploy, etc.)
+- **Transaction Sizes**: Bytes consumed under various scenarios (1K vs 100K claimants)
+- **Write Contention**: Actual concurrent claim performance testing
+- **Proof Sizes**: Current vs optimized merkle proof bandwidth requirements
+- **On-chain Storage**: Account rent costs at scale (campaigns, cohorts, receipts)
+
+**Validation Methodology:**
+
+- Mollusk SVM benchmarking with realistic datasets
+- Devnet stress testing with concurrent users
+- Cost modeling for different campaign sizes
+- Comparison with naive airdrop approaches
+
+### **User Experience Architecture (Critical Path)**
+
+**Campaign Deployer Journey:**
+
+```
+CSV Upload → dApp Validation → Budget Calculation → Deploy → Monitor
+     ↓              ↓               ↓              ↓         ↓
+   (or CLI)    Fee Estimation   Vault Funding    Status   Claims
+```
+
+**Claimant Journey:**
+
+```
+Connect Wallet → Check Eligibility → Claim Tokens → View History
+      ↓               ↓                  ↓             ↓
+   (instant)    (database query)   (merkle proof)  (receipts)
+```
+
+**Missing Components:**
+
+- 🚨 **dApp Frontend**: Primary user interface (most critical gap)
+- 🚨 **CSV Upload Interface**: Campaign creation without CLI knowledge
+- 🚨 **Claim Status Dashboard**: User-friendly claim tracking
+- ⚠️ **dApp Template**: Next.js template for forks (mono-repo issue)
+
+### **Immediate Strategic Priorities**
+
+1. **Performance Validation Sprint** (1 week)
+
+   - Measure actual CU consumption, transaction sizes, write contention
+   - Validate or refine performance claims with concrete data
+   - Document optimization opportunities for v1
+
+2. **User Experience Definition** (1 week)
+
+   - Design primary user journeys (campaign deployer + claimant)
+   - Define dApp requirements and architecture
+   - Resolve mono-repo vs template strategy
+
+3. **v1 Optimization Planning** (ongoing)
+   - Trunk optimization specification for shorter proofs
+   - CU optimization roadmap with priority fee strategy
+   - Batch operation enhancement beyond current transaction packing
+
 ## 2. Core Components - Implementation Checklist
 
 ### On-Chain Program (`programs/prism-protocol/src/`)
@@ -207,185 +304,74 @@ To enable efficient, scalable, and verifiable token distribution on Solana, mini
   - ✅ RPC operations via `PrismProtocolClient`
   - ✅ CSV schema validation via `prism-protocol-csvs`
 
-**Phase 4: Campaign Management & Production Readiness 📋 PLANNED**
+**Phase 4: Post-Infrastructure Implementation**
 
-- **Purpose:** Administrative operations, production deployment, and campaign creation tools
+Based on **DEPLOYMENT_ARCHITECTURE.md** (validated) and realistic next steps:
 
-- **🚀 CRITICAL ARCHITECTURAL IMPROVEMENTS NEEDED**
+#### **4.1 Deployment Architecture Implementation**
 
-  **Transaction Architecture Overhaul**
+**High Priority (Validated):**
 
-  _Current Problem_: Deploy command creates 50+ individual transactions with scattered transaction building/sending logic:
+1. **🏗️ Enhanced Deploy Command** - Implement init/activate pattern
 
-  - 1 campaign initialization
-  - 5+ cohort initializations
-  - 20+ vault creations
-  - 20+ vault funding operations
-  - 1 campaign activation
-  - **Total: ~60 seconds deployment time, ~$1.25 in fees**
+   - **Effort**: 2-3 weeks
+   - **Challenge**: IPFS integration, registration arrays, atomic deployment
+   - **User Value**: Reliable, verifiable campaign deployment
+   - **Status**: ✅ **VALIDATED** - Detailed in DEPLOYMENT_ARCHITECTURE.md
 
-  _Required Components_:
+2. **📱 Basic Client SDK** - Minimal claim functionality
+   - **Effort**: 1-2 weeks
+   - **Challenge**: Bundle size, wallet integration
+   - **User Value**: Enable claim sites and dApp integration
+   - **Status**: ✅ **VALIDATED** - Clear technical need for claim transactions
 
-  1. **Deploy Planner Abstraction** 📋 NEW
+#### **4.2 Monitoring & Automation**
 
-     - **Purpose**: Determine what instructions need to be built based on DB signatures and on-chain state
-     - **Inputs**: `CampaignDatabase`, `PrismProtocolClient`, campaign fingerprint
-     - **Logic**:
-       - Check DB for existing deployment signatures
-       - Cross-reference with actual on-chain account existence (surgical `get_account` calls)
-       - Generate instruction plan for missing/incomplete deployments
-       - Support for partial deployment recovery (handle failed mid-deployment scenarios)
-     - **Outputs**: `Vec<DeploymentStep>` with instruction builders and dependencies
-     - **Benefits**: Idempotent deployments, clear deployment state visibility
+**Medium Priority (Validated Need):**
 
-  2. **Generic Instruction/Transaction Packer** 📋 CONFIRMED IN PLAN
+3. **📊 Deployment Monitoring** - Track campaign activations
 
-     - **Purpose**: Pack instructions into optimally-sized transactions
-     - **Inputs**: `Vec<Instruction>`, `&Keypair` (admin signer), transaction size limits
-     - **Logic**:
-       - Respect instruction dependencies and execution order
-       - Pack by transaction size limits (not arbitrary batching)
-       - Handle cross-instruction account dependencies
-       - Generate multiple transactions when size limits exceeded
-     - **Outputs**: `Vec<Transaction>` ready for transmission
-     - **Generic Usage**: Useful for deploy, claim batching, any multi-instruction operations
+   - **Effort**: 1 week
+   - **Challenge**: Event monitoring, reliable IPFS hash extraction
+   - **User Value**: Automated response to campaign deployments
+   - **Status**: ✅ **VALIDATED** - Needed for automation triggers
 
-  3. **Unified Transaction Retry Utility** 📋 NEW
+4. **🏗️ Automated Static Site Generation** - Generate claim sites from deployments
+   - **Effort**: 2-3 weeks
+   - **Challenge**: Template design, IPFS content loading
+   - **User Value**: Zero-touch claim site creation
+   - **Status**: ✅ **VALIDATED** - Clear value for hosted service
 
-     - **Purpose**: Single retry mechanism with proper re-signing
-     - **Inputs**: `Vec<Transaction>`, `&Keypair`, `&RpcClient`, retry config
-     - **Logic**:
-       - Fresh blockhash fetching for each retry attempt
-       - Re-signing with admin keypair (critical for retry success)
-       - Exponential backoff with jitter
-       - Transaction confirmation waiting
-       - Detailed error logging with explorer URLs
-     - **Benefits**: Consistent retry behavior, proper error handling
+#### **4.3 Everything Else**
 
-  4. **Database Deployment Coordinator** 📋 NEW
-     - **Purpose**: Track deployment signatures and state in DB
-     - **Operations**:
-       - `mark_campaign_deployed(signature)`
-       - `mark_cohort_deployed(cohort_name, signature)`
-       - `mark_vault_created(cohort, vault_index, signature)`
-       - `mark_vault_funded(cohort, vault_index, signature, amount)`
-       - `mark_campaign_activated(signature)`
-     - **State Queries**: `get_deployment_status()` for resume/retry scenarios
-     - **Benefits**: Full deployment auditability, recovery from partial failures
+**Unvalidated/Speculative:**
 
-  _Expected Impact_:
+- ⚠️ **Verification Tools** - Need deeper auditor workflow research
+- ⚠️ **Template System** - Don't know what customization users want
+- ⚠️ **Setup Automation** - Haven't validated installation friction
+- ⚠️ **Desktop Apps** - Speculative solution to unknown problems
 
-  - **50+ transactions → 3-5 transactions** (intelligent batching)
-  - **~60 seconds → ~10 seconds** deployment time
-  - **~$1.25 → ~$0.15** in transaction fees
-  - **Robust failure recovery** with clear deployment state tracking
+### **What We Actually Know:**
 
-- **🔧 CRITICAL CLIENT IMPROVEMENTS (Anemic Client Issues)**
+1. **DEPLOYMENT_ARCHITECTURE.md works** - Carefully designed, trust-minimized
+2. **People will want claim sites** - Basic technical requirement
+3. **Monitoring enables automation** - Obvious operational need
+4. **Hosted sites have value** - Clear business case
 
-  **Current Problem**: PrismProtocolClient is anemic - CLI commands resort to raw RPC client for many operations
+### **What We Don't Know Yet:**
 
-  _Specific Raw RPC Usage Identified_:
+1. **How verification actually works in practice**
+2. **What UI/UX patterns users want**
+3. **What customization is actually needed**
+4. **What developer workflows look like**
+5. **What auditor workflows look like**
 
-  - **Blockhash Operations**: `rpc_client.get_latest_blockhash()` (used 8+ times in deploy_campaign.rs)
-  - **Transaction Sending**: `rpc_client.send_and_confirm_transaction_with_spinner_and_config()` (used 6+ times)
-  - **Account Existence Checks**: `rpc_client.get_account(vault_address).is_ok()` for vault detection
-  - **Balance Queries**: `rpc_client.get_balance(&admin_pubkey)` for SOL balance checking
-  - **Connection Testing**: `rpc_client.get_slot()` for RPC stability verification
-  - **Admin Token Balance**: Manual ATA address derivation + raw token account fetching
+### **Honest Next Steps:**
 
-  _Required Client Enhancements_:
-
-  ```rust
-  impl PrismProtocolClient {
-      // Transaction Management
-      pub fn build_and_send_transaction(&self, instructions: Vec<Instruction>, signers: &[&dyn Signer]) -> ClientResult<Signature>
-      pub fn simulate_transaction(&self, instructions: &[Instruction]) -> ClientResult<SimulationResult>
-      pub fn send_transaction_with_retry(&self, tx: Transaction, max_retries: u8) -> ClientResult<Signature>
-
-      // Account Existence & State Checking
-      pub fn account_exists(&self, address: &Pubkey) -> ClientResult<bool>
-      pub fn get_sol_balance(&self, address: &Pubkey) -> ClientResult<u64>
-      pub fn get_token_balance(&self, owner: &Pubkey, mint: &Pubkey) -> ClientResult<u64>
-
-      // Campaign State Verification
-      pub fn verify_campaign_ready_for_activation(&self, fingerprint: &[u8; 32]) -> ClientResult<ActivationStatus>
-      pub fn get_campaign_deployment_status(&self, fingerprint: &[u8; 32]) -> ClientResult<DeploymentStatus>
-
-      // Batch Operations
-      pub fn get_multiple_accounts(&self, addresses: &[Pubkey]) -> ClientResult<Vec<Option<Account>>>
-      pub fn check_vault_funding_status(&self, cohort: &Pubkey, vault_count: u8) -> ClientResult<Vec<VaultStatus>>
-  }
-  ```
-
-  _Benefits_:
-
-  - **Eliminate all raw RPC usage** in CLI commands
-  - **Consistent error handling** across all blockchain operations
-  - **Built-in retry logic** with proper re-signing
-  - **Campaign-aware operations** that understand protocol semantics
-  - **Batch optimizations** for multi-account queries
-
-- **🔄 CAMPAIGN BUDGET & SAFE MATH STATUS** 📋 IN PROGRESS
-
-  **Current Implementation Status**:
-
-  - ✅ **Decimal Math Foundation**: `rust_decimal::Decimal` integrated in fixture generator
-  - ✅ **Precise CSV Generation**: Percentages sum to exactly 100.0% in cohorts.csv
-  - ✅ **Budget Parsing**: CLI accepts human-readable token amounts (e.g., "1000.5")
-  - ✅ **Base Unit Conversion**: Proper multiplication by 10^decimals for mint operations
-  - ⚠️ **Partial Integration**: Only fixture generator uses `Decimal`, compile_campaign still uses approximations
-
-  **Remaining Work Required**:
-
-  1. **Complete `compile_campaign.rs` Integration** 📋 HIGH PRIORITY
-
-     ```rust
-     // CURRENT (problematic):
-     let budget_f64: f64 = budget.parse()?;
-     let budget_base_units = (budget_f64 * (10_u64.pow(mint_decimals as u32) as f64)) as u64;
-
-     // REQUIRED (precise):
-     let budget_decimal = Decimal::from_str(&budget)?;
-     let base_unit_multiplier = Decimal::from(10_u64.pow(mint_decimals as u32));
-     let budget_base_units = budget_decimal.checked_mul(base_unit_multiplier)?.to_u64()?;
-     ```
-
-  2. **Database Schema Updates** 📋 MEDIUM PRIORITY
-
-     - Store budget amounts as precise decimal strings (not floating point)
-     - Add mint decimals to campaign_info table for validation
-     - Update vault requirements calculation to use precise math
-
-  3. **Validation Layer** 📋 MEDIUM PRIORITY
-     - Verify budget × cohort percentages = expected total allocations
-     - Cross-check mint decimals between CLI input and blockchain state
-     - Add overflow protection for large token amounts
-
-  **Financial Safety Impact**:
-
-  - **Current Risk**: Floating point errors can cause 0.1% funding discrepancies
-  - **With Complete Integration**: Mathematically precise token allocations
-  - **Example**: 1M USDC campaign difference: $1,000 error vs. $0 error
-
-- **🎯 IMMEDIATE NEXT PRIORITIES**
-
-  1. **Complete Campaign Budget Integration** (1-2 days)
-
-     - Fix `compile_campaign.rs` to use `Decimal` throughout
-     - Update database schema for precise storage
-     - Add validation layer for budget consistency
-
-  2. **Transaction Architecture Implementation** (3-4 days)
-
-     - Deploy planner abstraction
-     - Generic instruction/transaction packer
-     - Unified retry utility
-     - Database deployment coordinator
-
-  3. **Enhanced PrismProtocolClient** (2-3 days)
-     - Add all missing abstractions to eliminate raw RPC usage
-     - Campaign-aware operations and state checking
-     - Batch optimization capabilities
+1. **Implement deployment architecture** (we know this works)
+2. **Build basic monitoring and automation** (clear operational need)
+3. **Research actual user workflows** before building more features
+4. **Validate problems before building solutions**
 
 ## 5. Testing Infrastructure & Coverage Analysis
 
@@ -770,3 +756,74 @@ The hard architectural work is **COMPLETE**. Next phase is rapid implementation 
 - API server with concurrent requests would amplify these problems exponentially
 - Clean infrastructure makes API server implementation trivial
 - Without cleanup first, API server will inherit all current technical debt and be fragile
+
+## 📦 Technical Deliverables Roadmap
+
+### **Phase 4: Post-Infrastructure Implementation**
+
+Based on **DEPLOYMENT_ARCHITECTURE.md** (validated) and realistic next steps:
+
+#### **4.1 Deployment Architecture Implementation**
+
+**High Priority (Validated):**
+
+1. **🏗️ Enhanced Deploy Command** - Implement init/activate pattern
+
+   - **Effort**: 2-3 weeks
+   - **Challenge**: IPFS integration, registration arrays, atomic deployment
+   - **User Value**: Reliable, verifiable campaign deployment
+   - **Status**: ✅ **VALIDATED** - Detailed in DEPLOYMENT_ARCHITECTURE.md
+
+2. **📱 Basic Client SDK** - Minimal claim functionality
+   - **Effort**: 1-2 weeks
+   - **Challenge**: Bundle size, wallet integration
+   - **User Value**: Enable claim sites and dApp integration
+   - **Status**: ✅ **VALIDATED** - Clear technical need for claim transactions
+
+#### **4.2 Monitoring & Automation**
+
+**Medium Priority (Validated Need):**
+
+3. **📊 Deployment Monitoring** - Track campaign activations
+
+   - **Effort**: 1 week
+   - **Challenge**: Event monitoring, reliable IPFS hash extraction
+   - **User Value**: Automated response to campaign deployments
+   - **Status**: ✅ **VALIDATED** - Needed for automation triggers
+
+4. **🏗️ Automated Static Site Generation** - Generate claim sites from deployments
+   - **Effort**: 2-3 weeks
+   - **Challenge**: Template design, IPFS content loading
+   - **User Value**: Zero-touch claim site creation
+   - **Status**: ✅ **VALIDATED** - Clear value for hosted service
+
+#### **4.3 Everything Else**
+
+**Unvalidated/Speculative:**
+
+- ⚠️ **Verification Tools** - Need deeper auditor workflow research
+- ⚠️ **Template System** - Don't know what customization users want
+- ⚠️ **Setup Automation** - Haven't validated installation friction
+- ⚠️ **Desktop Apps** - Speculative solution to unknown problems
+
+### **What We Actually Know:**
+
+1. **DEPLOYMENT_ARCHITECTURE.md works** - Carefully designed, trust-minimized
+2. **People will want claim sites** - Basic technical requirement
+3. **Monitoring enables automation** - Obvious operational need
+4. **Hosted sites have value** - Clear business case
+
+### **What We Don't Know Yet:**
+
+1. **How verification actually works in practice**
+2. **What UI/UX patterns users want**
+3. **What customization is actually needed**
+4. **What developer workflows look like**
+5. **What auditor workflows look like**
+
+### **Honest Next Steps:**
+
+1. **Implement deployment architecture** (we know this works)
+2. **Build basic monitoring and automation** (clear operational need)
+3. **Research actual user workflows** before building more features
+4. **Validate problems before building solutions**
