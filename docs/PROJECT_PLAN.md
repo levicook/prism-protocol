@@ -1,936 +1,357 @@
-# Prism Protocol: Project Plan & Checklist
+# Prism Protocol: Project Plan v2
 
-## 1. Core Project Goal
+**Vision**: Trust-minimized token distribution with cryptographic verification at every step.
 
-To enable efficient, scalable, and verifiable token distribution on Solana, minimizing write contention and optimizing on-chain resources. (See `README.md` for full details).
+**Strategic Foundation**: Based on validated [DEPLOYMENT_ARCHITECTURE.md](./DEPLOYMENT_ARCHITECTURE.md) - IPFS-first, registration-tracked, cryptographically verified deployment pipeline.
 
-## 🎯 **STRATEGIC PRIORITIES & USER EXPERIENCE ARCHITECTURE**
+## 🎯 Executive Summary
 
-### **Current Status: Strong Foundations, Need User-Focused Strategy**
+### **What We Have Built (Current v0 System)**
 
-After one week of development, we've built incredibly solid technical foundations:
+**✅ Solid Foundation:**
+- Complete CLI with 10 functional commands
+- Infrastructure crates: `prism-protocol-db`, `prism-protocol-client`, `prism-protocol-csvs`
+- End-to-end claiming works (CSV → compile → deploy → claim)
+- Precise decimal math throughout
+- Comprehensive test coverage
 
-- ✅ **Financial Safety**: Precise decimal math eliminates funding errors
-- ✅ **Infrastructure**: Clean abstractions, comprehensive testing, production-ready CLI
-- ✅ **Protocol Design**: Campaign fingerprints, merkle proofs, vault distribution
+**⚠️ Current Limitations:**
+- **Direct deployment pattern** (missing IPFS + activation controls)
+- **No trust verification** (can't independently verify deployments)
+- **Mixed abstractions** (commands use both new infrastructure and raw RPC)
+- **No automated site generation** (manual claim process only)
 
-**Critical Gap**: We've optimized for developers, not end users. Need clear user experience strategy.
+### **Strategic Target (Validated v1 Architecture)**
 
-### **User Experience Priority Ranking**
-
-**Primary Users (95% of usage):**
-
-1. **dApp Users** - Campaign deployers uploading CSVs, claimants connecting wallets
-2. **CLI Users** - Technical campaign deployers comfortable with command-line tools
-
-**Secondary Users (5% of usage):** 3. **SDK Integrators** - Developers building custom dApps/services 4. **API Consumers** - Programmatic access for data/automation
-
-### **v0 vs v1 Performance Strategy**
-
-**Current v0 (Proof of Concept):**
-
-- ✅ Full merkle proofs (~32 bytes × tree depth)
-- ✅ Individual transactions per operation
-- ⚠️ **Performance claims unvalidated** - need concrete measurements
-
-**Planned v1 (Production Optimization):**
-
-- 🎯 **Trunk optimization**: Store intermediate tree levels on cohorts → shorter proofs
-- 🎯 **CU optimization**: Measured compute unit consumption with accurate cost estimation
-- 🎯 **Batch operations**: Transaction packing for deployment efficiency
-- 🎯 **Priority fee strategy**: Optimal fee calculation for reliable execution
-
-### **Performance Validation Requirements**
-
-**Critical Measurements Needed:**
-
-- **CU Consumption**: Exact compute units per instruction (claim, deploy, etc.)
-- **Transaction Sizes**: Bytes consumed under various scenarios (1K vs 100K claimants)
-- **Write Contention**: Actual concurrent claim performance testing
-- **Proof Sizes**: Current vs optimized merkle proof bandwidth requirements
-- **On-chain Storage**: Account rent costs at scale (campaigns, cohorts, receipts)
-
-**Validation Methodology:**
-
-- Mollusk SVM benchmarking with realistic datasets
-- Devnet stress testing with concurrent users
-- Cost modeling for different campaign sizes
-- Comparison with naive airdrop approaches
-
-### **User Experience Architecture (Critical Path)**
-
-**Campaign Deployer Journey:**
+**🎯 Trust-Minimized Deployment Pipeline:**
 
 ```
-CSV Upload → dApp Validation → Budget Calculation → Deploy → Monitor
-     ↓              ↓               ↓              ↓         ↓
-   (or CLI)    Fee Estimation   Vault Funding    Status   Claims
+CSV Files (Immutable) →
+  IPFS Publishing (Content-Addressed) →
+    Campaign Compilation (Deterministic) →
+      On-Chain Deployment (Registration Pattern) →
+        Activation Controls (Comprehensive Validation) →
+          Automated Site Generation (Zero-Touch)
 ```
 
-**Claimant Journey:**
+**🔑 Key Benefits:**
+- **Campaign creators**: Can verify deployed data matches their CSV
+- **Token claimants**: Can independently verify eligibility amounts  
+- **Auditors**: Can reproduce entire campaign locally from CSV files
+- **Platform operators**: Zero-trust architecture with cryptographic verification
 
+## 📊 Current System Analysis
+
+### **CLI Commands (All Functional)**
+
+| Command | Status | Uses New Infrastructure | Raw RPC Usage |
+|---------|--------|------------------------|---------------|
+| `generate-fixtures` | ✅ Working | Partial | Yes |
+| `compile-campaign` | ✅ Working | Yes | Minimal |
+| `deploy-campaign` | ✅ Working | Partial | Yes |
+| `campaign-status` | ✅ Working | Partial | Yes |
+| `claim-tokens` | ✅ Working | Partial | Yes |
+| `check-eligibility` | ✅ Working | Yes | Minimal |
+| `query-claims` | ✅ Working | Yes | Minimal |
+| `pause-campaign` | ✅ Working | Partial | Yes |
+| `resume-campaign` | ✅ Working | Partial | Yes |
+| `reclaim-tokens` | ✅ Working | Partial | Yes |
+
+**Summary**: Hybrid state - all commands work, infrastructure exists, but modernization incomplete.
+
+### **Infrastructure Assessment**
+
+**✅ Completed Infrastructure:**
+- `prism-protocol-db`: Unified database interface (eliminates scattered connections)
+- `prism-protocol-client`: RPC abstraction layer (reduces but doesn't eliminate raw usage)
+- `prism-protocol-csvs`: Authoritative CSV schemas with `Decimal` precision
+- `prism-protocol-sdk`: Address finders and instruction builders
+- `prism-protocol-merkle`: Off-chain tree construction and proof generation
+
+**⚠️ Architecture Gaps vs DEPLOYMENT_ARCHITECTURE.md:**
+- **No IPFS integration** in deploy command
+- **No activation controls** (campaigns activate immediately on deploy)
+- **No registration pattern** (direct deployment without readiness validation)
+- **No automated site generation** (no event monitoring or IPFS fetching)
+
+## 🚀 Strategic Implementation Plan
+
+### **Phase 1: Core v1 Architecture (2-3 weeks)**
+
+**Goal**: Implement the validated DEPLOYMENT_ARCHITECTURE.md patterns
+
+#### **1.1 Enhanced Deploy Command (Week 1)**
+
+**Current**: Direct deployment (v0 pattern)
+```bash
+prism-protocol-cli deploy-campaign --campaign-db-in campaign.db --admin-keypair admin.json
+# → Deploys directly to Solana, activates immediately
 ```
-Connect Wallet → Check Eligibility → Claim Tokens → View History
-      ↓               ↓                  ↓             ↓
-   (instant)    (database query)   (merkle proof)  (receipts)
+
+**Target**: IPFS-first atomic deployment (v1 pattern)
+```bash
+prism-protocol-cli deploy-campaign --campaign-db-in campaign.db --admin-keypair admin.json --go-live-date "2024-03-15T10:00:00Z"
+# → 1. Publish CSVs to IPFS, 2. Deploy to Solana with IPFS hashes, 3. Remains INACTIVE
 ```
 
-**Missing Components:**
-
-- 🚨 **dApp Frontend**: Primary user interface (most critical gap)
-- 🚨 **CSV Upload Interface**: Campaign creation without CLI knowledge
-- 🚨 **Claim Status Dashboard**: User-friendly claim tracking
-- ⚠️ **dApp Template**: Next.js template for forks (mono-repo issue)
-
-### **Immediate Strategic Priorities**
-
-1. **Performance Validation Sprint** (1 week)
-
-   - Measure actual CU consumption, transaction sizes, write contention
-   - Validate or refine performance claims with concrete data
-   - Document optimization opportunities for v1
-
-2. **User Experience Definition** (1 week)
-
-   - Design primary user journeys (campaign deployer + claimant)
-   - Define dApp requirements and architecture
-   - Resolve mono-repo vs template strategy
-
-3. **v1 Optimization Planning** (ongoing)
-   - Trunk optimization specification for shorter proofs
-   - CU optimization roadmap with priority fee strategy
-   - Batch operation enhancement beyond current transaction packing
-
-## 2. Core Components - Implementation Checklist
-
-### On-Chain Program (`programs/prism-protocol/src/`)
-
-- **State Accounts (`state.rs`):**
-  - [x] `CampaignV0` struct defined ✅
-  - [x] `CohortV0` struct defined ✅
-  - [x] `ClaimReceiptV0` struct defined ✅
-  - [ ] Future enhanced cohort versions (e.g., with optimizations) - _Future Design_
-- **Instructions (`instructions/` & `lib.rs`):**
-  - [x] `handle_initialize_campaign_v0` ✅
-  - [x] `handle_initialize_cohort_v0` ✅
-  - [x] `handle_create_vault_v0` ✅
-  - [x] `handle_claim_tokens_v0` ✅
-  - [x] `handle_set_campaign_active_status` ✅
-  - [x] `handle_reclaim_tokens` ✅
-  - [ ] Future enhanced instruction versions - _Future Design_
-- **Merkle Logic:**
-  - [x] `ClaimLeaf` struct and `hash_claim_leaf` function (`merkle_leaf.rs`) ✅
-  - [x] `verify_merkle_proof` function (in `claim_tokens_v0.rs`) ✅
-  - [x] Domain separation with 0x00/0x01 prefixes for security ✅
-- **Program Entrypoint (`lib.rs`):**
-  - [x] Declare program ID ✅
-  - [x] Define `initialize_campaign_v0` public instruction ✅
-  - [x] Define `initialize_cohort_v0` public instruction ✅
-  - [x] Define `create_vault_v0` public instruction ✅
-  - [x] Define `claim_tokens_v0` public instruction ✅
-  - [x] Define `set_campaign_active_status` public instruction ✅
-  - [x] Define `reclaim_tokens` public instruction ✅
-
-### Crate Structure (Completed Refactoring)
-
-- **Core Program (`prism-protocol`):**
-  - [x] Minimal on-chain program with core functionality ✅
-  - [x] Clean separation from off-chain utilities ✅
-- **SDK Crate (`prism-protocol-sdk`):**
-  - [x] Address finders for PDA derivation ✅
-  - [x] Instruction builders for transaction construction ✅
-  - [x] Client-side utilities ✅
-- **Merkle Tree Crate (`prism-protocol-merkle`):**
-  - [x] Off-chain merkle tree construction ✅
-  - [x] Proof generation and verification utilities ✅
-  - [x] Consistent hashing for vault assignment ✅
-  - [x] Custom hasher with domain separation ✅
-- **Testing Utilities (`prism-protocol-testing`):**
-  - [x] Shared test fixtures and utilities ✅
-  - [x] Mollusk SVM integration helpers ✅
-
-### Off-Chain CLI (`apps/prism-protocol-cli`)
-
-- **Status:** _Phase 0, 1, 2 Completed, Phase 3 Partially Implemented_
-- **Priority:** High - Core functionality complete, claiming ecosystem and architecture improvements next
-
-#### Planned CLI Features & Implementation Phases
-
-**Phase 0: Enhanced Fixture Generation (For Testing) ✅ COMPLETED**
-
-- **Purpose:** Generate organized test datasets with real keypairs for development and testing
-- **Commands:**
-  - `cargo run -p prism-protocol-cli -- generate-fixtures --campaign-name <NAME> [options]`
-  - Organized directory structure: `test-artifacts/fixtures/{campaign-slug}/`
-  - Real Solana keypair generation for all claimants (no more dummy pubkeys)
-  - Individual keypair files with complete metadata for each claimant
-  - CSV output format (campaign.csv and cohorts.csv)
-  - Multi-cohort fixture generation with configurable cohort counts
-- **Key Features:**
-  - ✅ Organized campaign-specific directory structure
-  - ✅ Real keypair generation for authentic testing
-  - ✅ Individual keypair file storage with metadata
-  - ✅ Overwrite protection to prevent data loss
-  - ✅ Multiple distribution patterns (uniform, realistic, exponential)
-  - ✅ Progress tracking for large datasets
-  - ✅ Configurable cohort and entitlement ranges
-  - ✅ Reproducible benchmarking via fixture archiving (replaces deterministic seeds)
-
-**Phase 1: Core Infrastructure ✅ **COMPLETED\*\*
+**Implementation Tasks:**
+- [ ] Add IPFS client integration (`kubo` or `ipfs-http-client`)
+- [ ] Enhance on-chain `CampaignV0` with IPFS hash fields and activation controls
+- [ ] Modify deploy command to publish CSVs → deploy with hashes → update campaign.db
+- [ ] Add go-live date parameter and embed in on-chain campaign
+- [ ] Keep campaigns inactive by default after deployment
+
+#### **1.2 Registration Pattern Implementation (Week 1-2)**
+
+**Current**: Direct vault creation and funding
+**Target**: Init/activate pattern with registration arrays
+
+**New On-Chain Instructions:**
+```rust
+pub fn init_campaign_v1(ctx: Context<InitCampaignV1>, expected_cohort_count: u8, go_live_timestamp: i64) -> Result<()>
+pub fn init_cohort_v1(ctx: Context<InitCohortV1>, expected_vault_count: u8) -> Result<()>
+pub fn activate_vault_v1(ctx: Context<ActivateVaultV1>, vault_index: u8) -> Result<()>
+pub fn activate_cohort_v1(ctx: Context<ActivateCohortV1>, cohort_index: u8) -> Result<()>
+pub fn activate_campaign_v1(ctx: Context<ActivateCampaignV1>, final_db_ipfs_hash: [u8; 32]) -> Result<()>
+```
+
+**Enhanced State Structures:**
+```rust
+#[account]
+pub struct CampaignV1 {
+    // Existing fields
+    pub admin: Pubkey,
+    pub mint: Pubkey,
+    pub fingerprint: [u8; 32],
+    
+    // IPFS integration
+    pub campaign_csv_ipfs_hash: [u8; 32],
+    pub cohorts_csv_ipfs_hash: [u8; 32],  
+    pub campaign_db_ipfs_hash: [u8; 32],  // Set during activation
+    
+    // Registration pattern
+    #[max_len(MAX_COHORTS_PER_CAMPAIGN)]
+    pub cohorts: Vec<Pubkey>,  // Cohorts register here
+    
+    // Activation controls
+    pub is_active: bool,
+    pub go_live_timestamp: i64,
+    pub bump: u8,
+}
+```
+
+#### **1.3 Activation Command (Week 2)**
+
+**New Command**: Campaign activation with comprehensive validation
+```bash
+prism-protocol-cli activate-campaign --campaign-db-in campaign.db --admin-keypair admin.json
+# → 1. Validate all cohorts/vaults ready, 2. Publish final DB to IPFS, 3. Activate campaign
+```
+
+**Activation Requirements:**
+- All cohorts deployed and registered with campaign
+- All vaults funded with correct token amounts
+- Final campaign.db published to IPFS
+- Admin signature required
+- Campaign not already active
+
+#### **1.4 Enhanced Verification (Week 2-3)**
+
+**Current**: Basic on-chain status checking
+**Target**: Cryptographic verification chain
+
+```bash
+prism-protocol-cli verify-campaign \
+  --campaign-csv-in customers.csv \
+  --cohorts-csv-in cohorts.csv \
+  --campaign-db-in campaign.db \
+  --check-ipfs-integrity
+```
+
+**Verification Steps:**
+1. Recompile CSVs → verify campaign.db fingerprint matches
+2. Check IPFS hashes in campaign.db → verify CSVs published correctly
+3. Check on-chain merkle roots → verify match campaign.db
+4. Validate activation status and funding completeness
+
+### **Phase 2: Automation Infrastructure (Week 3-4)**
+
+**Goal**: Enable zero-touch site generation from campaign activations
+
+#### **2.1 Event Monitoring (Week 3)**
+
+**New Command**: Monitor campaign activations
+```bash
+prism-protocol-cli monitor-campaigns \
+  --program-id <PRISM_PROGRAM_ID> \
+  --auto-generate-sites \
+  --output-dir ./generated-sites/
+```
+
+**Architecture:**
+- Monitor `CampaignActivated` events containing IPFS hashes
+- Extract campaign data from IPFS using content hashes
+- Generate static claim sites with embedded campaign data
+- Deploy to CDN or static hosting automatically
+
+#### **2.2 Static Site Generation (Week 4)**
 
-**Target: Week 1-2 of Sprint**
+**New Command**: Generate claim sites from campaign data
+```bash
+prism-protocol-cli generate-claim-site \
+  --campaign-db-in campaign.db \
+  --template minimal \
+  --output ./claim-site
+```
+
+**Templates:**
+- **Minimal**: Basic claim interface with wallet connection
+- **Modern**: Styled UI with progress indicators and transaction status
+- **Corporate**: Customizable branding and company integration
 
-### Campaign Management ✅
+### **Phase 3: Client SDK (Week 4-5)**
 
-- [x] Campaign compilation from CSV sources → SQLite database
-- [x] Campaign deployment with comprehensive on-chain state management
-- [x] Campaign status querying and verification
-- [x] Automated vault creation and funding
-- [x] Campaign activation controls
+**Goal**: Enable dApp developers to integrate claiming functionality
 
-### Token Distribution ✅
+#### **3.1 Basic Client SDK**
 
-- [x] **END-TO-END TOKEN CLAIMING WORKING** 🎉
-- [x] Merkle proof verification and validation
-- [x] Multi-cohort support with deterministic vault assignment
-- [x] Comprehensive claim validation and double-spend protection
-- [x] Automatic token account creation for claimants
-- [x] **CRITICAL BUG FIXED**: Vault address derivation now uses correct campaign fingerprint
+**Package**: `@prism-protocol/client-sdk` (TypeScript/JavaScript)
 
-### Test Infrastructure ✅
+**Core Functionality:**
+```typescript
+// Wallet connection and eligibility checking
+const eligibility = await prismClient.checkEligibility(walletAddress, campaignDb);
 
-- [x] Enhanced fixture generation with real keypairs and organized directory structure
-- [x] Deterministic address derivation across compilation and deployment
-- [x] Campaign database schema with complete merkle tree integration
-- [x] **Clean fixture organization**: `test-artifacts/fixtures/{campaign-slug}/`
+// Transaction building for claims
+const claimTx = await prismClient.buildClaimTransaction(walletAddress, cohortProof);
 
-**Status: ✅ PHASE 1 COMPLETE - Core claiming functionality fully operational**
+// Bundle size: <50KB gzipped (essential for web usage)
+```
 
-**Phase 2: Enhanced Command Interface ✅ **COMPLETED\*\*
+**Key Features:**
+- Merkle proof validation (client-side verification)
+- Transaction building for claim instructions
+- Wallet adapter integration (Phantom, Solflare, etc.)
+- TypeScript definitions for type safety
 
-**Target: Week 2-3 of Sprint**
+## 🔧 Technical Implementation Details
 
-### CLI Command Suite ✅
+### **IPFS Integration Strategy**
 
-- [x] Enhanced `generate-fixtures` with real keypair generation
-- [x] `compile-campaign` with corrected address derivation logic
-- [x] `deploy-campaign` with comprehensive deployment verification
-- [x] `campaign-status` with accurate on-chain state reporting
-- [x] `claim-tokens` with **working end-to-end token claiming**
+**Approach**: Use `kubo` (IPFS HTTP API) for reliable, production-ready IPFS operations
 
-### Error Handling & Validation ✅
+**Content Publishing Pattern:**
+```rust
+// Early publishing (safe, immutable inputs)
+let campaign_csv_hash = ipfs_client.publish_file("customers.csv").await?;
+let cohorts_csv_hash = ipfs_client.publish_file("cohorts.csv").await?;
 
-- [x] Comprehensive input validation and user-friendly error messages
-- [x] Pre-flight checks for SOL balances, token accounts, and RPC connectivity
-- [x] Proper error handling for insufficient funds and network issues
-- [x] **Critical bug detection and resolution** for address derivation mismatches
+// Store hashes in campaign.db immediately
+db.store_ipfs_hash("campaign_csv_ipfs_hash", &campaign_csv_hash)?;
+db.store_ipfs_hash("cohorts_csv_ipfs_hash", &cohorts_csv_hash)?;
 
-**Status: ✅ PHASE 2 COMPLETE - All core CLI commands operational**
+// Late publishing (when deployment complete)
+let final_db_hash = ipfs_client.publish_file("campaign.db").await?;
+// Provided during activate_campaign instruction
+```
 
-**Phase 3: Claiming Ecosystem Foundation 🚧 PARTIALLY IMPLEMENTED**
+### **Database Schema Enhancements**
 
-- **Purpose:** Build complete claiming infrastructure and query tools
-- **Strategic Approach:** Database-first with blockchain verification for comprehensive claim management
+**New IPFS Tracking Table:**
+```sql
+CREATE TABLE ipfs_hashes (
+    key TEXT PRIMARY KEY,
+    hash TEXT NOT NULL,
+    published_at INTEGER NOT NULL
+);
 
-- **✅ COMPLETED: Infrastructure Foundation (MERGED AND VALIDATED!)**
+-- Example entries:
+-- ('campaign_csv_ipfs_hash', 'QmCustomersHash123...', timestamp)
+-- ('cohorts_csv_ipfs_hash', 'QmCohortsHash456...', timestamp)  
+-- ('campaign_db_ipfs_hash', 'QmFinalDBHash789...', timestamp)
+```
 
-  1. **CSV Schema Formalization** ✅ COMPLETED ✨
+**Enhanced Campaign Info:**
+```sql
+ALTER TABLE campaign ADD COLUMN go_live_timestamp INTEGER;
+ALTER TABLE campaign ADD COLUMN is_active BOOLEAN DEFAULT FALSE;
+```
 
-     - ✅ Created `prism-protocol-csvs` crate with authoritative schemas
-     - ✅ Cross-CSV validation (`validate_csv_consistency()`)
-     - ✅ Type-safe serialization/deserialization with proper error handling
-     - ✅ 5/5 tests passing with version management
-     - **Impact**: API server foundation ready for CSV uploads
+### **Error Handling & Recovery**
 
-  2. **Database Interface Implementation** ✅ COMPLETED ✨
+**Deployment Failure Recovery:**
+- IPFS publishing failures → retry with exponential backoff
+- Partial on-chain deployment → resume from last successful step
+- Activation validation failures → clear error messages with specific remediation
 
-     - ✅ Complete `prism-protocol-db` crate with `CampaignDatabase` interface
-     - ✅ Schema management, connection handling, all CRUD operations
-     - ✅ 5/5 tests passing including error handling
-     - **Impact**: Eliminated scattered `Connection::open()` calls - ready for API server
+**Verification Failures:**
+- IPFS content mismatch → detailed diff output showing discrepancies
+- On-chain state inconsistency → specific account addresses and expected vs actual values
+- CSV recompilation mismatch → highlight which merkle roots don't match
 
-  3. **Client Infrastructure** ✅ COMPLETED ✨
-     - ✅ Complete `prism-protocol-client` crate with `PrismProtocolClient`
-     - ✅ Unified RPC operations, SPL token management, transaction simulation
-     - ✅ Clean abstractions for all protocol operations
-     - **Impact**: Ready to eliminate scattered RPC client creation
+## 📋 Success Metrics
 
-- **✅ COMPLETED: CLI Modernization (Phase 3B)**
+### **Phase 1 Success Criteria**
 
-  **Status**: ✅ ALL CLI COMMANDS MODERNIZED - Zero scattered RPC client calls remaining
+**Functional:**
+- [ ] Deploy command publishes CSVs to IPFS before on-chain deployment
+- [ ] Campaigns remain inactive until explicitly activated
+- [ ] Activation command validates all components ready before enabling claims
+- [ ] Verify command cryptographically validates entire deployment chain
 
-  **✅ Modernized Commands:**
+**Performance:**
+- [ ] IPFS publishing completes in <30 seconds for typical campaigns (10K claimants)
+- [ ] Activation validation runs in <10 seconds
+- [ ] Verification against CSVs completes in <5 seconds
 
-  - ✅ `check_eligibility.rs` - Using `CampaignDatabase` + `PrismProtocolClient`
-  - ✅ `deploy_campaign.rs` - Using `CampaignDatabase` + `PrismProtocolClient`
-  - ✅ `campaign_status.rs` - Using `CampaignDatabase` + `PrismProtocolClient`
-  - ✅ `query_claims.rs` - Using `CampaignDatabase` + `PrismProtocolClient`
-  - ✅ `claim_tokens.rs` - Using `CampaignDatabase` + `PrismProtocolClient`
+### **Phase 2 Success Criteria**
 
-  **🎉 Technical Debt Elimination Results:**
+**Automation:**
+- [ ] Event monitoring detects campaign activations within 30 seconds
+- [ ] Static site generation completes in <2 minutes
+- [ ] Generated sites load in <3 seconds globally
 
-  - ✅ **Zero `RpcClient::new_with_commitment()` calls** in CLI commands
-  - ✅ **Zero scattered database connections** - all using `CampaignDatabase`
-  - ✅ **All commands using unified `PrismProtocolClient`** for blockchain operations
-  - ✅ **Consistent error handling patterns** across all commands
-  - ✅ **25/25 tests passing** after modernization
+### **Phase 3 Success Criteria**
 
-  **Migration Pattern Used:**
+**Developer Experience:**
+- [ ] Client SDK bundle size <50KB gzipped
+- [ ] TypeScript definitions provide complete type safety
+- [ ] Integration examples work with major wallet providers
 
-  ```rust
-  // BEFORE (legacy):
-  let rpc_client = RpcClient::new_with_commitment(rpc_url, CommitmentConfig::confirmed());
+## 🚨 Risk Assessment
 
-  // AFTER (modernized):
-  let client = PrismProtocolClient::new(rpc_url)
-      .map_err(|e| CliError::InvalidConfig(format!("Failed to create RPC client: {}", e)))?;
-  ```
+### **High-Risk Dependencies**
 
-  **Validated Infrastructure**: All commands now use proper abstractions, ready for API server
+**IPFS Reliability:**
+- **Risk**: IPFS network unavailability or content pinning failures
+- **Mitigation**: Use multiple IPFS gateways, implement retry logic, consider backup pinning services
 
-- **📋 PLANNED: API Server Implementation (Phase 3C)**
+**On-Chain Program Updates:**
+- **Risk**: Breaking changes to existing deployed campaigns
+- **Mitigation**: Version program instructions (v0 vs v1), maintain backward compatibility
 
-  **Status**: NOT STARTED - infrastructure foundation now ready
+### **Medium-Risk Factors**
 
-  **Key Components:**
+**Complexity Management:**
+- **Risk**: Over-engineering activation patterns
+- **Mitigation**: Start with simple registration arrays, add complexity only as needed
 
-  - ❌ HTTP API Server (`prism-protocol-cli serve-api`) - Core proof serving
-  - ❌ REST endpoints for eligibility and proof lookup
-  - ❌ Enhanced CLI claim integration using API server
+**User Experience:**
+- **Risk**: Multi-step deployment process confuses users
+- **Mitigation**: Clear CLI output, comprehensive error messages, detailed documentation
 
-  **Architecture Ready:**
+### **Low-Risk Assumptions**
 
-  - ✅ Database pooling via `CampaignDatabase`
-  - ✅ RPC operations via `PrismProtocolClient`
-  - ✅ CSV schema validation via `prism-protocol-csvs`
+**Infrastructure Maturity:**
+- Database and RPC abstractions are proven and stable
+- CSV compilation and merkle tree generation are well-tested
+- Deployment transaction building works reliably
 
-### **📋 CURRENT IMPLEMENTATION IMPROVEMENTS NEEDED**
+## 🎯 Success Definition
 
-**Purpose:** Critical technical debt and architectural improvements for the existing v0 system
+**Phase 1 Complete**: Prism Protocol becomes the first trust-minimized token distribution platform where:
+- Campaign creators can cryptographically verify their deployed campaigns match their original CSV data
+- Token claimants can independently validate their eligibility without trusting any platform
+- Auditors can reproduce entire campaigns locally and verify all deployment targets serve consistent data
 
-- **🚀 TRANSACTION ARCHITECTURE OVERHAUL**
-
-  **Current Problem**: Deploy command creates 50+ individual transactions with scattered transaction building/sending logic:
-
-  - 1 campaign initialization
-  - 5+ cohort initializations
-  - 20+ vault creations
-  - 20+ vault funding operations
-  - 1 campaign activation
-  - **Total: ~60 seconds deployment time, ~$1.25 in fees**
-
-  **Required Components**:
-
-  1. **Deploy Planner Abstraction** 📋 NEW
-
-     - **Purpose**: Determine what instructions need to be built based on DB signatures and on-chain state
-     - **Inputs**: `CampaignDatabase`, `PrismProtocolClient`, campaign fingerprint
-     - **Logic**:
-       - Check DB for existing deployment signatures
-       - Cross-reference with actual on-chain account existence (surgical `get_account` calls)
-       - Generate instruction plan for missing/incomplete deployments
-       - Support for partial deployment recovery (handle failed mid-deployment scenarios)
-     - **Outputs**: `Vec<DeploymentStep>` with instruction builders and dependencies
-     - **Benefits**: Idempotent deployments, clear deployment state visibility
-
-  2. **Generic Instruction/Transaction Packer** 📋 CONFIRMED IN PLAN
-
-     - **Purpose**: Pack instructions into optimally-sized transactions
-     - **Inputs**: `Vec<Instruction>`, `&Keypair` (admin signer), transaction size limits
-     - **Logic**:
-       - Respect instruction dependencies and execution order
-       - Pack by transaction size limits (not arbitrary batching)
-       - Handle cross-instruction account dependencies
-       - Generate multiple transactions when size limits exceeded
-     - **Outputs**: `Vec<Transaction>` ready for transmission
-     - **Generic Usage**: Useful for deploy, claim batching, any multi-instruction operations
-
-  3. **Unified Transaction Retry Utility** 📋 NEW
-
-     - **Purpose**: Single retry mechanism with proper re-signing
-     - **Inputs**: `Vec<Transaction>`, `&Keypair`, `&RpcClient`, retry config
-     - **Logic**:
-       - Fresh blockhash fetching for each retry attempt
-       - Re-signing with admin keypair (critical for retry success)
-       - Exponential backoff with jitter
-       - Transaction confirmation waiting
-       - Detailed error logging with explorer URLs
-     - **Benefits**: Consistent retry behavior, proper error handling
-
-  4. **Database Deployment Coordinator** 📋 NEW
-     - **Purpose**: Track deployment signatures and state in DB
-     - **Operations**:
-       - `mark_campaign_deployed(signature)`
-       - `mark_cohort_deployed(cohort_name, signature)`
-       - `mark_vault_created(cohort, vault_index, signature)`
-       - `mark_vault_funded(cohort, vault_index, signature, amount)`
-       - `mark_campaign_activated(signature)`
-     - **State Queries**: `get_deployment_status()` for resume/retry scenarios
-     - **Benefits**: Full deployment auditability, recovery from partial failures
-
-  **Expected Impact**:
-
-  - **50+ transactions → 3-5 transactions** (intelligent batching)
-  - **~60 seconds → ~10 seconds** deployment time
-  - **~$1.25 → ~$0.15** in transaction fees
-  - **Robust failure recovery** with clear deployment state tracking
-
-- **🔧 CRITICAL CLIENT IMPROVEMENTS (Anemic Client Issues)**
-
-  **Current Problem**: PrismProtocolClient is anemic - CLI commands resort to raw RPC client for many operations
-
-  **Specific Raw RPC Usage Identified**:
-
-  - **Blockhash Operations**: `rpc_client.get_latest_blockhash()` (used 8+ times in deploy_campaign.rs)
-  - **Transaction Sending**: `rpc_client.send_and_confirm_transaction_with_spinner_and_config()` (used 6+ times)
-  - **Account Existence Checks**: `rpc_client.get_account(vault_address).is_ok()` for vault detection
-  - **Balance Queries**: `rpc_client.get_balance(&admin_pubkey)` for SOL balance checking
-  - **Connection Testing**: `rpc_client.get_slot()` for RPC stability verification
-  - **Admin Token Balance**: Manual ATA address derivation + raw token account fetching
-
-  **Required Client Enhancements**:
-
-  ```rust
-  impl PrismProtocolClient {
-      // Transaction Management
-      pub fn build_and_send_transaction(&self, instructions: Vec<Instruction>, signers: &[&dyn Signer]) -> ClientResult<Signature>
-      pub fn simulate_transaction(&self, instructions: &[Instruction]) -> ClientResult<SimulationResult>
-      pub fn send_transaction_with_retry(&self, tx: Transaction, max_retries: u8) -> ClientResult<Signature>
-
-      // Account Existence & State Checking
-      pub fn account_exists(&self, address: &Pubkey) -> ClientResult<bool>
-      pub fn get_sol_balance(&self, address: &Pubkey) -> ClientResult<u64>
-      pub fn get_token_balance(&self, owner: &Pubkey, mint: &Pubkey) -> ClientResult<u64>
-
-      // Campaign State Verification
-      pub fn verify_campaign_ready_for_activation(&self, fingerprint: &[u8; 32]) -> ClientResult<ActivationStatus>
-      pub fn get_campaign_deployment_status(&self, fingerprint: &[u8; 32]) -> ClientResult<DeploymentStatus>
-
-      // Batch Operations
-      pub fn get_multiple_accounts(&self, addresses: &[Pubkey]) -> ClientResult<Vec<Option<Account>>>
-      pub fn check_vault_funding_status(&self, cohort: &Pubkey, vault_count: u8) -> ClientResult<Vec<VaultStatus>>
-  }
-  ```
-
-  **Benefits**:
-
-  - **Eliminate all raw RPC usage** in CLI commands
-  - **Consistent error handling** across all blockchain operations
-  - **Built-in retry logic** with proper re-signing
-  - **Campaign-aware operations** that understand protocol semantics
-  - **Batch optimizations** for multi-account queries
-
-- **🔄 CAMPAIGN BUDGET & SAFE MATH STATUS** 📋 IN PROGRESS
-
-  **Current Implementation Status**:
-
-  - ✅ **Decimal Math Foundation**: `rust_decimal::Decimal` integrated in fixture generator
-  - ✅ **Precise CSV Generation**: Percentages sum to exactly 100.0% in cohorts.csv
-  - ✅ **Budget Parsing**: CLI accepts human-readable token amounts (e.g., "1000.5")
-  - ✅ **Base Unit Conversion**: Proper multiplication by 10^decimals for mint operations
-  - ⚠️ **Partial Integration**: Only fixture generator uses `Decimal`, compile_campaign still uses approximations
-
-  **Remaining Work Required**:
-
-  1. **Complete `compile_campaign.rs` Integration** 📋 HIGH PRIORITY
-
-     ```rust
-     // CURRENT (problematic):
-     let budget_f64: f64 = budget.parse()?;
-     let budget_base_units = (budget_f64 * (10_u64.pow(mint_decimals as u32) as f64)) as u64;
-
-     // REQUIRED (precise):
-     let budget_decimal = Decimal::from_str(&budget)?;
-     let base_unit_multiplier = Decimal::from(10_u64.pow(mint_decimals as u32));
-     let budget_base_units = budget_decimal.checked_mul(base_unit_multiplier)?.to_u64()?;
-     ```
-
-  2. **Database Schema Updates** 📋 MEDIUM PRIORITY
-
-     - Store budget amounts as precise decimal strings (not floating point)
-     - Add mint decimals to campaign_info table for validation
-     - Update vault requirements calculation to use precise math
-
-  3. **Validation Layer** 📋 MEDIUM PRIORITY
-     - Verify budget × cohort percentages = expected total allocations
-     - Cross-check mint decimals between CLI input and blockchain state
-     - Add overflow protection for large token amounts
-
-  **Financial Safety Impact**:
-
-  - **Current Risk**: Floating point errors can cause 0.1% funding discrepancies
-  - **With Complete Integration**: Mathematically precise token allocations
-  - **Example**: 1M USDC campaign difference: $1,000 error vs. $0 error
-
-- **🎯 IMMEDIATE NEXT PRIORITIES**
-
-  1. **Complete Campaign Budget Integration** (1-2 days)
-
-     - Fix `compile_campaign.rs` to use `Decimal` throughout
-     - Update database schema for precise storage
-     - Add validation layer for budget consistency
-
-  2. **Transaction Architecture Implementation** (3-4 days)
-
-     - Deploy planner abstraction
-     - Generic instruction/transaction packer
-     - Unified retry utility
-     - Database deployment coordinator
-
-  3. **Enhanced PrismProtocolClient** (2-3 days)
-     - Add all missing abstractions to eliminate raw RPC usage
-     - Campaign-aware operations and state checking
-     - Batch optimization capabilities
-
-**Phase 4: Post-Infrastructure Implementation**
-
-Based on **DEPLOYMENT_ARCHITECTURE.md** (validated) and realistic next steps:
-
-#### **4.1 Deployment Architecture Implementation**
-
-**High Priority (Validated):**
-
-1. **🏗️ Enhanced Deploy Command** - Implement init/activate pattern
-
-   - **Effort**: 2-3 weeks
-   - **Challenge**: IPFS integration, registration arrays, atomic deployment
-   - **User Value**: Reliable, verifiable campaign deployment
-   - **Status**: ✅ **VALIDATED** - Detailed in DEPLOYMENT_ARCHITECTURE.md
-
-2. **📱 Basic Client SDK** - Minimal claim functionality
-   - **Effort**: 1-2 weeks
-   - **Challenge**: Bundle size, wallet integration
-   - **User Value**: Enable claim sites and dApp integration
-   - **Status**: ✅ **VALIDATED** - Clear technical need for claim transactions
-
-#### **4.2 Monitoring & Automation**
-
-**Medium Priority (Validated Need):**
-
-3. **📊 Deployment Monitoring** - Track campaign activations
-
-   - **Effort**: 1 week
-   - **Challenge**: Event monitoring, reliable IPFS hash extraction
-   - **User Value**: Automated response to campaign deployments
-   - **Status**: ✅ **VALIDATED** - Needed for automation triggers
-
-4. **🏗️ Automated Static Site Generation** - Generate claim sites from deployments
-   - **Effort**: 2-3 weeks
-   - **Challenge**: Template design, IPFS content loading
-   - **User Value**: Zero-touch claim site creation
-   - **Status**: ✅ **VALIDATED** - Clear value for hosted service
-
-#### **4.3 Everything Else**
-
-**Unvalidated/Speculative:**
-
-- ⚠️ **Verification Tools** - Need deeper auditor workflow research
-- ⚠️ **Template System** - Don't know what customization users want
-- ⚠️ **Setup Automation** - Haven't validated installation friction
-- ⚠️ **Desktop Apps** - Speculative solution to unknown problems
-
-### **What We Actually Know:**
-
-1. **DEPLOYMENT_ARCHITECTURE.md works** - Carefully designed, trust-minimized
-2. **People will want claim sites** - Basic technical requirement
-3. **Monitoring enables automation** - Obvious operational need
-4. **Hosted sites have value** - Clear business case
-
-### **What We Don't Know Yet:**
-
-1. **How verification actually works in practice**
-2. **What UI/UX patterns users want**
-3. **What customization is actually needed**
-4. **What developer workflows look like**
-5. **What auditor workflows look like**
-
-### **Honest Next Steps:**
-
-1. **Implement deployment architecture** (we know this works)
-2. **Build basic monitoring and automation** (clear operational need)
-3. **Research actual user workflows** before building more features
-4. **Validate problems before building solutions**
-
-## 5. Testing Infrastructure & Coverage Analysis
-
-### Current Test Coverage ✅
-
-**Unit Tests (`cargo test`):**
-
-- [x] Merkle tree generation and proof verification ✅
-- [x] Address derivation functions ✅
-- [x] Instruction builders ✅
-- [x] Basic CLI argument parsing ✅
-- [x] Token decimal formatting and mint account parsing ✅
-
-**CLI Integration Tests (`scripts/test-cli.sh`):**
-
-- [x] Fixture generation with various distributions ✅
-- [x] Campaign compilation and database creation ✅
-- [x] Database schema validation ✅
-- [x] Merkle tree storage and retrieval ✅
-
-**Anchor Program Tests (`anchor test`):**
-
-- [x] Campaign initialization ✅
-- [x] Cohort initialization ✅
-- [x] Vault creation ✅
-- [x] Token claiming with merkle proofs ✅
-- [x] Access control and authorization ✅
-
-**End-to-End Tests (Manual & Automated):** ✅ SIGNIFICANTLY ADVANCED
-
-- [x] Complete workflow: fixture generation → campaign compilation → deployment ✅
-- [x] Local validator setup and SPL token operations ✅
-- [x] Campaign and cohort PDA deployment with real transactions ✅
-- [x] Vault creation and funding with WSOL token transfers ✅
-- [x] Database tracking of deployment signatures ✅
-- [x] Progressive deployment status updates ✅
-- [x] **Token Decimal Safety Testing**: Verified proper WSOL (9 decimals) handling ✅
-- [x] **Idempotent Deployment Testing**: Re-running deploy command safely skips completed steps ✅
-- [x] **Secrets Management Integration**: Full encryption/decryption workflow with team keypairs ✅
-- [x] **CLI Configuration Testing**: Multi-network config generation and usage ✅
-- [x] **Eligibility Checking**: Database + blockchain verification with real deployed campaigns ✅
-- [x] **Claims Query Testing**: Blockchain-first claim history retrieval ✅
-
-### Enhanced Database Schema ✅
-
-**Vault Lifecycle Tracking:**
-
-- [x] `created_at` - timestamp when vault PDA was created on-chain ✅
-- [x] `created_by_tx` - transaction signature for vault creation ✅
-- [x] `funded_at` - timestamp when vault was funded with tokens ✅
-- [x] `funded_by_tx` - transaction signature for vault funding ✅
-- [x] Surgical database updates for each operation ✅
-
-### Critical Achievements & Bug Fixes ✅
-
-**Token Decimal Safety (CRITICAL):**
-
-- [x] **Bug Fix**: Replaced hardcoded 9-decimal assumption with proper mint account fetching ✅
-- [x] **Impact**: Prevents 1000x overfunding disasters with tokens like USDC (6 decimals) ✅
-- [x] **Implementation**: `get_mint_decimals()` and `format_token_amount()` functions ✅
-- [x] **Testing**: Verified correct behavior with WSOL (9 decimals) in production deployment ✅
-
-**Idempotent Deployment (CRITICAL):**
-
-- [x] **Smart Pre-flight Checks**: Calculate actual tokens needed vs database totals ✅
-- [x] **Safe Re-runs**: Deploy command can be run multiple times without overfunding ✅
-- [x] **Vault Balance Checking**: `fund_vault_if_needed()` only transfers difference ✅
-- [x] **Comprehensive Reporting**: Shows "Actually needed: 0 tokens" when vaults already funded ✅
-
-### Identified Testing Gaps ⚠️
-
-**Architecture & State Management:**
-
-- [ ] **Deployment State Validation** - Testing proper campaign activation prerequisites
-- [ ] **State Machine Testing** - Campaign/cohort/vault state transitions
-- [ ] **Multi-Admin Scenarios** - Testing distributed deployment coordination
-- [ ] **Error Recovery** - Testing deployment rollback and retry mechanisms
-
-**Claiming Ecosystem Gaps:**
-
-- [ ] **Enhanced Fixture Generator** - Campaign-organized directory structure with HD wallets
-- [ ] **API Server** - No proof serving infrastructure exists yet
-- [ ] **CLI Claim Command** - No `claim-tokens` command implemented yet
-- [ ] **Actual Token Claiming** - End-to-end claim execution and receipt verification
-
-**Missing End-to-End Scenarios:**
-
-- [ ] **Token claiming workflow** - Real claim transactions with proof verification
-- [ ] **Multi-user claim scenarios** - Testing concurrent claims with real keypairs
-- [ ] **Cross-network testing** - Devnet deployment and operation
-- [ ] **Large-scale testing** - Testing with realistic token amounts and user counts (100K+ claimants)
-- [ ] **Different Token Types** - Testing with USDC, other SPL tokens (decimal validation)
-
-**Performance & Scale Testing:**
-
-- [ ] **Large merkle trees** - Testing with 100K+ claimants
-- [ ] **API server performance** - Once implemented, response times with large databases
-- [ ] **Transaction batching** - Optimizing deployment transaction costs
-- [ ] **Memory usage profiling** - Ensuring efficient resource usage with large datasets
-
-### Current Status & Next Steps 🎯
-
-**✅ MAJOR STATUS UPDATE: Infrastructure Foundation Complete**
-
-**🎉 CRITICAL ACHIEVEMENT: All Infrastructure Crates Operational**
-
-- **25/25 tests passing** across all workspace crates
-- **Zero compilation errors** - clean, working foundation
-- **Proven CLI integration** - `check_eligibility` demonstrates full infrastructure usage
-- **Ready for API server** - all abstractions in place
-
-**📊 Technical Debt Elimination Status:**
-
-| Issue                | Before                                   | After                                     | Status        |
-| -------------------- | ---------------------------------------- | ----------------------------------------- | ------------- |
-| Database Connections | 19+ scattered `Connection::open()` calls | Single `CampaignDatabase` interface       | ✅ ELIMINATED |
-| RPC Client Creation  | 6+ scattered `RpcClient::new()` calls    | Single `PrismProtocolClient` interface    | ✅ ELIMINATED |
-| CSV Schema Chaos     | Loosely defined interface                | Authoritative `prism-protocol-csvs` crate | ✅ ELIMINATED |
-| SPL Token Handling   | Raw byte scanning, unsafe operations     | Clean `anchor_spl` abstractions           | ✅ ELIMINATED |
-
-**🎯 IMMEDIATE NEXT PRIORITIES (1-2 days each):**
-
-### **✅ COMPLETED: CLI Modernization + Query Claims Implementation**
-
-- ✅ **Target**: Migrate remaining 3 commands to use `PrismProtocolClient`
-- ✅ **Effort**: Completed in ~2 hours total (pattern was proven effective)
-- ✅ **Validation**: Zero scattered RPC client calls in entire codebase achieved
-- ✅ **BONUS**: Implemented fully functional `query_claims` command using existing infrastructure
-  - ✅ Uses `CampaignDatabase` + `PrismProtocolClient` for clean architecture
-  - ✅ Automatically detects keypair files vs. pubkey strings
-  - ✅ Queries all cohorts for claim receipts using `get_claim_receipt_v0()`
-  - ✅ Beautiful output with timestamps, vault assignments, and explorer links
-  - ✅ **Simple approach**: No complex `getProgramAccounts` filtering needed
-
-### **🎯 CURRENT PRIORITY: API Server Implementation**
-
-- **Target**: HTTP REST API using completed infrastructure (`serve-api` command)
-- **Effort**: 2-3 days (foundation makes this straightforward)
-- **Impact**: Complete claiming ecosystem with dApp integration ready
-- **Architecture Ready**: All infrastructure crates (`prism-protocol-db`, `prism-protocol-client`, `prism-protocol-csvs`) operational with 25/25 tests passing
-
-**🚀 PROJECT MOMENTUM: Foundation → Implementation**
-
-The hard architectural work is **COMPLETE**. Next phase is rapid implementation using proven patterns.
-
-## 6. Key Design Decisions & Implementation Notes
-
-- **✅ Campaign Fingerprint System:**
-  - Campaigns are identified by a cryptographic fingerprint derived from constituent cohort merkle roots
-  - Ensures immutability and verifiability of campaign definitions
-- **✅ Merkle Tree Security:**
-  - Domain separation using 0x00 prefix for leaves, 0x01 for internal nodes
-  - Prevents second preimage attacks and ensures proof integrity
-- **✅ Vault Assignment:**
-  - Consistent hashing distributes claimants across multiple vaults
-  - Reduces write contention while maintaining deterministic assignment
-- **✅ Modular Architecture:**
-  - Clean separation between on-chain program and off-chain utilities
-  - Reusable SDK and testing components
-
-## 7. Benchmarking Plan (using Mollusk SVM)
-
-- **Objective:** Quantitatively validate performance, scalability, and resource consumption.
-- **On-Chain Benchmarking Areas:**
-  - [ ] **`claim_tokens_v0` Performance:**
-    - CU consumption vs. proof length for various cohort sizes
-    - Transaction size analysis
-    - Maximum practical cohort size determination
-  - [ ] **Account Sizes & Rent:**
-    - Document rent costs for `CampaignV0`, `CohortV0`, `ClaimReceiptV0` PDAs
-    - Compare costs across different vault configurations
-  - [ ] **Initialization Instructions:**
-    - CU consumption for each instruction type
-    - Transaction size analysis
-- **Off-Chain Benchmarking Areas:**
-  - [ ] Merkle tree generation time for large claimant lists
-  - [ ] Proof generation time and memory usage
-  - [ ] Consistent hashing performance
-
-## 8. Critical Technical Debt & Code Quality Issues 🚨
-
-### **✅ RESOLVED: CSV Schema Definition (COMPLETED)**
-
-- **Previous Issue**: Loosely defined CSV interface between `generate-fixtures` and `compile-campaign`
-- **Solution Implemented**:
-  - ✅ Created dedicated `prism-protocol-csvs` crate with authoritative schemas
-  - ✅ Type-safe `CampaignCsvRow` and `CohortsCsvRow` definitions
-  - ✅ Cross-file validation with `validate_csv_consistency()`
-  - ✅ Version management and comprehensive test coverage
-- **Result**: API server can now safely accept CSV uploads with guaranteed consistency
-
-### **PRIORITY 1: Database Connection Management (BLOCKING API SERVER)**
-
-- **Issue**: Extremely scattered database connection handling across ALL commands
-- **Scale of Problem**:
-  - `deploy_campaign.rs`: **9 separate `Connection::open()` calls**
-  - `check_eligibility.rs`: **2 separate `Connection::open()` calls**
-  - `claim_tokens.rs`: **3 separate `Connection::open()` calls**
-  - `campaign_status.rs`: **3 separate `Connection::open()` calls**
-  - `fund_vaults.rs`: **2 separate `Connection::open()` calls**
-  - **Total: 19+ redundant database connections across codebase**
-- **Specific Problems**:
-  - Opening `Connection::open(db_path)` repeatedly within the SAME function
-  - Passing `PathBuf` instead of connections, forcing repeated opens
-  - No transaction management or connection pooling
-  - Inconsistent error handling for database operations
-  - **API server will amplify this problem 100x** with concurrent requests
-- **Solution Required**:
-
-  ```rust
-  // Create new crate: `prism-protocol-db`
-  pub struct CampaignDatabase {
-      conn: Connection,
-  }
-
-  impl CampaignDatabase {
-      pub fn open(path: &Path) -> Result<Self, DbError> { /* */ }
-      pub fn read_campaign_info(&self) -> Result<CampaignInfo, DbError> { /* */ }
-      pub fn read_cohort_data(&self) -> Result<Vec<CohortData>, DbError> { /* */ }
-      pub fn read_claimant_eligibility(&self, pubkey: &Pubkey) -> Result<Vec<EligibilityInfo>, DbError> { /* */ }
-      pub fn update_vault_funding(&mut self, /* ... */) -> Result<(), DbError> { /* */ }
-      // ... all database operations
-  }
-  ```
-
-- **Priority**: **CRITICAL** - Must complete before API server work
-
-### **PRIORITY 2: RPC Client Management (BLOCKING API SERVER)**
-
-- **Issue**: Duplicated RPC client creation and configuration across ALL commands
-- **Scale of Problem**:
-  - Every command creates `RpcClient::new_with_commitment(rpc_url, CommitmentConfig::confirmed())`
-  - No centralized configuration, error handling, or retry logic
-  - Missing abstraction for common blockchain operations
-  - **API server will need shared RPC client pool** - current approach won't scale
-- **Specific Problems**:
-  - `deploy_campaign.rs`, `check_eligibility.rs`, `claim_tokens.rs`, `fund_vaults.rs`, `campaign_status.rs`, `query_claims.rs` all duplicate identical RPC setup
-  - No connection pooling, timeouts, or retry mechanisms
-  - Raw `get_account_data()` calls scattered everywhere
-  - Missing transaction simulation and logging
-- **Solution Required**:
-
-  ```rust
-  // Create new crate: `prism-protocol-client`
-  pub struct PrismProtocolClient {
-      rpc_client: RpcClient,
-      program_id: Pubkey,
-  }
-
-  impl PrismProtocolClient {
-      pub fn new(rpc_url: String) -> Result<Self, ClientError> { /* */ }
-      pub fn get_campaign(&self, fingerprint: &[u8; 32], admin: &Pubkey) -> Result<Option<CampaignV0>, ClientError> { /* */ }
-      pub fn get_cohort(&self, campaign: &Pubkey, merkle_root: &[u8; 32]) -> Result<Option<CohortV0>, ClientError> { /* */ }
-      pub fn get_mint_info(&self, mint: &Pubkey) -> Result<MintInfo, ClientError> { /* */ }
-      pub fn get_token_account_balance(&self, address: &Pubkey) -> Result<u64, ClientError> { /* */ }
-      pub fn simulate_and_send_transaction(&self, tx: Transaction) -> Result<Signature, ClientError> { /* */ }
-      // ... all blockchain operations
-  }
-  ```
-
-- **Priority**: **CRITICAL** - Must complete before API server work
-
-### **PRIORITY 3: Sketchy SPL Token Account Handling**
-
-- **Issue**: Manual byte scanning and unsafe token account operations
-- **Specific Problems Found**:
-  - `deploy_campaign.rs:97-101`: Raw `get_account_data()` + `Mint::unpack()` for decimal fetching
-  - Hardcoded WSOL address checking: `"So11111111111111111111111111111111111111112"`
-  - No abstraction for common SPL token operations
-  - Missing proper error handling for malformed token accounts
-- **Solution Required**: Integrate into `PrismProtocolClient` with proper SPL token abstractions
-- **Priority**: **HIGH** - Needed for API server token formatting
-
-### **PRIORITY 4: Transaction Management & Observability**
-
-- **Issue**: No transaction simulation, inconsistent logging, poor debugging experience
-- **Specific Problems**:
-  - No `simulate_transaction()` calls before `send_transaction()` - failures discovered too late
-  - Transaction signatures scattered in println!() statements instead of structured logging
-  - No explorer URL generation for easy debugging
-  - Missing `--dry-run` capabilities across commands
-  - No standardized transaction building patterns
-- **Solution Required**:
-
-  ```rust
-  impl PrismProtocolClient {
-      pub fn simulate_and_send_transaction(&self, tx: Transaction, dry_run: bool) -> Result<TransactionResult, ClientError> {
-          if dry_run {
-              let sim_result = self.rpc_client.simulate_transaction(&tx)?;
-              return Ok(TransactionResult::Simulated(sim_result));
-          }
-
-          // Always simulate first in live mode
-          let sim_result = self.rpc_client.simulate_transaction(&tx)?;
-          if sim_result.value.err.is_some() {
-              return Err(ClientError::SimulationFailed(sim_result));
-          }
-
-          let signature = self.rpc_client.send_transaction(&tx)?;
-          println!("✅ Transaction: https://explorer.solana.com/tx/{}", signature);
-          Ok(TransactionResult::Executed(signature))
-      }
-  }
-  ```
-
-- **Priority**: **HIGH** - Essential for API server reliability
-
-### **PRIORITY 5: CLI Architecture Consolidation**
-
-- **Issue**: Commands doing too much, mixed concerns, copied code patterns
-- **Specific Problems**:
-  - Every command implements its own database reading logic
-  - Business logic mixed with I/O and CLI parsing
-  - Copy-pasted error handling and validation patterns
-  - No shared utilities for common operations
-- **Examples of Duplication**:
-  - Reading campaign info: `deploy_campaign.rs:383`, `check_eligibility.rs:183`, `campaign_status.rs:64`
-  - Reading cohort data: `deploy_campaign.rs:422`, `fund_vaults.rs:374`
-  - Pubkey parsing: `check_eligibility.rs:38-50`, `query_claims.rs:30-42`
-- **Solution Required**: Extract business logic into service modules, create shared utilities
-- **Priority**: **MEDIUM** - Technical debt that compounds over time
-
-### **NEW CRITICAL ISSUE: Error Handling Inconsistency**
-
-- **Issue**: Inconsistent error handling patterns across commands
-- **Problems**:
-  - Mix of `CliError::InvalidConfig()` and direct `map_err()` calls
-  - Some errors use formatted strings, others use direct error propagation
-  - Database errors sometimes wrapped, sometimes not
-  - RPC errors handled differently across commands
-- **Solution Required**: Standardize error handling patterns, better error context
-- **Priority**: **MEDIUM-HIGH** - Will cause debugging issues in production
-
-## **Updated Implementation Plan for API Server Success**
-
-### **Phase 3A: Infrastructure Cleanup (MUST COMPLETE FIRST)**
-
-**Target: Week 1 of API Server Sprint**
-
-1. **🏗️ Create `prism-protocol-db` crate**
-
-   - Encapsulate ALL database operations
-   - Connection management and transaction support
-   - Consistent error handling
-   - **Replace all 19+ `Connection::open()` calls**
-
-2. **🌐 Create `prism-protocol-client` crate**
-
-   - Unified RPC client with connection pooling
-   - Common blockchain operations (accounts, transactions, SPL tokens)
-   - Transaction simulation and logging
-   - **Replace all 6+ duplicated RPC client creations**
-
-3. **🔧 Refactor CLI commands to use new crates**
-   - Remove all direct database and RPC code
-   - Standardize error handling patterns
-   - Add `--dry-run` support across all commands
-
-### **Phase 3B: API Server Implementation**
-
-**Target: Week 2 of API Server Sprint**
-
-1. **🌐 HTTP API Server** (`prism-protocol-cli serve-api`)
-
-   - REST endpoints using shared database and client crates
-   - Connection pooling for both database and RPC
-   - Proper error handling and logging
-   - Rate limiting and security
-
-2. **🔗 Enhanced CLI Claim Integration**
-   - `claim-tokens` command that uses API server for proof lookup
-   - Use shared client for transaction handling
-
-**Estimated Effort**:
-
-- Phase 3A (Infrastructure): **3-4 days** (critical foundation)
-- Phase 3B (API Server): **2-3 days** (straightforward with good foundation)
-
-**Why This Order Matters**:
-
-- The current codebase has **19+ database connections** and **6+ RPC clients** scattered everywhere
-- API server with concurrent requests would amplify these problems exponentially
-- Clean infrastructure makes API server implementation trivial
-- Without cleanup first, API server will inherit all current technical debt and be fragile
+**This foundation enables infinite scale, zero-trust automation, and complete elimination of platform dependencies.** 
