@@ -160,7 +160,7 @@ pub mod prism_protocol {
     }
 
     // admin
-    pub fn reclaim_tokens(
+    pub fn reclaim_tokens_v0(
         ctx: Context<ReclaimTokensV0>,
         campaign_fingerprint: [u8; 32],
         cohort_merkle_root_arg: [u8; 32],

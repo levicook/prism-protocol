@@ -8,17 +8,14 @@ name = "prism_protocol_testing"
 path = "src/lib.rs"
 
 [dependencies]
+prism-protocol-merkle = { path = "../prism-protocol-merkle" }
+prism-protocol-sdk = { path = "../prism-protocol-sdk" }
+prism_protocol = { path = "../../programs/prism-protocol" }
+
 anchor-lang = { workspace = true }
 anchor-spl = { workspace = true }
 mollusk-svm = { workspace = true }
-mollusk-svm-programs-token = { workspace = true, features = [
-    "associated-token",
-    "token",
-] }
-prism_protocol = { path = "../../programs/prism-protocol", features = [
-    "no-entrypoint",
-] }
-prism-protocol-merkle = { path = "../prism-protocol-merkle" }
-prism-protocol-sdk = { path = "../prism-protocol-sdk" }
+mollusk-svm-programs-token = { workspace = true }
+solana-program = { workspace = true }
 solana-sdk = { workspace = true }
 spl-token = { workspace = true }
