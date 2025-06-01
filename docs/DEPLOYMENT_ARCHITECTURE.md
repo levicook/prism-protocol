@@ -602,6 +602,7 @@ deploy-campaign internally:
 5. **Build monitoring infrastructure**
    - Watch for CampaignV0 creation events
    - Extract IPFS hashes from on-chain data
+   - Platform should immediately pin campaign content to IPFS for reliable processing
    - Auto-generate static sites from IPFS content
 
 ## 🤔 Critical Design Questions to Resolve
