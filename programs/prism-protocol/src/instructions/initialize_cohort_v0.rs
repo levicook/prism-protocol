@@ -1,5 +1,5 @@
 use crate::error::ErrorCode;
-use crate::state::{CampaignV0, CohortV0};
+use crate::state::{CampaignStatus, CampaignV0, CohortV0};
 use crate::{CAMPAIGN_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX};
 use anchor_lang::prelude::*;
 
@@ -22,9 +22,9 @@ pub struct InitializeCohortV0<'info> {
             campaign_fingerprint.as_ref()
         ],
         bump = campaign.bump,
-        has_one = admin @ ErrorCode::Unauthorized, // Ensures the signer is the campaign admin
-        constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::ConstraintSeedsMismatch,
-        constraint = !campaign.is_active @ ErrorCode::CampaignIsActive,
+        has_one = admin @ ErrorCode::CampaignAdminMismatch, // Ensures the signer is the campaign admin
+        constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::CampaignFingerprintMismatch,
+        constraint = campaign.status == CampaignStatus::Inactive @ ErrorCode::CampaignIsActive,
     )]
     pub campaign: Account<'info, CampaignV0>,
 

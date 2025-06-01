@@ -1,5 +1,5 @@
 use crate::error::ErrorCode;
-use crate::state::{CampaignV0, CohortV0};
+use crate::state::{CampaignStatus, CampaignV0, CohortV0};
 use crate::{CAMPAIGN_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX};
 use anchor_lang::prelude::*;
 
@@ -19,8 +19,8 @@ pub struct ActivateCohortV0<'info> {
             campaign_fingerprint.as_ref()
         ],
         bump = campaign.bump,
-        has_one = admin @ ErrorCode::Unauthorized,
-        constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::ConstraintSeedsMismatch,
+        has_one = admin @ ErrorCode::CampaignAdminMismatch,
+        constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::CampaignFingerprintMismatch,
     )]
     pub campaign: Account<'info, CampaignV0>,
 
@@ -31,7 +31,7 @@ pub struct ActivateCohortV0<'info> {
             cohort_merkle_root.as_ref(),
         ],
         bump = cohort.bump,
-        constraint = cohort.campaign == campaign.key() @ ErrorCode::ConstraintSeedsMismatch,
+        constraint = cohort.campaign == campaign.key() @ ErrorCode::CohortCampaignMismatch,
         constraint = cohort.merkle_root == cohort_merkle_root @ ErrorCode::MerkleRootMismatch,
     )]
     pub cohort: Account<'info, CohortV0>,
@@ -58,7 +58,10 @@ pub fn handle_activate_cohort_v0(
     );
 
     // Validation 3: Campaign must not be active yet
-    require!(!campaign.is_active, ErrorCode::CampaignIsActive);
+    require!(
+        campaign.status == CampaignStatus::Inactive,
+        ErrorCode::CampaignIsActive
+    );
 
     // Increment campaign's activated cohort count
     campaign.activated_cohort_count = campaign

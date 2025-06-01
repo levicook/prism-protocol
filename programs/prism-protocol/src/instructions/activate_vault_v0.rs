@@ -1,6 +1,6 @@
 use crate::constants::VAULT_SEED_PREFIX;
 use crate::error::ErrorCode;
-use crate::state::{CampaignV0, CohortV0};
+use crate::state::{CampaignStatus, CampaignV0, CohortV0};
 use crate::{CAMPAIGN_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX};
 use anchor_lang::prelude::*;
 use anchor_spl::token::TokenAccount;
@@ -21,8 +21,9 @@ pub struct ActivateVaultV0<'info> {
             campaign_fingerprint.as_ref()
         ],
         bump = campaign.bump,
-        has_one = admin @ ErrorCode::Unauthorized,
-        constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::ConstraintSeedsMismatch,
+        has_one = admin @ ErrorCode::CampaignAdminMismatch,
+        constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::CampaignFingerprintMismatch,
+        constraint = campaign.status == CampaignStatus::Inactive @ ErrorCode::CampaignIsActive,
     )]
     pub campaign: Account<'info, CampaignV0>,
 
@@ -34,7 +35,7 @@ pub struct ActivateVaultV0<'info> {
             cohort_merkle_root.as_ref(),
         ],
         bump = cohort.bump,
-        constraint = cohort.campaign == campaign.key() @ ErrorCode::ConstraintSeedsMismatch,
+        constraint = cohort.campaign == campaign.key() @ ErrorCode::CohortCampaignMismatch,
         constraint = cohort.merkle_root == cohort_merkle_root @ ErrorCode::MerkleRootMismatch,
     )]
     pub cohort: Account<'info, CohortV0>,
@@ -64,7 +65,7 @@ pub fn handle_activate_vault_v0(
     // Validation 1: Vault index must be within expected range
     require!(
         vault_index < cohort.expected_vault_count,
-        ErrorCode::InvalidVaultIndex
+        ErrorCode::VaultIndexOutOfBounds
     );
 
     // Validation 2: Cannot activate more vaults than initialized

@@ -2,71 +2,73 @@ use anchor_lang::prelude::*;
 
 #[error_code]
 pub enum ErrorCode {
-    #[msg("Custom error message")]
-    CustomError,
+    // Basic validation errors
     #[msg("Invalid Merkle proof provided.")]
     InvalidMerkleProof,
-    #[msg("Tokens for this entitlement have already been claimed.")]
-    AlreadyClaimed,
-    #[msg("The assigned vault is not valid for this cohort.")]
-    InvalidAssignedVault,
-    #[msg("The campaign is not currently active.")]
-    CampaignNotActive,
-    #[msg("This cohort is not currently active.")]
-    CohortNotActive,
-    #[msg("The vault does not have enough tokens to fulfill this claim.")]
-    InsufficientVaultBalance,
-    #[msg("A calculation resulted in a numeric overflow.")]
-    NumericOverflow,
     #[msg("The provided Merkle root does not match the one stored in the cohort.")]
     MerkleRootMismatch,
-    #[msg("The claimant in the proof does not match the transaction signer.")]
-    ClaimantMismatch,
-    #[msg("The number of entitlements claimed exceeds the total available for this cohort.")]
-    EntitlementsExceeded,
-    #[msg("The number of vaults provided exceeds the maximum allowed.")]
-    MaxVaultsExceeded,
-    #[msg("String parameter is too long.")]
-    StringTooLong,
-    #[msg("Claim deadline has passed.")]
-    ClaimDeadlinePassed,
-    #[msg("Invalid authority for this action.")]
-    InvalidAuthority,
-    #[msg("Unauthorized access or mismatched authority.")]
-    Unauthorized,
-    #[msg("Seed constraint violation: provided seeds do not match expected PDA derivation.")]
-    ConstraintSeedsMismatch, // TODO this is an absolute garbage error message. Replace every usage with an error that indicates which seed is mismatched.
-    #[msg("At least one vault must be provided for a cohort.")]
-    NoVaultsProvided,
-    #[msg("The number of vaults specified exceeds the maximum allowed per cohort.")]
-    TooManyVaults,
-    #[msg("Invalid vault index: vaults must be created sequentially starting from 0.")]
-    InvalidVaultIndex,
-    #[msg("Vault at this index has already been created.")]
-    VaultAlreadyExists,
+    #[msg("A calculation resulted in a numeric overflow.")]
+    NumericOverflow,
+    #[msg("Invalid parameter: entitlements must be greater than zero.")]
+    InvalidEntitlements,
 
-    #[msg("Campaign is active.")]
+    // Authorization and access errors
+    #[msg("Token account owner mismatch: account is not owned by the expected authority.")]
+    TokenAccountOwnerMismatch,
+    #[msg("Campaign admin mismatch: signer is not the campaign administrator.")]
+    CampaignAdminMismatch,
+
+    // Specific PDA/constraint validation errors
+    #[msg("Campaign fingerprint mismatch: the provided fingerprint does not match the campaign account.")]
+    CampaignFingerprintMismatch,
+    #[msg("Cohort campaign mismatch: the cohort does not belong to the specified campaign.")]
+    CohortCampaignMismatch,
+    #[msg("Mint mismatch: the provided mint does not match the campaign's mint.")]
+    MintMismatch,
+
+    // Campaign lifecycle errors
+    #[msg("The campaign is not currently active.")]
+    CampaignNotActive,
+    #[msg("Campaign is currently active and cannot be modified.")]
     CampaignIsActive,
-
-    // Campaign activation errors
-    #[msg("Invalid IPFS hash: hash cannot be empty.")]
-    InvalidIpfsHash,
     #[msg("Campaign has already been activated.")]
     CampaignAlreadyActivated,
-    #[msg("Campaign already active.")]
-    CampaignAlreadyActive,
-    #[msg("Invalid go-live slot: must be current or future slot.")]
-    InvalidGoLiveSlot,
+    #[msg("Campaign is unstoppable: cannot pause, halt, or modify an unstoppable campaign.")]
+    CampaignIsUnstoppable,
+    #[msg("Campaign is not paused: cannot resume a campaign that is not paused.")]
+    CampaignNotPaused,
+    #[msg("Campaign is not permanently halted: can only reclaim tokens from permanently halted campaigns.")]
+    CampaignNotPermanentlyHalted,
+    #[msg("Invalid campaign status transition: the requested state change is not allowed.")]
+    InvalidStatusTransition,
+    #[msg("Go-live date not reached: claims are not allowed until the campaign's go-live slot.")]
+    GoLiveDateNotReached,
+
+    // Campaign setup/activation errors
+    #[msg("Invalid IPFS hash: hash cannot be empty.")]
+    InvalidIpfsHash,
+    #[msg("Go-live slot is in the past: must be current or future slot.")]
+    GoLiveSlotInPast,
     #[msg("No cohorts expected: campaign must expect at least one cohort.")]
     NoCohortsExpected,
     #[msg("Not all cohorts activated: active_cohort_count must equal expected_cohort_count for campaign activation.")]
     NotAllCohortsActivated,
+
+    // Cohort and vault setup errors
     #[msg("No vaults expected: cohort must expect at least one vault.")]
     NoVaultsExpected,
+    #[msg("Vault index out of bounds: index exceeds the expected vault count for this cohort.")]
+    VaultIndexOutOfBounds,
+    #[msg("The number of vaults specified exceeds the maximum allowed per cohort.")]
+    TooManyVaults,
     #[msg("Vault not initialized: cannot activate vault that hasn't been initialized.")]
     VaultNotInitialized,
     #[msg("Incorrect vault funding: vault balance must match expected amount.")]
     IncorrectVaultFunding,
     #[msg("Not all vaults activated: all vaults in cohort must be activated before cohort activation.")]
     NotAllVaultsActivated,
+
+    // Claiming errors
+    #[msg("Vault index mismatch: the assigned vault index is out of bounds for this cohort.")]
+    AssignedVaultIndexOutOfBounds,
 }

@@ -51,6 +51,38 @@ pub mod prism_protocol {
     }
 
     // admin
+    pub fn make_campaign_unstoppable_v0(
+        ctx: Context<MakeCampaignUnstoppableV0>,
+        campaign_fingerprint: [u8; 32],
+    ) -> Result<()> {
+        instructions::handle_make_campaign_unstoppable_v0(ctx, campaign_fingerprint)
+    }
+
+    // admin
+    pub fn pause_campaign_v0(
+        ctx: Context<PauseCampaignV0>,
+        campaign_fingerprint: [u8; 32],
+    ) -> Result<()> {
+        instructions::handle_pause_campaign_v0(ctx, campaign_fingerprint)
+    }
+
+    // admin
+    pub fn resume_campaign_v0(
+        ctx: Context<ResumeCampaignV0>,
+        campaign_fingerprint: [u8; 32],
+    ) -> Result<()> {
+        instructions::handle_resume_campaign_v0(ctx, campaign_fingerprint)
+    }
+
+    // admin
+    pub fn permanently_halt_campaign_v0(
+        ctx: Context<PermanentlyHaltCampaignV0>,
+        campaign_fingerprint: [u8; 32],
+    ) -> Result<()> {
+        instructions::handle_permanently_halt_campaign_v0(ctx, campaign_fingerprint)
+    }
+
+    // admin
     pub fn initialize_cohort_v0(
         ctx: Context<InitializeCohortV0>,
         campaign_fingerprint: [u8; 32],
@@ -129,12 +161,12 @@ pub mod prism_protocol {
 
     // admin
     pub fn reclaim_tokens(
-        ctx: Context<ReclaimTokens>,
+        ctx: Context<ReclaimTokensV0>,
         campaign_fingerprint: [u8; 32],
         cohort_merkle_root_arg: [u8; 32],
         vault_index: u8,
     ) -> Result<()> {
-        instructions::handle_reclaim_tokens(
+        instructions::handle_reclaim_tokens_v0(
             ctx,
             campaign_fingerprint,
             cohort_merkle_root_arg,

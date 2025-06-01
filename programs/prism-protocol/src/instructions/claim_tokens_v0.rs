@@ -4,7 +4,7 @@ use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 use crate::constants::VAULT_SEED_PREFIX;
 use crate::error::ErrorCode;
 use crate::merkle_leaf::{hash_claim_leaf, ClaimLeaf};
-use crate::state::{CampaignV0, ClaimReceiptV0, CohortV0};
+use crate::state::{CampaignStatus, CampaignV0, ClaimReceiptV0, CohortV0};
 use crate::{CAMPAIGN_V0_SEED_PREFIX, CLAIM_RECEIPT_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX};
 use anchor_lang::solana_program::hash::Hasher as SolanaHasher; // Alias to avoid conflict if Hasher trait is in scope elsewhere
 
@@ -34,9 +34,9 @@ pub struct ClaimTokensV0<'info> {
             campaign_fingerprint.as_ref(),
         ],
         bump = campaign.bump,
-        constraint = campaign.is_active @ ErrorCode::CampaignNotActive,
-        constraint = campaign.mint == mint.key() @ ErrorCode::InvalidMerkleProof,
-        constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::ConstraintSeedsMismatch,
+        constraint = campaign.status == CampaignStatus::Active @ ErrorCode::CampaignNotActive,
+        constraint = campaign.mint == mint.key() @ ErrorCode::MintMismatch,
+        constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::CampaignFingerprintMismatch,
     )]
     pub campaign: Box<Account<'info, CampaignV0>>,
 
@@ -47,7 +47,7 @@ pub struct ClaimTokensV0<'info> {
             merkle_root.as_ref()
         ],
         bump = cohort.bump,
-        constraint = cohort.campaign == campaign.key() @ ErrorCode::InvalidMerkleProof,
+        constraint = cohort.campaign == campaign.key() @ ErrorCode::CohortCampaignMismatch,
         constraint = cohort.merkle_root == merkle_root @ ErrorCode::MerkleRootMismatch, // Ensure cohort found by seed matches arg
     )]
     pub cohort: Box<Account<'info, CohortV0>>,
@@ -56,7 +56,7 @@ pub struct ClaimTokensV0<'info> {
     /// The vault pubkey is derived using the vault index.
     #[account(
         mut,
-        constraint = vault.mint == mint.key() @ ErrorCode::InvalidMerkleProof,
+        constraint = vault.mint == mint.key() @ ErrorCode::MintMismatch,
         seeds = [
             VAULT_SEED_PREFIX,
             cohort.key().as_ref(),
@@ -68,7 +68,7 @@ pub struct ClaimTokensV0<'info> {
 
     /// The mint of the token being distributed. Renamed from reward_token_mint.
     #[account(
-        constraint = mint.key() == campaign.mint @ ErrorCode::InvalidMerkleProof
+        constraint = mint.key() == campaign.mint @ ErrorCode::MintMismatch
     )]
     pub mint: Box<Account<'info, Mint>>,
 
@@ -111,17 +111,25 @@ pub fn handle_claim_tokens_v0(
     entitlements: u64,
 ) -> Result<()> {
     // 0. Basic argument validation
-    require!(entitlements > 0, ErrorCode::InvalidMerkleProof);
+    require!(entitlements > 0, ErrorCode::InvalidEntitlements);
+
+    // 1. Check campaign go-live slot
+    let campaign = &ctx.accounts.campaign;
+    let current_slot = Clock::get()?.slot;
+    require!(
+        current_slot >= campaign.go_live_slot,
+        ErrorCode::GoLiveDateNotReached
+    );
 
     let cohort = &ctx.accounts.cohort;
 
-    // 1. Validate vault index is within bounds (using expected vault count)
+    // 2. Validate vault index is within bounds (using expected vault count)
     require!(
         assigned_vault_index < cohort.expected_vault_count,
-        ErrorCode::InvalidAssignedVault
+        ErrorCode::AssignedVaultIndexOutOfBounds
     );
 
-    // 2. Construct the leaf node from the transaction data
+    // 3. Construct the leaf node from the transaction data
     let leaf = ClaimLeaf {
         claimant: ctx.accounts.claimant.key(),
         assigned_vault_index,
@@ -129,22 +137,22 @@ pub fn handle_claim_tokens_v0(
     };
     let leaf_hash = hash_claim_leaf(&leaf);
 
-    // 3. Verify the Merkle proof using our hashing scheme (SHA256)
+    // 4. Verify the Merkle proof using our hashing scheme (SHA256)
     if !verify_merkle_proof(&merkle_proof, &cohort.merkle_root, &leaf_hash) {
         return err!(ErrorCode::InvalidMerkleProof);
     }
     msg!("Merkle proof verified successfully.");
 
-    // 4. Check if already claimed (ClaimReceipt PDA is initialized, so this prevents re-init)
+    // 5. Check if already claimed (ClaimReceipt PDA is initialized, so this prevents re-init)
     // The init constraint on ClaimReceipt already handles this.
 
-    // 5. Calculate total tokens to be claimed
+    // 6. Calculate total tokens to be claimed
     let total_amount = cohort
         .amount_per_entitlement
         .checked_mul(entitlements)
         .ok_or(ErrorCode::NumericOverflow)?;
 
-    // 6. Perform the token transfer
+    // 7. Perform the token transfer
     let transfer_accounts = Transfer {
         from: ctx.accounts.vault.to_account_info(),
         to: ctx.accounts.claimant_token_account.to_account_info(),
@@ -171,7 +179,7 @@ pub fn handle_claim_tokens_v0(
         total_amount,
     )?;
 
-    // 7. Update state
+    // 8. Update state
     let claim_receipt = &mut ctx.accounts.claim_receipt;
     claim_receipt.set_inner(ClaimReceiptV0 {
         cohort: cohort.key(),

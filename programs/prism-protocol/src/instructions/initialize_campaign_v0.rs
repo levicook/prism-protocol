@@ -1,5 +1,6 @@
 use crate::error::ErrorCode;
-use crate::{state::CampaignV0, CAMPAIGN_V0_SEED_PREFIX};
+use crate::state::{CampaignStatus, CampaignV0};
+use crate::CAMPAIGN_V0_SEED_PREFIX;
 use anchor_lang::prelude::*;
 
 #[derive(Accounts)]
@@ -37,12 +38,13 @@ pub fn handle_initialize_campaign_v0(
         admin: ctx.accounts.admin.key(),
         mint,
         fingerprint: campaign_fingerprint,
-        campaign_db_ipfs_hash: [0; 32], // Set during activation
-        expected_cohort_count,          // Set during campaign initialization
-        initialized_cohort_count: 0,    // Incremented during cohort init
-        activated_cohort_count: 0,      // Incremented during cohort activation
-        is_active: false,               // Inactive until explicitly activated
-        go_live_slot: 0,                // Set during activation
+        campaign_db_ipfs_hash: [0; 32],   // Set during activation
+        expected_cohort_count,            // Set during campaign initialization
+        initialized_cohort_count: 0,      // Incremented during cohort init
+        activated_cohort_count: 0,        // Incremented during cohort activation
+        status: CampaignStatus::Inactive, // Starts inactive until activated
+        unstoppable: false,               // Starts stoppable, can be made unstoppable later
+        go_live_slot: 0,                  // Set during activation
         bump: ctx.bumps.campaign,
     });
 
