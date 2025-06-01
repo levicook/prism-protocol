@@ -1,8 +1,9 @@
+use crate::error::ErrorCode;
 use crate::{state::CampaignV0, CAMPAIGN_V0_SEED_PREFIX};
 use anchor_lang::prelude::*;
 
 #[derive(Accounts)]
-#[instruction(campaign_fingerprint: [u8; 32], mint_pubkey: Pubkey)]
+#[instruction(campaign_fingerprint: [u8; 32], mint_pubkey: Pubkey, expected_cohort_count: u8)]
 pub struct InitializeCampaignV0<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
@@ -14,7 +15,7 @@ pub struct InitializeCampaignV0<'info> {
         seeds = [
             CAMPAIGN_V0_SEED_PREFIX,
             admin.key().as_ref(),
-            campaign_fingerprint.as_ref(),
+            campaign_fingerprint.as_ref()
         ],
         bump
     )]
@@ -27,14 +28,21 @@ pub fn handle_initialize_campaign_v0(
     ctx: Context<InitializeCampaignV0>,
     campaign_fingerprint: [u8; 32],
     mint: Pubkey,
+    expected_cohort_count: u8,
 ) -> Result<()> {
-    let campaign = &mut ctx.accounts.campaign;
+    require!(expected_cohort_count > 0, ErrorCode::NoCohortsExpected);
 
+    let campaign = &mut ctx.accounts.campaign;
     campaign.set_inner(CampaignV0 {
         admin: ctx.accounts.admin.key(),
         mint,
         fingerprint: campaign_fingerprint,
-        is_active: false,
+        campaign_db_ipfs_hash: [0; 32], // Set during activation
+        expected_cohort_count,          // Set during campaign initialization
+        initialized_cohort_count: 0,    // Incremented during cohort init
+        activated_cohort_count: 0,      // Incremented during cohort activation
+        is_active: false,               // Inactive until explicitly activated
+        go_live_slot: 0,                // Set during activation
         bump: ctx.bumps.campaign,
     });
 

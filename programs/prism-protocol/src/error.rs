@@ -47,4 +47,26 @@ pub enum ErrorCode {
 
     #[msg("Campaign is active.")]
     CampaignIsActive,
+
+    // Campaign activation errors
+    #[msg("Invalid IPFS hash: hash cannot be empty.")]
+    InvalidIpfsHash,
+    #[msg("Campaign has already been activated.")]
+    CampaignAlreadyActivated,
+    #[msg("Campaign already active.")]
+    CampaignAlreadyActive,
+    #[msg("Invalid go-live slot: must be current or future slot.")]
+    InvalidGoLiveSlot,
+    #[msg("No cohorts expected: campaign must expect at least one cohort.")]
+    NoCohortsExpected,
+    #[msg("Not all cohorts activated: active_cohort_count must equal expected_cohort_count for campaign activation.")]
+    NotAllCohortsActivated,
+    #[msg("No vaults expected: cohort must expect at least one vault.")]
+    NoVaultsExpected,
+    #[msg("Vault not initialized: cannot activate vault that hasn't been initialized.")]
+    VaultNotInitialized,
+    #[msg("Incorrect vault funding: vault balance must match expected amount.")]
+    IncorrectVaultFunding,
+    #[msg("Not all vaults activated: all vaults in cohort must be activated before cohort activation.")]
+    NotAllVaultsActivated,
 }

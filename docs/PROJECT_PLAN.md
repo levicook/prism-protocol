@@ -40,6 +40,63 @@ CSV Files (Immutable) →
 - **Auditors**: Can reproduce entire campaign locally from CSV files
 - **Platform operators**: Zero-trust architecture with cryptographic verification
 
+## 🚨 IMMEDIATE PRIORITY: Verification Workflows
+
+**Issue Identified**: Current verification workflows in PROTOCOL_ARCHITECTURE.md need design work to properly reflect IPFS-first architecture.
+
+**Current Problems:**
+- Verification commands still reference local CSV files instead of IPFS sources
+- Mixed patterns between IPFS-hash-based verification and file-based verification
+- Self-hosted integration patterns are placeholders, not ready for implementation
+- Command-line examples don't consistently show the IPFS-first verification flow
+
+**Required Design Work:**
+
+### **1. IPFS-First Verification Commands (PRIORITY 1)**
+
+**Current (inconsistent):**
+```bash
+# Some commands use local files
+prism-protocol-cli verify-campaign \
+  --campaign-csv-in customers.csv \
+  --cohorts-csv-in cohorts.csv \
+  --campaign-db-in campaign.db
+
+# Others use IPFS hashes  
+prism-protocol-cli verify-campaign \
+  --campaign-ipfs-hash QmCampaignDB789... \
+  --check-all-targets
+```
+
+**Need to Design:** Consistent IPFS-first verification workflow that:
+- Fetches original CSVs from IPFS using hashes stored in campaign.db
+- Supports both "I have the IPFS hash" and "I have local files" entry points
+- Clearly shows the verification chain: IPFS → CSV → Database → On-chain
+- Provides useful output for each verification step
+
+### **2. Self-Hosted Integration Workflow (PRIORITY 2)**
+
+**Current**: Marked as placeholder in PROTOCOL_ARCHITECTURE.md
+**Need to Design:**
+- How do users discover campaign IPFS hashes for self-hosting?
+- What does the site generation command actually look like?
+- How do generated sites load data from IPFS vs embedded data?
+- What templates exist and how do they work?
+
+### **3. Platform Integration Verification (PRIORITY 3)**
+
+**Need to Design:**
+- How do hosted platforms prove they're serving correct data?
+- What does cross-platform verification look like?
+- How do users verify a hosted site against IPFS sources?
+
+**Action Items:**
+- [ ] Design complete IPFS-first verification command interface
+- [ ] Create verification workflow diagrams showing all entry points
+- [ ] Prototype verification commands to validate user experience
+- [ ] Update PROTOCOL_ARCHITECTURE.md with finalized verification patterns
+- [ ] Design self-hosted integration workflow with concrete commands
+
 ## 📊 Current System Analysis
 
 ### **CLI Commands (All Functional)**

@@ -159,7 +159,6 @@ pub fn build_claim_tokens_ix(
 
     Ok((ix, ix_accounts, ix_data))
 }
-
 pub fn build_set_campaign_active_status_ix(
     admin: Pubkey,
     campaign: Pubkey,
@@ -185,3 +184,4 @@ pub fn build_set_campaign_active_status_ix(
 
     Ok((ix, ix_accounts, ix_data))
 }
+

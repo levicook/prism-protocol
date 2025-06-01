@@ -5,8 +5,7 @@ pub mod merkle_leaf;
 pub mod state;
 
 pub use constants::{
-    CAMPAIGN_V0_SEED_PREFIX, CLAIM_RECEIPT_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX,
-    MAX_VAULTS_PER_COHORT, VAULT_SEED_PREFIX,
+    CAMPAIGN_V0_SEED_PREFIX, CLAIM_RECEIPT_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX, VAULT_SEED_PREFIX,
 };
 pub use instructions::*;
 pub use merkle_leaf::*;
@@ -26,8 +25,29 @@ pub mod prism_protocol {
         ctx: Context<InitializeCampaignV0>,
         campaign_fingerprint: [u8; 32],
         mint: Pubkey,
+        expected_cohort_count: u8,
     ) -> Result<()> {
-        instructions::handle_initialize_campaign_v0(ctx, campaign_fingerprint, mint)
+        instructions::handle_initialize_campaign_v0(
+            ctx,
+            campaign_fingerprint,
+            mint,
+            expected_cohort_count,
+        )
+    }
+
+    // admin
+    pub fn activate_campaign_v0(
+        ctx: Context<ActivateCampaignV0>,
+        campaign_fingerprint: [u8; 32],
+        final_db_ipfs_hash: [u8; 32],
+        go_live_slot: u64,
+    ) -> Result<()> {
+        instructions::handle_activate_campaign_v0(
+            ctx,
+            campaign_fingerprint,
+            final_db_ipfs_hash,
+            go_live_slot,
+        )
     }
 
     // admin
@@ -36,25 +56,34 @@ pub mod prism_protocol {
         campaign_fingerprint: [u8; 32],
         merkle_root: [u8; 32],
         amount_per_entitlement: u64,
-        vault_count: u8,
+        expected_vault_count: u8,
     ) -> Result<()> {
         instructions::handle_initialize_cohort_v0(
             ctx,
             campaign_fingerprint,
             merkle_root,
             amount_per_entitlement,
-            vault_count,
+            expected_vault_count,
         )
     }
 
     // admin
-    pub fn create_vault_v0(
-        ctx: Context<CreateVaultV0>,
+    pub fn activate_cohort_v0(
+        ctx: Context<ActivateCohortV0>,
+        campaign_fingerprint: [u8; 32],
+        cohort_merkle_root: [u8; 32],
+    ) -> Result<()> {
+        instructions::handle_activate_cohort_v0(ctx, campaign_fingerprint, cohort_merkle_root)
+    }
+
+    // admin
+    pub fn initialize_vault_v0(
+        ctx: Context<InitializeVaultV0>,
         campaign_fingerprint: [u8; 32],
         cohort_merkle_root: [u8; 32],
         vault_index: u8,
     ) -> Result<()> {
-        instructions::handle_create_vault_v0(
+        instructions::handle_initialize_vault_v0(
             ctx,
             campaign_fingerprint,
             cohort_merkle_root,
@@ -63,21 +92,20 @@ pub mod prism_protocol {
     }
 
     // admin
-    pub fn set_campaign_active_status(
-        ctx: Context<SetCampaignActiveStatus>,
+    pub fn activate_vault_v0(
+        ctx: Context<ActivateVaultV0>,
         campaign_fingerprint: [u8; 32],
-        is_active: bool,
+        cohort_merkle_root: [u8; 32],
+        vault_index: u8,
+        expected_balance: u64,
     ) -> Result<()> {
-        instructions::handle_set_campaign_active_status(ctx, campaign_fingerprint, is_active)
-    }
-
-    // admin
-    pub fn reclaim_tokens(
-        ctx: Context<ReclaimTokens>,
-        campaign_fingerprint: [u8; 32],
-        cohort_merkle_root_arg: [u8; 32],
-    ) -> Result<()> {
-        instructions::handle_reclaim_tokens(ctx, campaign_fingerprint, cohort_merkle_root_arg)
+        instructions::handle_activate_vault_v0(
+            ctx,
+            campaign_fingerprint,
+            cohort_merkle_root,
+            vault_index,
+            expected_balance,
+        )
     }
 
     // claimant
@@ -89,13 +117,28 @@ pub mod prism_protocol {
         assigned_vault_index: u8,
         entitlements: u64,
     ) -> Result<()> {
-        instructions::claim_tokens_v0::handle_claim_tokens_v0(
+        instructions::handle_claim_tokens_v0(
             ctx,
             campaign_fingerprint,
             cohort_merkle_root,
             merkle_proof,
             assigned_vault_index,
             entitlements,
+        )
+    }
+
+    // admin
+    pub fn reclaim_tokens(
+        ctx: Context<ReclaimTokens>,
+        campaign_fingerprint: [u8; 32],
+        cohort_merkle_root_arg: [u8; 32],
+        vault_index: u8,
+    ) -> Result<()> {
+        instructions::handle_reclaim_tokens(
+            ctx,
+            campaign_fingerprint,
+            cohort_merkle_root_arg,
+            vault_index,
         )
     }
 }

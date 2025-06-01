@@ -1,7 +1,5 @@
 use anchor_lang::prelude::*;
 
-use crate::MAX_VAULTS_PER_COHORT;
-
 #[account] // seed [CAMPAIGN_V0_SEED_PREFIX, fingerprint]
 #[derive(InitSpace)]
 pub struct CampaignV0 {
@@ -15,8 +13,23 @@ pub struct CampaignV0 {
     /// This is used in the Campaign PDA seeds.
     pub fingerprint: [u8; 32],
 
+    /// IPFS hash of the final campaign database (published during activation, final deployment record)
+    pub campaign_db_ipfs_hash: [u8; 32],
+
+    /// Expected number of cohorts for this campaign (set at campaign initialization)
+    pub expected_cohort_count: u8,
+
+    /// Number of cohorts that have been initialized (incremented during cohort init)
+    pub initialized_cohort_count: u8,
+
+    /// Number of cohorts that have been activated (incremented during cohort activation)
+    pub activated_cohort_count: u8,
+
     /// Whether the campaign is currently active and allowing claims.
     pub is_active: bool,
+
+    /// Slot when campaign should go live (claims allowed after this slot)
+    pub go_live_slot: u64,
 
     /// Bump seed for the Campaign PDA.
     pub bump: u8,
@@ -35,10 +48,14 @@ pub struct CohortV0 {
     /// The amount of `mint` tokens to be distributed per single unit of entitlement.
     pub amount_per_entitlement: u64,
 
-    /// List of token account pubkeys that serve as vaults for this cohort.
-    /// The size of this Vec is determined at initialization and capped by MAX_VAULTS_PER_COHORT.
-    #[max_len(MAX_VAULTS_PER_COHORT)]
-    pub vaults: Vec<Pubkey>,
+    /// Expected number of vaults for this cohort (set at cohort initialization)
+    pub expected_vault_count: u8,
+
+    /// Number of vaults that have been initialized (incremented during vault creation)
+    pub initialized_vault_count: u8,
+
+    /// Number of vaults that have been activated (incremented during vault activation)
+    pub activated_vault_count: u8,
 
     /// Bump seed for the Cohort PDA.
     pub bump: u8,
