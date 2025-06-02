@@ -2,23 +2,23 @@
 name = "prism-protocol-testing"
 version = "0.1.0"
 edition = "2021"
-
-[lib]
-name = "prism_protocol_testing"
-path = "src/lib.rs"
+build = "build.rs"
 
 [dependencies]
-anchor-lang = { workspace = true }
-anchor-spl = { workspace = true }
-mollusk-svm = { workspace = true }
-mollusk-svm-programs-token = { workspace = true, features = [
-    "associated-token",
-    "token",
-] }
+prism-protocol-sdk = { path = "../../crates/prism-protocol-sdk" }
 prism_protocol = { path = "../../programs/prism-protocol", features = [
     "no-entrypoint",
 ] }
-prism-protocol-merkle = { path = "../prism-protocol-merkle" }
-prism-protocol-sdk = { path = "../prism-protocol-sdk" }
-solana-sdk = { workspace = true }
-spl-token = { workspace = true }
+
+litesvm = { workspace = true, features = [] }
+litesvm-token = { workspace = true }
+solana-hash = { workspace = true }
+solana-instruction = { workspace = true }
+solana-keypair = { workspace = true }
+solana-message = { workspace = true }
+solana-pubkey = { workspace = true }
+solana-signature = { workspace = true }
+solana-signer = { workspace = true }
+solana-sysvar = { workspace = true }
+solana-transaction = { workspace = true }
+solana-transaction-error = { workspace = true }

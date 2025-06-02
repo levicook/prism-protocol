@@ -1,9 +1,10 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
+use crate::constants::VAULT_SEED_PREFIX;
 use crate::error::ErrorCode;
 use crate::merkle_leaf::{hash_claim_leaf, ClaimLeaf};
-use crate::state::{CampaignV0, ClaimReceiptV0, CohortV0};
+use crate::state::{CampaignStatus, CampaignV0, ClaimReceiptV0, CohortV0};
 use crate::{CAMPAIGN_V0_SEED_PREFIX, CLAIM_RECEIPT_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX};
 use anchor_lang::solana_program::hash::Hasher as SolanaHasher; // Alias to avoid conflict if Hasher trait is in scope elsewhere
 
@@ -33,9 +34,9 @@ pub struct ClaimTokensV0<'info> {
             campaign_fingerprint.as_ref(),
         ],
         bump = campaign.bump,
-        constraint = campaign.is_active @ ErrorCode::CampaignNotActive,
-        constraint = campaign.mint == mint.key() @ ErrorCode::InvalidMerkleProof,
-        constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::ConstraintSeedsMismatch,
+        constraint = campaign.status == CampaignStatus::Active @ ErrorCode::CampaignNotActive,
+        constraint = campaign.mint == mint.key() @ ErrorCode::MintMismatch,
+        constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::CampaignFingerprintMismatch,
     )]
     pub campaign: Box<Account<'info, CampaignV0>>,
 
@@ -46,23 +47,28 @@ pub struct ClaimTokensV0<'info> {
             merkle_root.as_ref()
         ],
         bump = cohort.bump,
-        constraint = cohort.campaign == campaign.key() @ ErrorCode::InvalidMerkleProof,
+        constraint = cohort.campaign == campaign.key() @ ErrorCode::CohortCampaignMismatch,
         constraint = cohort.merkle_root == merkle_root @ ErrorCode::MerkleRootMismatch, // Ensure cohort found by seed matches arg
     )]
     pub cohort: Box<Account<'info, CohortV0>>,
 
     /// The specific vault from which tokens will be transferred.
-    /// The vault pubkey is derived from the cohort.vaults[assigned_vault_index].
+    /// The vault pubkey is derived using the vault index.
     #[account(
         mut,
-        constraint = vault.mint == mint.key() @ ErrorCode::InvalidMerkleProof,
-        constraint = vault.key() == cohort.vaults[assigned_vault_index as usize] @ ErrorCode::InvalidAssignedVault,
+        constraint = vault.mint == mint.key() @ ErrorCode::MintMismatch,
+        seeds = [
+            VAULT_SEED_PREFIX,
+            cohort.key().as_ref(),
+            &assigned_vault_index.to_le_bytes()
+        ],
+        bump
     )]
     pub vault: Box<Account<'info, TokenAccount>>,
 
     /// The mint of the token being distributed. Renamed from reward_token_mint.
     #[account(
-        constraint = mint.key() == campaign.mint @ ErrorCode::InvalidMerkleProof
+        constraint = mint.key() == campaign.mint @ ErrorCode::MintMismatch
     )]
     pub mint: Box<Account<'info, Mint>>,
 
@@ -105,18 +111,23 @@ pub fn handle_claim_tokens_v0(
     entitlements: u64,
 ) -> Result<()> {
     // 0. Basic argument validation
-    require!(entitlements > 0, ErrorCode::InvalidMerkleProof);
+    require!(entitlements > 0, ErrorCode::InvalidEntitlements);
+
+    // 1. Check campaign go-live slot
+    let campaign = &ctx.accounts.campaign;
+    let current_slot = Clock::get()?.slot;
+    require!(
+        current_slot >= campaign.go_live_slot,
+        ErrorCode::GoLiveDateNotReached
+    );
 
     let cohort = &ctx.accounts.cohort;
 
-    // 1. Validate vault index is within bounds
+    // 2. Validate vault index is within bounds (using expected vault count)
     require!(
-        (assigned_vault_index as usize) < cohort.vaults.len(),
-        ErrorCode::InvalidAssignedVault
+        assigned_vault_index < cohort.expected_vault_count,
+        ErrorCode::AssignedVaultIndexOutOfBounds
     );
-
-    // 2. Get the vault pubkey from the index (already validated by constraint)
-    let assigned_vault_pubkey = cohort.vaults[assigned_vault_index as usize];
 
     // 3. Construct the leaf node from the transaction data
     let leaf = ClaimLeaf {
@@ -173,7 +184,7 @@ pub fn handle_claim_tokens_v0(
     claim_receipt.set_inner(ClaimReceiptV0 {
         cohort: cohort.key(),
         claimant: ctx.accounts.claimant.key(),
-        assigned_vault: assigned_vault_pubkey,
+        assigned_vault: ctx.accounts.vault.key(),
         claimed_at_timestamp: Clock::get()?.unix_timestamp,
         bump: ctx.bumps.claim_receipt,
     });
@@ -198,8 +209,7 @@ fn verify_merkle_proof(proof: &[[u8; 32]], root: &[u8; 32], leaf: &[u8; 32]) -> 
         let mut hasher = SolanaHasher::default(); // Uses SHA256 by default
         hasher.hash(&[0x01]); // Internal node prefix - provides domain separation from leaf nodes (0x00)
                               // Correctly order H(L) and H(R) before hashing for the parent node.
-                              // This order must match the tree generation logic (lexicographic ordering).
-        if computed_hash.as_ref() <= p_elem.as_ref() {
+        if computed_hash <= *p_elem {
             hasher.hash(&computed_hash);
             hasher.hash(p_elem);
         } else {
@@ -208,7 +218,7 @@ fn verify_merkle_proof(proof: &[[u8; 32]], root: &[u8; 32], leaf: &[u8; 32]) -> 
         }
         computed_hash = hasher.result().to_bytes();
     }
-    computed_hash.as_ref() == root
+    computed_hash == *root
 }
 
 // Original handler with placeholder/incorrect Keccak logic has been removed.

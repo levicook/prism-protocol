@@ -22,15 +22,3 @@ test-sbf = []
 [dependencies]
 anchor-lang = { workspace = true, features = ["init-if-needed"] }
 anchor-spl = { workspace = true }
-
-[dev-dependencies]
-mollusk-svm = { workspace = true }
-mollusk-svm-programs-token = { workspace = true, features = [
-    "associated-token",
-    "token",
-] }
-prism-protocol-merkle = { path = "../../crates/prism-protocol-merkle" }
-prism-protocol-sdk = { path = "../../crates/prism-protocol-sdk" }
-prism-protocol-testing = { path = "../../crates/prism-protocol-testing" }
-solana-sdk = { workspace = true }
-spl-token = { workspace = true }
