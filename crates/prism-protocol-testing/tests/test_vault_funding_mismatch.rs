@@ -1,34 +1,67 @@
+use prism_protocol::error::ErrorCode as PrismError;
 use prism_protocol_testing::{FixtureStage, TestFixture};
+use solana_instruction::error::InstructionError;
+use solana_transaction_error::TransactionError;
 
 #[test]
-#[ignore]
 fn test_vault_funding_mismatch() {
     let mut test = TestFixture::default();
 
-    // Setup campaign, cohort, and vault
-    test.jump_to(FixtureStage::CampaignInitialized)
-        .expect("campaign initialization failed");
-
-    test.jump_to(FixtureStage::CohortInitialized)
-        .expect("cohort initialization failed");
-
-    test.jump_to(FixtureStage::VaultInitialized)
+    // Get to vault initialized stage (creates campaign, cohort, vault)
+    let state = test
+        .jump_to(FixtureStage::VaultInitialized)
         .expect("vault initialization failed");
 
-    todo!();
-    // Try to activate vault with wrong expected balance
-    // Note: The actual vault funding vs expected balance validation
-    // depends on your program's implementation
-    // let wrong_expected_balance = 999_999_999; // Different from what's actually funded
-    // let result = test.jump_to(FixtureStage::VaultActivated { expected_balance: wrong_expected_balance,
-    // });
+    // Get the vault and mint from the returned state
+    let mint = state.mint.expect("Mint should be initialized");
+    let vault = state.vault.expect("Vault should be initialized");
+    let expected_balance = 10_000_000_000u64; // Same as next_expected_balance()
 
-    // This might pass if your TestFixture doesn't actually fund the vault yet
-    // You may need to enhance TestFixture to do real token funding
-    // match result {
-    //     Ok(_) => {
-    //         println!("⚠️  Vault activation succeeded - may need real funding logic in TestFixture")
-    //     }
-    //     Err(_) => println!("✅ Correctly rejected vault with funding mismatch"),
-    // }
+    // Fund the vault with the WRONG amount (half of what's expected)
+    let wrong_amount = expected_balance / 2; // 5_000_000_000
+    test.mint_to(mint, vault, wrong_amount)
+        .expect("Failed to fund vault with wrong amount");
+
+    println!(
+        "💰 Funded vault with {} tokens (expected: {})",
+        wrong_amount, expected_balance
+    );
+
+    // Now try to activate the vault - this should fail with IncorrectVaultFunding
+    let result = test.step_to(FixtureStage::VaultActivated);
+
+    match result {
+        Ok(_) => {
+            panic!("❌ Vault activation should have failed due to funding mismatch!");
+        }
+        Err(failed_meta) => {
+            println!(
+                "✅ Vault activation correctly failed: {:?}",
+                failed_meta.err
+            );
+
+            const ANCHOR_ERROR_OFFSET: u32 = 6000;
+
+            const EXPECTED_ERROR: u32 =
+                PrismError::IncorrectVaultFunding as u32 + ANCHOR_ERROR_OFFSET;
+
+            match failed_meta.err {
+                TransactionError::InstructionError(_, InstructionError::Custom(code)) => {
+                    if code == EXPECTED_ERROR {
+                        println!("✅ Confirmed IncorrectVaultFunding error");
+                    } else {
+                        panic!("❌ Expected error code {}, got {}", EXPECTED_ERROR, code);
+                    }
+                }
+                _ => {
+                    panic!(
+                        "❌ Expected TransactionError::InstructionError with Custom code, got: {:?}",
+                        failed_meta.err
+                    );
+                }
+            }
+        }
+    }
+
+    println!("🎉 Vault funding mismatch test passed!");
 }

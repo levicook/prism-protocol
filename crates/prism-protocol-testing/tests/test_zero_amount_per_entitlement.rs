@@ -1,16 +1,38 @@
+use prism_protocol::error::ErrorCode as PrismError;
 use prism_protocol_testing::{FixtureStage, TestFixture};
+use solana_instruction::error::InstructionError;
+use solana_transaction_error::TransactionError;
 
 #[test]
-#[ignore]
 fn test_zero_amount_per_entitlement() {
     let mut test = TestFixture::default();
-    
+
+    // Get to campaign initialized stage first
     test.jump_to(FixtureStage::CampaignInitialized)
-    .expect("campaign initialization failed");
-    
-    // Try to initialize cohort with zero amount per entitlement
+        .expect("campaign initialization failed");
+
+    // Set the next amount per entitlement to zero (should be rejected)
+    test.set_next_amount_per_entitlement(0);
+
+    // Try to advance to cohort initialized - should fail with InvalidEntitlements
     let result = test.jump_to(FixtureStage::CohortInitialized);
-    
-    assert!(result.is_err(), "Expected cohort initialization to fail with zero amount");
-    println!("✅ Correctly rejected zero amount per entitlement");
+
+    match result {
+        Ok(_) => {
+            panic!("❌ Cohort initialization should have failed with zero amount per entitlement!");
+        }
+        Err(failed_meta) => {
+            // Verify we got the expected InvalidEntitlements error
+            const EXPECTED_ERROR: u32 = PrismError::InvalidEntitlements as u32 + 6000; // Anchor offset
+            
+            match failed_meta.err {
+                TransactionError::InstructionError(_, InstructionError::Custom(code)) => {
+                    assert_eq!(code, EXPECTED_ERROR, "Expected InvalidEntitlements error");
+                }
+                _ => {
+                    panic!("Expected TransactionError::InstructionError with Custom code, got: {:?}", failed_meta.err);
+                }
+            }
+        }
+    }
 } 

@@ -16,6 +16,7 @@ use {
         build_initialize_campaign_v0_ix, build_initialize_cohort_v0_ix,
         build_initialize_vault_v0_ix, AddressFinder,
     },
+    solana_instruction::Instruction,
     solana_keypair::Keypair,
     solana_message::Message,
     solana_pubkey::Pubkey,
@@ -46,11 +47,17 @@ pub struct TestFixture {
     admin_keypair: Keypair,
     state: FixtureState,
     svm: LiteSVM,
-    logging_enabled: bool,
+    log_transaction_results: bool,
     // Counters for generating incremental values
     fingerprint_counter: u8,
     cohort_counter: u8,
-    vault_counter: u8,
+    // vault_counter: u8,
+    // Consumable overrides for next_* functions
+    next_campaign_fingerprint_override: Option<[u8; 32]>,
+    next_cohort_merkle_root_override: Option<[u8; 32]>,
+    next_amount_per_entitlement_override: Option<u64>,
+    next_expected_balance_override: Option<u64>,
+    next_go_live_slot_override: Option<u64>,
 }
 
 impl TestFixture {
@@ -74,11 +81,17 @@ impl TestFixture {
             admin_keypair,
             state,
             svm,
-            logging_enabled: true,
+            log_transaction_results: true,
             // Counters for generating incremental values
             fingerprint_counter: 0,
             cohort_counter: 0,
-            vault_counter: 0,
+            // vault_counter: 0,
+            // Consumable overrides for next_* functions
+            next_campaign_fingerprint_override: None,
+            next_cohort_merkle_root_override: None,
+            next_amount_per_entitlement_override: None,
+            next_expected_balance_override: None,
+            next_go_live_slot_override: None,
         }
     }
 
@@ -112,11 +125,21 @@ impl TestFixture {
         self.svm.warp_to_slot(slot);
     }
 
+    /// Enable transaction logging (default: enabled)
+    pub fn enable_transaction_logging(&mut self) {
+        self.log_transaction_results = true;
+    }
+
+    /// Disable transaction logging
+    pub fn disable_transaction_logging(&mut self) {
+        self.log_transaction_results = false;
+    }
+
     /// Send a transaction and optionally print logs based on the logging_enabled setting
     pub fn send_transaction(&mut self, tx: Transaction) -> TransactionResult {
         let result = self.svm.send_transaction(tx);
 
-        if self.logging_enabled {
+        if self.log_transaction_results {
             match &result {
                 Ok(meta) => {
                     println!("=== Transaction Logs (Success) ===");
@@ -139,6 +162,16 @@ impl TestFixture {
         result
     }
 
+    pub fn send_instructions(&mut self, instructions: &[Instruction]) -> TransactionResult {
+        let tx = Transaction::new(
+            &[&self.admin_keypair],
+            Message::new(instructions, Some(&self.admin)),
+            self.latest_blockhash(),
+        );
+
+        self.send_transaction(tx)
+    }
+
     pub fn mint_to(
         &mut self,
         mint: Pubkey,
@@ -153,16 +186,6 @@ impl TestFixture {
             amount,
         )
         .send()
-    }
-
-    /// Enable transaction logging (default: enabled)
-    pub fn enable_logging(&mut self) {
-        self.logging_enabled = true;
-    }
-
-    /// Disable transaction logging
-    pub fn disable_logging(&mut self) {
-        self.logging_enabled = false;
     }
 
     pub fn jump_to(
@@ -262,13 +285,14 @@ impl TestFixture {
         );
 
         let cohort_merkle_root = self.next_cohort_merkle_root();
+        let amount_per_entitlement = self.next_amount_per_entitlement();
 
         let (ix, accounts, _) = build_initialize_cohort_v0_ix(
             &self.address_finder,
             self.admin,
             campaign_fingerprint,
             cohort_merkle_root,
-            self.next_amount_per_entitlement(),
+            amount_per_entitlement,
             1, // expected_vault_count,
         )
         .expect("Failed to build initialize cohort v0 ix");
@@ -458,16 +482,34 @@ impl TestFixture {
         Ok(())
     }
 
-    /// Generate next campaign fingerprint (incremental)
+    /// Generate next campaign fingerprint (with consumable override)
     fn next_campaign_fingerprint(&mut self) -> [u8; 32] {
-        self.fingerprint_counter += 1;
-        [self.fingerprint_counter; 32]
+        if let Some(override_value) = self.next_campaign_fingerprint_override.take() {
+            override_value
+        } else {
+            self.fingerprint_counter += 1;
+            [self.fingerprint_counter; 32]
+        }
     }
 
-    /// Generate next cohort merkle root (incremental)
+    /// Set the next campaign fingerprint (consumed on next call)
+    pub fn set_next_campaign_fingerprint(&mut self, fingerprint: [u8; 32]) {
+        self.next_campaign_fingerprint_override = Some(fingerprint);
+    }
+
+    /// Generate next cohort merkle root (with consumable override)
     fn next_cohort_merkle_root(&mut self) -> [u8; 32] {
-        self.cohort_counter += 1;
-        [self.cohort_counter; 32]
+        if let Some(override_value) = self.next_cohort_merkle_root_override.take() {
+            override_value
+        } else {
+            self.cohort_counter += 1;
+            [self.cohort_counter; 32]
+        }
+    }
+
+    /// Set the next cohort merkle root (consumed on next call)
+    pub fn set_next_cohort_merkle_root(&mut self, merkle_root: [u8; 32]) {
+        self.next_cohort_merkle_root_override = Some(merkle_root);
     }
 
     /// Generate next mint (requires SVM transaction)
@@ -476,19 +518,40 @@ impl TestFixture {
         Ok(mint)
     }
 
-    /// Generate next amount per entitlement (fixed for now)
-    fn next_amount_per_entitlement(&self) -> u64 {
-        1_000_000_000 // 1 token with 9 decimals
+    /// Generate next amount per entitlement (with consumable override)
+    fn next_amount_per_entitlement(&mut self) -> u64 {
+        self.next_amount_per_entitlement_override
+            .take()
+            .unwrap_or(1_000_000_000) // 1 token with 9 decimals
     }
 
-    /// Generate next expected balance (fixed for now)
-    fn next_expected_balance(&self) -> u64 {
-        10_000_000_000 // 10 tokens with 9 decimals
+    /// Set the next amount per entitlement (consumed on next call)
+    pub fn set_next_amount_per_entitlement(&mut self, amount: u64) {
+        self.next_amount_per_entitlement_override = Some(amount);
     }
 
-    /// Generate next go live slot (future slot)
-    fn next_go_live_slot(&self) -> u64 {
-        self.latest_slot() + 10
+    /// Generate next expected balance (with consumable override)
+    fn next_expected_balance(&mut self) -> u64 {
+        self.next_expected_balance_override
+            .take()
+            .unwrap_or(10_000_000_000) // 10 tokens with 9 decimals
+    }
+
+    /// Set the next expected balance (consumed on next call)
+    pub fn set_next_expected_balance(&mut self, balance: u64) {
+        self.next_expected_balance_override = Some(balance);
+    }
+
+    /// Generate next go live slot (with consumable override)
+    fn next_go_live_slot(&mut self) -> u64 {
+        self.next_go_live_slot_override
+            .take()
+            .unwrap_or_else(|| self.latest_slot() + 10)
+    }
+
+    /// Set the next go live slot (consumed on next call)
+    pub fn set_next_go_live_slot(&mut self, slot: u64) {
+        self.next_go_live_slot_override = Some(slot);
     }
 }
 

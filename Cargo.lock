@@ -3029,6 +3029,7 @@ dependencies = [
  "prism-protocol-sdk",
  "prism_protocol",
  "solana-hash",
+ "solana-instruction",
  "solana-keypair",
  "solana-message",
  "solana-pubkey",
@@ -3036,6 +3037,7 @@ dependencies = [
  "solana-signer",
  "solana-sysvar",
  "solana-transaction",
+ "solana-transaction-error",
 ]
 
 [[package]]

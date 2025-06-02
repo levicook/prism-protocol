@@ -52,6 +52,7 @@ pub fn handle_initialize_cohort_v0(
     expected_vault_count: u8,
 ) -> Result<()> {
     require!(expected_vault_count > 0, ErrorCode::NoVaultsExpected);
+    require!(amount_per_entitlement > 0, ErrorCode::InvalidEntitlements);
 
     let cohort = &mut ctx.accounts.cohort;
     cohort.set_inner(CohortV0 {
