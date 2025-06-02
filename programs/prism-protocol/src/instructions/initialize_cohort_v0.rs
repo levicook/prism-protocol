@@ -1,6 +1,6 @@
 use crate::error::ErrorCode;
-use crate::state::{CampaignV0, CohortV0};
-use crate::{CAMPAIGN_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX, MAX_VAULTS_PER_COHORT};
+use crate::state::{CampaignStatus, CampaignV0, CohortV0};
+use crate::{CAMPAIGN_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX};
 use anchor_lang::prelude::*;
 
 #[derive(Accounts)]
@@ -8,22 +8,23 @@ use anchor_lang::prelude::*;
     campaign_fingerprint: [u8; 32],
     merkle_root: [u8; 32],
     amount_per_entitlement: u64,
-    vault_count: u8
+    expected_vault_count: u8
 )]
 pub struct InitializeCohortV0<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
 
     #[account(
+        mut,
         seeds = [
             CAMPAIGN_V0_SEED_PREFIX,
             admin.key().as_ref(),
             campaign_fingerprint.as_ref()
         ],
         bump = campaign.bump,
-        has_one = admin @ ErrorCode::Unauthorized, // Ensures the signer is the campaign admin
-        constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::ConstraintSeedsMismatch,
-        constraint = !campaign.is_active @ ErrorCode::CampaignIsActive,
+        has_one = admin @ ErrorCode::CampaignAdminMismatch,
+        constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::CampaignFingerprintMismatch,
+        constraint = campaign.status == CampaignStatus::Inactive @ ErrorCode::CampaignIsActive,
     )]
     pub campaign: Account<'info, CampaignV0>,
 
@@ -48,22 +49,28 @@ pub fn handle_initialize_cohort_v0(
     _campaign_fingerprint: [u8; 32], // consumed in account constraints
     merkle_root: [u8; 32],
     amount_per_entitlement: u64,
-    vault_count: u8,
+    expected_vault_count: u8,
 ) -> Result<()> {
-    require!(vault_count > 0, ErrorCode::InvalidVaultIndex);
-    require!(
-        vault_count as usize <= MAX_VAULTS_PER_COHORT,
-        ErrorCode::TooManyVaults
-    );
+    require!(expected_vault_count > 0, ErrorCode::NoVaultsExpected);
+    require!(amount_per_entitlement > 0, ErrorCode::InvalidEntitlements);
 
     let cohort = &mut ctx.accounts.cohort;
     cohort.set_inner(CohortV0 {
         campaign: ctx.accounts.campaign.key(),
         merkle_root,
         amount_per_entitlement,
-        vaults: vec![Pubkey::default(); vault_count as usize], // Pre-size with default pubkeys
+        expected_vault_count,       // Set during cohort initialization
+        initialized_vault_count: 0, // Incremented during vault creation
+        activated_vault_count: 0,   // Incremented during vault activation
         bump: ctx.bumps.cohort,
     });
+
+    // Increment campaign's initialized cohort count
+    let campaign = &mut ctx.accounts.campaign;
+    campaign.initialized_cohort_count = campaign
+        .initialized_cohort_count
+        .checked_add(1)
+        .ok_or(ErrorCode::NumericOverflow)?;
 
     Ok(())
 }

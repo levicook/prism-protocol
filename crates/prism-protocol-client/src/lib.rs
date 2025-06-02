@@ -23,11 +23,13 @@ Uses `anchor_spl` types exclusively for SPL token operations per our architectur
 
 ```rust
 use prism_protocol_client::{PrismProtocolClient, ClientResult};
+use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
 fn example() -> ClientResult<()> {
-    let client = PrismProtocolClient::new("https://api.devnet.solana.com".to_string())?;
+    let rpc_client = RpcClient::new("https://api.devnet.solana.com".to_string());
+    let client = PrismProtocolClient::new(Arc::new(rpc_client));
 
     // Protocol operations (note: using v0 methods with proper versioning)
     let fingerprint = [0u8; 32]; // Example fingerprint
