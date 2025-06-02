@@ -129,7 +129,7 @@ impl BatchTxClient {
         for message in &messages {
             let fee = self.rpc_client.get_fee_for_message(message).await?;
             total_fee += fee;
-            
+
             // For now, we'll estimate compute units based on instruction count
             // In a full implementation, we'd simulate each transaction
             let estimated_cu = message.instructions.len() as u32 * 10_000; // Rough estimate
@@ -275,17 +275,20 @@ impl BatchTxClient {
                     })?;
 
                 // Attempt to send
-                match rpc_client.send_and_confirm_transaction_with_spinner_and_commitment(
-                    &transaction,
-                    confirmation_commitment,
-                ).await {
+                match rpc_client
+                    .send_and_confirm_transaction_with_spinner_and_commitment(
+                        &transaction,
+                        confirmation_commitment,
+                    )
+                    .await
+                {
                     Ok(signature) => {
                         debug!("Transaction {} succeeded", tx_index);
                         Ok(signature)
                     }
                     Err(e) => {
                         warn!("Transaction {} attempt failed: {}", tx_index, e);
-                        
+
                         // Determine if this is a retryable error
                         let error_str = e.to_string();
                         if error_str.contains("blockhash") || error_str.contains("timeout") {

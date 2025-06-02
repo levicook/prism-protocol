@@ -1,40 +1,40 @@
-use std::time::Duration;
-use solana_sdk::commitment_config::CommitmentConfig;
 use backoff::ExponentialBackoff;
+use solana_sdk::commitment_config::CommitmentConfig;
+use std::time::Duration;
 
 /// Configuration for batch transaction operations
 #[derive(Debug, Clone)]
 pub struct TxBatchConfig {
     /// Maximum number of retry attempts for failed transactions
     pub max_retries: usize,
-    
+
     /// Backoff strategy for retry delays
     pub retry_backoff: ExponentialBackoff,
-    
+
     /// Maximum number of instructions to pack into a single transaction
     pub max_instructions_per_tx: usize,
-    
+
     /// Commitment level for transaction confirmation
     pub confirmation_commitment: CommitmentConfig,
-    
+
     /// Whether to skip preflight checks (simulation before sending)
     pub skip_preflight: bool,
-    
+
     /// Whether to simulate transactions before sending to optimize compute units
     pub simulate_before_send: bool,
-    
+
     /// Whether to automatically set compute unit limits based on simulation
     pub auto_compute_unit_limit: bool,
-    
+
     /// Whether to verify payer balance before sending transactions
     pub verify_balance_before_send: bool,
-    
+
     /// Maximum number of transactions to send in parallel
     pub max_parallel_sends: usize,
-    
+
     /// Whether to chunk instructions optimally based on transaction size limits
     pub chunk_instructions_optimally: bool,
-    
+
     /// Maximum transaction size in bytes (conservative default)
     pub max_transaction_size_bytes: usize,
 }
@@ -76,4 +76,4 @@ mod tests {
         assert!(config.simulate_before_send);
         assert!(config.verify_balance_before_send);
     }
-} 
+}

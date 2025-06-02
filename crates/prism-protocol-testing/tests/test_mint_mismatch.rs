@@ -4,6 +4,14 @@ use prism_protocol_testing::{FixtureStage, TestFixture};
 use solana_instruction::error::InstructionError;
 use solana_transaction_error::TransactionError;
 
+/// Test vault initialization with wrong mint → MintMismatch error
+///
+/// Should test:
+/// - Set up campaign and cohort with original mint
+/// - Create a different (wrong) mint
+/// - Attempt to initialize vault with wrong mint
+/// - Verify fails with MintMismatch error code
+/// - Verify proper error handling and no state corruption
 #[test]
 fn test_mint_mismatch() {
     let mut test = TestFixture::default();

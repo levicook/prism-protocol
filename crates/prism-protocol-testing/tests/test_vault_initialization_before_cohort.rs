@@ -1,7 +1,14 @@
 use prism_protocol_testing::{FixtureStage, TestFixture};
 
+/// Test vault initialization before cohort (wrong order) - should fail
+///
+/// Should test:
+/// - Initialize campaign only
+/// - Attempt to initialize vault WITHOUT cohort existing
+/// - Verify operation fails (vault requires cohort to exist first)
+/// - Ensure proper order dependencies are enforced
 #[test]
-#[ignore]
+#[ignore = "Test may need review - unclear if this order dependency actually exists in protocol"]
 fn test_vault_initialization_before_cohort() {
     let mut test = TestFixture::default();
 

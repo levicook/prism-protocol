@@ -3,6 +3,14 @@ use prism_protocol_testing::{FixtureStage, TestFixture};
 use solana_instruction::error::InstructionError;
 use solana_transaction_error::TransactionError;
 
+/// Test vault activation with incorrect funding → IncorrectVaultFunding error
+///
+/// Should test:
+/// - Initialize campaign, cohort, and vault properly
+/// - Fund vault with WRONG amount (insufficient funding)
+/// - Attempt to activate vault with incorrect balance
+/// - Verify fails with IncorrectVaultFunding error code
+/// - Ensure precise balance validation is working
 #[test]
 fn test_vault_funding_mismatch() {
     let mut test = TestFixture::default();

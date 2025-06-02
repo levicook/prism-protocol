@@ -1,5 +1,16 @@
 use prism_protocol_testing::{FixtureStage, TestFixture};
 
+/// Test cohort initialization before campaign - auto-advancement behavior
+///
+/// **BEHAVIOR CHANGED**: Originally tested wrong order (should fail),
+/// but now TestFixture auto-advances through missing stages.
+///
+/// Currently tests:
+/// - Attempt cohort initialization without explicit campaign init
+/// - Verify TestFixture auto-creates campaign first (success)
+/// - Verify both campaign and cohort end up initialized
+///
+/// **MAY NEED REVIEW**: Should this test direct protocol behavior instead?
 #[test]
 fn test_cohort_initialization_before_campaign() {
     let mut test = TestFixture::default();

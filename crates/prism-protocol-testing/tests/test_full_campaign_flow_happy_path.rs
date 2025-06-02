@@ -1,5 +1,13 @@
 use prism_protocol_testing::{FixtureStage, TestFixture};
 
+/// Test the full campaign initialization and activation flow (happy path)
+///
+/// Should test:
+/// - Initialize campaign → cohort → vault in correct order
+/// - Fund vault with correct amount
+/// - Activate vault → cohort → campaign successfully
+/// - Verify all status transitions work correctly
+/// - **NOTE: Does NOT test claiming - that's the critical missing piece**
 #[test]
 fn test_full_campaign_flow_happy_path() {
     let mut test = TestFixture::default();

@@ -22,7 +22,7 @@ pub struct InitializeCohortV0<'info> {
             campaign_fingerprint.as_ref()
         ],
         bump = campaign.bump,
-        has_one = admin @ ErrorCode::CampaignAdminMismatch, // Ensures the signer is the campaign admin
+        has_one = admin @ ErrorCode::CampaignAdminMismatch,
         constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::CampaignFingerprintMismatch,
         constraint = campaign.status == CampaignStatus::Inactive @ ErrorCode::CampaignIsActive,
     )]
