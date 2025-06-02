@@ -181,14 +181,16 @@ impl TestFixture {
             FixtureStage::CampaignActivated,
         ];
 
-        let stages_to_step: Vec<FixtureStage> = all_stages
+        let mut stages_to_step: Vec<FixtureStage> = all_stages
             .into_iter()
             .filter(|s| s <= &target_stage)
             .filter(|s| match &self.state.stage {
                 Some(current) => s > current,
                 None => true,
             })
-            .collect();
+            .collect::<Vec<_>>();
+
+        stages_to_step.sort_by(|a, b| a.cmp(b)); // just in case :)
 
         for stage in stages_to_step {
             self.step_to(stage)?;
