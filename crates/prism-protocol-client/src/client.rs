@@ -347,6 +347,6 @@ impl PrismProtocolClient {
 
     /// Get the program ID
     pub fn program_id(&self) -> &Pubkey {
-        self.address_finder.program_id()
+        &self.address_finder.program_id
     }
 }
