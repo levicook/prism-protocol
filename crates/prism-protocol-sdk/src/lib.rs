@@ -22,6 +22,18 @@ mod instruction_builders;
 // Re-export main types
 pub use address_finder::AddressFinder;
 pub use budget_allocation::{AllocationError, AllocationResult, BudgetAllocator};
-pub use campaign_compiler::{compile_campaign, CompilerError, CompilerResult};
+pub use campaign_compiler::{
+    compile_campaign, CompiledCampaign, CompiledCohort, CompilerError, CompilerResult,
+};
 pub use instruction_builders::*;
 pub use prism_protocol::state::*;
+pub use prism_protocol::ClaimLeaf;
+pub use prism_protocol_merkle::ClaimTree;
+
+// Re-export csv types
+pub use prism_protocol_csvs::{CampaignCsvRow, CohortsCsvRow};
+
+// Re-export database types
+pub use prism_protocol_db::{
+    CampaignDatabase, CampaignInfo, ClaimProof, CohortInfo, EligibilityInfo, VaultRequirement,
+};

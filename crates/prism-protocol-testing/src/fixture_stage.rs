@@ -1,34 +1,50 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FixtureStage {
+    /// Campaign has been compiled
+    CampaignCompiled,
+
     /// Campaign has been initialized but is inactive
     CampaignInitialized,
 
     /// A cohort has been initialized and added to campaign
-    CohortInitialized,
+    CohortsInitialized,
 
     /// A vault has been created for the cohort but is empty
-    VaultInitialized,
+    VaultsInitialized,
 
     /// The vault has been funded and activated
-    VaultActivated,
+    VaultsActivated,
 
     /// The cohort has been activated
-    CohortActivated,
+    CohortsActivated,
 
     /// The campaign has been activated and claims are allowed
-    CampaignActivated,
+    CampaignsActivated,
 }
 
 impl FixtureStage {
+    pub fn all() -> &'static [FixtureStage] {
+        &[
+            FixtureStage::CampaignCompiled,
+            FixtureStage::CampaignInitialized,
+            FixtureStage::CohortsInitialized,
+            FixtureStage::VaultsInitialized,
+            FixtureStage::VaultsActivated,
+            FixtureStage::CohortsActivated,
+            FixtureStage::CampaignsActivated,
+        ]
+    }
+
     /// Get the ordinal position of this stage in the progression
     pub fn ord(&self) -> u8 {
         match self {
-            FixtureStage::CampaignInitialized { .. } => 0,
-            FixtureStage::CohortInitialized { .. } => 1,
-            FixtureStage::VaultInitialized => 2,
-            FixtureStage::VaultActivated { .. } => 3,
-            FixtureStage::CohortActivated => 4,
-            FixtureStage::CampaignActivated { .. } => 5,
+            FixtureStage::CampaignCompiled => 0,
+            FixtureStage::CampaignInitialized => 1,
+            FixtureStage::CohortsInitialized => 2,
+            FixtureStage::VaultsInitialized => 3,
+            FixtureStage::VaultsActivated => 4,
+            FixtureStage::CohortsActivated => 5,
+            FixtureStage::CampaignsActivated => 6,
         }
     }
 }
@@ -42,5 +58,11 @@ impl PartialOrd for FixtureStage {
 impl Ord for FixtureStage {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.ord().cmp(&other.ord())
+    }
+}
+
+impl Default for FixtureStage {
+    fn default() -> Self {
+        FixtureStage::CampaignCompiled
     }
 }

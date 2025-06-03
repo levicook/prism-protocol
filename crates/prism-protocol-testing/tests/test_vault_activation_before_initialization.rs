@@ -16,11 +16,11 @@ fn test_vault_activation_before_initialization() {
     test.jump_to(FixtureStage::CampaignInitialized)
         .expect("campaign initialization failed");
 
-    test.jump_to(FixtureStage::CohortInitialized)
+    test.jump_to(FixtureStage::CohortsInitialized)
         .expect("cohort initialization failed");
 
     // Try to activate vault without initializing it first
-    let result = test.jump_to(FixtureStage::VaultActivated);
+    let result = test.jump_to(FixtureStage::VaultsActivated);
 
     // This should fail because vault isn't initialized yet
     assert!(
