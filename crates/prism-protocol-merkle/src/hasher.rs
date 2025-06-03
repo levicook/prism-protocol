@@ -32,7 +32,7 @@ use rs_merkle::Hasher;
 ///
 /// This approach is used by Bitcoin, Ethereum, Certificate Transparency, and other
 /// security-critical merkle tree implementations.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PrismHasher;
 
 impl Hasher for PrismHasher {

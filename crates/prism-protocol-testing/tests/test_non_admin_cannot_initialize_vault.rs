@@ -1,4 +1,4 @@
-use prism_protocol_sdk::build_activate_campaign_v0_ix;
+use prism_protocol_sdk::build_initialize_vault_v0_ix;
 use prism_protocol_testing::{FixtureStage, TestFixture};
 use solana_instruction::error::InstructionError;
 use solana_keypair::Keypair;
@@ -7,21 +7,22 @@ use solana_signer::Signer;
 use solana_transaction::Transaction;
 use solana_transaction_error::TransactionError;
 
-/// Test that campaign activation is NOT permissionless
+/// Test that vault initialization is NOT permissionless
 ///
 /// This test demonstrates Anchor's security model: even if an attacker:
-/// - Knows all the public campaign parameters (fingerprint, etc.)
+/// - Knows all the public vault parameters (campaign fingerprint, merkle root, vault index, etc.)
 /// - Has sufficient funds to pay transaction fees
 /// - Can construct a syntactically correct instruction
-///
-/// They still CANNOT activate the campaign because PDA derivation uses the admin's key.
+/// 
+/// They still CANNOT initialize the vault because PDA derivation uses the admin's key.
 /// The instruction will fail with AccountNotInitialized, proving the security model works.
 #[test]
-fn test_non_admin_cannot_activate_campaign() {
+fn test_non_admin_cannot_initialize_vault() {
     let mut test = TestFixture::default();
 
-    test.jump_to(FixtureStage::CohortsActivated)
-        .expect("cohort activation failed");
+    // Set up: cohorts initialized but vaults not yet initialized
+    test.jump_to(FixtureStage::CohortsInitialized)
+        .expect("cohort initialization failed");
 
     // Create an attacker with sufficient funds
     let attacker = Keypair::new();
@@ -29,17 +30,22 @@ fn test_non_admin_cannot_activate_campaign() {
         .expect("airdrop failed");
 
     let campaign_fingerprint = test.state.compiled_campaign.fingerprint;
+    let first_cohort = &test.state.compiled_campaign.cohorts[0];
+    let cohort_merkle_root = first_cohort.merkle_root;
+    let mint = test.state.compiled_campaign.mint;
+    let vault_index = 0u8;
 
     // Attacker knows all public parameters and constructs instruction with THEIR key
     // This will derive a different (non-existent) campaign PDA
-    let (ix, _, _) = build_activate_campaign_v0_ix(
+    let (ix, _, _) = build_initialize_vault_v0_ix(
         &test.state.address_finder,
-        attacker.pubkey(), // Attacker's key - derives wrong PDA!
+        attacker.pubkey(), // Attacker's key - derives wrong campaign PDA!
         campaign_fingerprint,
-        [1u8; 32],               // final_db_ipfs_hash (non-zero)
-        test.current_slot() + 1, // go_live_slot
+        cohort_merkle_root,
+        mint,
+        vault_index,
     )
-    .expect("Failed to build activate campaign v0 ix");
+    .expect("Failed to build initialize vault v0 ix");
 
     // Attacker can pay fees and sign, but instruction will fail
     let tx = Transaction::new(
@@ -52,12 +58,10 @@ fn test_non_admin_cannot_activate_campaign() {
 
     match result {
         Ok(_) => {
-            panic!(
-                "❌ Campaign activation should have failed - instruction is not permissionless!"
-            );
+            panic!("❌ Vault initialization should have failed - instruction is not permissionless!");
         }
         Err(failed_meta) => {
-            // The instruction fails because the PDA derived from attacker's key doesn't exist
+            // The instruction fails because the campaign PDA derived from attacker's key doesn't exist
             // This proves the security model: you can't access accounts you don't own
             const EXPECTED_ERROR: u32 = 3012; // AccountNotInitialized
 
@@ -65,7 +69,7 @@ fn test_non_admin_cannot_activate_campaign() {
                 TransactionError::InstructionError(_, InstructionError::Custom(code)) => {
                     assert_eq!(code, EXPECTED_ERROR, "Expected AccountNotInitialized error");
                     println!("✅ Confirmed AccountNotInitialized error (code: {})", code);
-                    println!("✅ This proves the instruction is NOT permissionless");
+                    println!("✅ This proves vault initialization is NOT permissionless");
                 }
                 _ => {
                     panic!(
@@ -77,17 +81,18 @@ fn test_non_admin_cannot_activate_campaign() {
         }
     }
 
-    // Additional verification: show that the CORRECT admin CAN activate
-    println!("🔐 Demonstrating that only the correct admin can activate...");
-
-    let (correct_ix, _, _) = build_activate_campaign_v0_ix(
+    // Additional verification: show that the CORRECT admin CAN initialize the vault
+    println!("🔐 Demonstrating that only the correct admin can initialize vault...");
+    
+    let (correct_ix, _, _) = build_initialize_vault_v0_ix(
         &test.state.address_finder,
         test.state.compiled_campaign.admin, // Correct admin
         campaign_fingerprint,
-        [1u8; 32],               // final_db_ipfs_hash (non-zero)
-        test.current_slot() + 1, // go_live_slot
+        cohort_merkle_root,
+        mint,
+        vault_index,
     )
-    .expect("Failed to build activate campaign v0 ix");
+    .expect("Failed to build initialize vault v0 ix");
 
     let correct_tx = Transaction::new(
         &[&test.state.admin_keypair],
@@ -96,8 +101,8 @@ fn test_non_admin_cannot_activate_campaign() {
     );
 
     test.send_transaction(correct_tx)
-        .expect("Correct admin should be able to activate campaign");
+        .expect("Correct admin should be able to initialize vault");
 
-    println!("✅ Correct admin successfully activated the campaign");
+    println!("✅ Correct admin successfully initialized the vault");
     println!("🎉 Security model verification complete!");
-}
+} 
