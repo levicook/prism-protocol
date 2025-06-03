@@ -13,7 +13,7 @@ use solana_transaction_error::TransactionError;
 /// - Knows all the public vault parameters (campaign fingerprint, merkle root, vault index, etc.)
 /// - Has sufficient funds to pay transaction fees
 /// - Can construct a syntactically correct instruction
-/// 
+///
 /// They still CANNOT activate the vault because PDA derivation uses the admin's key.
 /// The instruction will fail with AccountNotInitialized, proving the security model works.
 #[test]
@@ -21,20 +21,20 @@ fn test_non_admin_cannot_activate_vault() {
     let mut test = TestFixture::default();
 
     // Set up: vaults initialized but not yet activated
-    test.jump_to(FixtureStage::VaultsInitialized)
-        .expect("vault initialization failed");
+    test.jump_to(FixtureStage::VaultsInitialized);
 
     // Create an attacker with sufficient funds
     let attacker = Keypair::new();
-    test.airdrop(&attacker.pubkey(), 1_000_000_000)
-        .expect("airdrop failed");
+    test.airdrop(&attacker.pubkey(), 1_000_000_000);
 
     let campaign_fingerprint = test.state.compiled_campaign.fingerprint;
     let first_cohort = &test.state.compiled_campaign.cohorts[0];
     let cohort_merkle_root = first_cohort.merkle_root;
     let first_vault = &first_cohort.vaults[0];
     let vault_index = 0u8;
-    let expected_balance = first_vault.required_tokens_u64().expect("Required tokens too large");
+    let expected_balance = first_vault
+        .required_tokens_u64()
+        .expect("Required tokens too large");
     let vault_address = first_vault.address; // Extract address to avoid borrow conflict
 
     // Attacker knows all public parameters and constructs instruction with THEIR key
@@ -85,7 +85,7 @@ fn test_non_admin_cannot_activate_vault() {
 
     // Additional verification: show that the CORRECT admin CAN activate the vault
     println!("🔐 Demonstrating that only the correct admin can activate vault...");
-    
+
     // First fund the vault (prerequisite for activation)
     let mint_ix = spl_token::instruction::mint_to(
         &test.state.address_finder.token_program_id,
@@ -94,7 +94,8 @@ fn test_non_admin_cannot_activate_vault() {
         &test.state.admin_keypair.pubkey(),
         &[&test.state.admin_keypair.pubkey()],
         expected_balance,
-    ).expect("Failed to build mint_to ix");
+    )
+    .expect("Failed to build mint_to ix");
 
     let (correct_ix, _, _) = build_activate_vault_v0_ix(
         &test.state.address_finder,
@@ -108,7 +109,10 @@ fn test_non_admin_cannot_activate_vault() {
 
     let correct_tx = Transaction::new(
         &[&test.state.admin_keypair],
-        Message::new(&[mint_ix, correct_ix], Some(&test.state.compiled_campaign.admin)),
+        Message::new(
+            &[mint_ix, correct_ix],
+            Some(&test.state.compiled_campaign.admin),
+        ),
         test.latest_blockhash(),
     );
 
@@ -117,4 +121,4 @@ fn test_non_admin_cannot_activate_vault() {
 
     println!("✅ Correct admin successfully activated the vault");
     println!("🎉 Security model verification complete!");
-} 
+}

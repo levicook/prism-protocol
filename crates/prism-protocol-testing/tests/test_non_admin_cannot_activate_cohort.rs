@@ -13,7 +13,7 @@ use solana_transaction_error::TransactionError;
 /// - Knows all the public cohort parameters (campaign fingerprint, merkle root, etc.)
 /// - Has sufficient funds to pay transaction fees
 /// - Can construct a syntactically correct instruction
-/// 
+///
 /// They still CANNOT activate the cohort because PDA derivation uses the admin's key.
 /// The instruction will fail with AccountNotInitialized, proving the security model works.
 #[test]
@@ -21,13 +21,12 @@ fn test_non_admin_cannot_activate_cohort() {
     let mut test = TestFixture::default();
 
     // Set up: vaults activated but cohorts not yet activated
-    test.jump_to(FixtureStage::VaultsActivated)
-        .expect("vault activation failed");
+    test.jump_to(FixtureStage::VaultsActivated);
 
     // Create an attacker with sufficient funds
     let attacker = Keypair::new();
-    test.airdrop(&attacker.pubkey(), 1_000_000_000)
-        .expect("airdrop failed");
+
+    test.airdrop(&attacker.pubkey(), 1_000_000_000);
 
     let campaign_fingerprint = test.state.compiled_campaign.fingerprint;
     let first_cohort = &test.state.compiled_campaign.cohorts[0];
@@ -79,7 +78,7 @@ fn test_non_admin_cannot_activate_cohort() {
 
     // Additional verification: show that the CORRECT admin CAN activate the cohort
     println!("🔐 Demonstrating that only the correct admin can activate cohort...");
-    
+
     let (correct_ix, _, _) = build_activate_cohort_v0_ix(
         &test.state.address_finder,
         test.state.compiled_campaign.admin, // Correct admin
@@ -99,4 +98,4 @@ fn test_non_admin_cannot_activate_cohort() {
 
     println!("✅ Correct admin successfully activated the cohort");
     println!("🎉 Security model verification complete!");
-} 
+}

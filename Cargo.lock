@@ -3024,6 +3024,7 @@ dependencies = [
 name = "prism-protocol-testing"
 version = "0.1.0"
 dependencies = [
+ "anchor-lang",
  "litesvm",
  "litesvm-token",
  "prism-protocol-sdk",
@@ -3035,6 +3036,7 @@ dependencies = [
  "solana-keypair",
  "solana-message",
  "solana-pubkey",
+ "solana-sdk",
  "solana-signature",
  "solana-signer",
  "solana-system-interface",
