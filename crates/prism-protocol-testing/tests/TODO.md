@@ -1,64 +1,81 @@
 # 🧪 PRISM PROTOCOL TEST COVERAGE ANALYSIS & TODO
 
-## 📊 CURRENT STATE ✅ UPDATED
+## 📊 CURRENT STATE ✅ UPDATED (REVISED)
 
-### ✅ EXISTING TESTS (9 files) - **NOW ALL DOCUMENTED**
-- `test_full_campaign_flow_happy_path.rs` ✅ - End-to-end happy path (missing claims)
-- `test_mint_mismatch.rs` ✅ - Vault init with wrong mint → MintMismatch
-- `test_vault_funding_mismatch.rs` ✅ - Vault activation with wrong funding → IncorrectVaultFunding
-- `test_zero_amount_per_entitlement.rs` ✅ - Cohort with zero entitlements → InvalidEntitlements
-- `test_non_admin_cannot_activate_campaign.rs` ⚠️ #[ignore] - Wrong admin activating → CampaignAdminMismatch
-- `test_vault_initialization_before_cohort.rs` ⚠️ #[ignore] - Wrong order operations (needs review)
-- `test_vault_activation_before_initialization.rs` ⚠️ #[ignore] - Wrong order operations (needs review)
-- `test_cohort_initialization_before_campaign.rs` ⚠️ - Tests auto-advancement (behavior changed)
-- `test_campaign_fingerprint_consistency.rs` ⚠️ #[ignore] - Fingerprint validation (stub only)
+### ✅ ACTUALLY WORKING TESTS (6 files) - **COMPREHENSIVE WORKING COVERAGE**
 
-### 📈 ERROR CODE COVERAGE: 4/23 (17%)
-**✅ TESTED:** MintMismatch, InvalidEntitlements, IncorrectVaultFunding, CampaignAdminMismatch
-**❌ UNTESTED:** 19 error codes (see below)
+- `test_full_campaign_flow_happy_path.rs` ✅ - **Complete claim flow** (happy path + multi-cohort)
+- `test_non_admin_cannot_activate_campaign.rs` ✅ - Security model verification
+- `test_non_admin_cannot_activate_cohort.rs` ✅ - Cohort activation security
+- `test_non_admin_cannot_initialize_cohort.rs` ✅ - Cohort init security
+- `test_non_admin_cannot_activate_vault.rs` ✅ - Vault activation security
+- `test_non_admin_cannot_initialize_vault.rs` ✅ - Vault init security
 
-### 🚨 TEST STATE SUMMARY
-- **5 tests WORKING** ✅ (actually test protocol behavior)
-- **4 tests IGNORED** ⚠️ (need implementation or review)
-- **18 tests STUBBED** 📋 (Phase 1-4 below)
-- **27 total test files** (5 working + 4 ignored + 18 stubs)
+### ⚠️ PLACEHOLDER TESTS (21 files) - **WELL-DOCUMENTED BUT UNIMPLEMENTED**
 
----
+- `test_mint_mismatch.rs` ⚠️ - Commented-out implementation (needs completion)
+- `test_vault_funding_mismatch.rs` ⚠️ - Commented-out implementation (needs completion)
+- `test_zero_amount_per_entitlement.rs` ⚠️ - Commented-out implementation (needs completion)
+- `test_vault_initialization_before_cohort.rs` ⚠️ - Stub only
+- `test_vault_activation_before_initialization.rs` ⚠️ - Stub only
+- `test_cohort_initialization_before_campaign.rs` ⚠️ - Stub only
+- `test_campaign_fingerprint_consistency.rs` ⚠️ - Stub only
+- **ALL Phase 1-4 tests below** ⚠️ - Enhanced stubs with pseudocode
 
-## 🚨 CRITICAL GAPS
+### 📈 ERROR CODE COVERAGE: 1/23 (4%) - **SIGNIFICANT REGRESSION**
 
-### **🔥 ZERO CLAIM TESTING**
-The most critical instruction `claim_tokens_v0` has **NO TESTS WHATSOEVER**. This is the primary user-facing functionality.
+**✅ TESTED:** CampaignAdminMismatch (via non-admin tests)
+**❌ UNTESTED:** 22 error codes including all critical claim error paths
 
-### **📋 INSTRUCTION COVERAGE**
-| Instruction | Tested | Priority |
-|---|---|---|
-| `claim_tokens_v0` | ❌ **0%** | **CRITICAL** |
-| `activate_campaign_v0` | ⚠️ Partial | HIGH |
-| `activate_cohort_v0` | ❌ 0% | HIGH |
-| `activate_vault_v0` | ⚠️ Partial | HIGH |
-| `reclaim_tokens_v0` | ❌ 0% | MEDIUM |
-| Campaign lifecycle | ❌ 0% | MEDIUM |
-| Error combinations | ❌ 0% | LOW |
+### 🚨 REVISED TEST STATE SUMMARY
+
+- **6 tests WORKING** ✅ (security model + basic happy path)
+- **21 tests PLACEHOLDER** ⚠️ (good docs, no implementation)
+- **27 total test files** (6 working + 21 placeholders)
 
 ---
 
-## 🎯 TODO: PHASE 1 - CRITICAL (IMMEDIATE) ✅ STUBBED
+## 🚨 CRITICAL GAPS (REVISED)
 
-### 🚀 claim_tokens_v0 Testing Suite
-- [ ] `test_claim_tokens_happy_path.rs` ✅ - Successful claim flow
-- [ ] `test_claim_invalid_merkle_proof.rs` ✅ - Invalid proof → InvalidMerkleProof
-- [ ] `test_claim_before_go_live.rs` ✅ - Claim before slot → GoLiveDateNotReached
-- [ ] `test_claim_vault_index_out_of_bounds.rs` ✅ - Bad vault index → AssignedVaultIndexOutOfBounds
-- [ ] `test_claim_inactive_campaign.rs` ✅ - Claim from inactive → CampaignNotActive
-- [ ] `test_claim_duplicate_prevention.rs` ✅ - Prevent double claims (ClaimReceipt PDA)
-- [ ] `test_claim_numeric_overflow.rs` ✅ - Entitlements overflow → NumericOverflow
+### **🔥 ZERO ERROR CODE TESTING**
+
+Despite having 1 working error code test, the critical claim error paths have **NO COVERAGE**:
+
+- ❌ `InvalidMerkleProof` - No merkle proof validation testing
+- ❌ `GoLiveDateNotReached` - No time-based claim validation
+- ❌ `AssignedVaultIndexOutOfBounds` - No boundary validation
+- ❌ `CampaignNotActive` - No status validation
+- ❌ `NumericOverflow` - No overflow protection testing
+
+### **📋 REVISED INSTRUCTION COVERAGE**
+
+| Instruction          | Tested                 | Priority     | Notes                       |
+| -------------------- | ---------------------- | ------------ | --------------------------- |
+| `claim_tokens_v0`    | ⚠️ **Happy path only** | **CRITICAL** | Zero error case coverage    |
+| Security model       | ✅ **Excellent**       | HIGH         | All non-admin cases covered |
+| Error validation     | ❌ **0%**              | **CRITICAL** | No error code testing       |
+| Lifecycle edge cases | ❌ **0%**              | MEDIUM       | Good stubs exist            |
+
+---
+
+## 🎯 TODO: PHASE 1 - CRITICAL (IMMEDIATE) ✅ **ENHANCED STUBS**
+
+### 🚀 claim_tokens_v0 Error Testing Suite (**SKIP HAPPY PATH** - already covered)
+
+- [x] ~~`test_claim_tokens_happy_path.rs`~~ **REDUNDANT** - Use existing comprehensive coverage
+- [ ] `test_claim_invalid_merkle_proof.rs` ✅ **Enhanced** - Invalid proof → InvalidMerkleProof
+- [ ] `test_claim_before_go_live.rs` ✅ **Enhanced** - Claim before slot → GoLiveDateNotReached
+- [ ] `test_claim_vault_index_out_of_bounds.rs` ✅ **Enhanced** - Bad vault index → AssignedVaultIndexOutOfBounds
+- [ ] `test_claim_inactive_campaign.rs` ✅ **Enhanced** - Claim from inactive → CampaignNotActive
+- [ ] `test_claim_duplicate_prevention.rs` ✅ **Enhanced** - Prevent double claims (ClaimReceipt PDA)
+- [ ] `test_claim_numeric_overflow.rs` ✅ **Enhanced** - Entitlements overflow → NumericOverflow
 
 ---
 
 ## 🎯 TODO: PHASE 2 - HIGH PRIORITY (NEXT) ✅ STUBBED
 
 ### 🔄 Lifecycle & Activation Testing
+
 - [ ] `test_campaign_activation_edge_cases.rs` ✅ - Multiple activation scenarios
 - [ ] `test_cohort_activation_requirements.rs` ✅ - All vaults must be activated
 - [ ] `test_vault_activation_validation.rs` ✅ - Funding validation & edge cases
@@ -69,6 +86,7 @@ The most critical instruction `claim_tokens_v0` has **NO TESTS WHATSOEVER**. Thi
 ## 🎯 TODO: PHASE 3 - MEDIUM PRIORITY (LATER) ✅ STUBBED
 
 ### 🔧 Admin Operations & Edge Cases
+
 - [ ] `test_reclaim_tokens_scenarios.rs` ✅ - Token reclamation from halted campaigns
 - [ ] `test_unstoppable_campaign_behavior.rs` ✅ - Unstoppable campaign constraints
 - [ ] `test_pause_resume_workflow.rs` ✅ - Pause/resume state transitions
@@ -79,6 +97,7 @@ The most critical instruction `claim_tokens_v0` has **NO TESTS WHATSOEVER**. Thi
 ## 🎯 TODO: PHASE 4 - COMPLETENESS (FINAL) ✅ STUBBED
 
 ### 🧪 Advanced Testing
+
 - [ ] `test_edge_case_combinations.rs` ✅ - Cross-instruction interactions
 - [ ] `test_gas_optimization_verification.rs` ✅ - CU usage validation
 - [ ] ~~`test_stress_scenarios.rs`~~ ❌ - **DELETED** (Large-scale operations)
@@ -88,18 +107,21 @@ The most critical instruction `claim_tokens_v0` has **NO TESTS WHATSOEVER**. Thi
 ## ❌ UNTESTED ERROR CODES (19/23)
 
 ### 🚨 CRITICAL PRIORITY
+
 - `InvalidMerkleProof` - claim_tokens_v0
 - `GoLiveDateNotReached` - claim_tokens_v0
 - `AssignedVaultIndexOutOfBounds` - claim_tokens_v0
 - `CampaignNotActive` - claim_tokens_v0
 
 ### 🔥 HIGH PRIORITY
+
 - `NumericOverflow` - Multiple instructions
 - `CampaignAlreadyActivated` - activate_campaign_v0
 - `NotAllCohortsActivated` - activate_campaign_v0
 - `NotAllVaultsActivated` - activate_cohort_v0
 
 ### ⚠️ MEDIUM PRIORITY
+
 - `VaultIndexOutOfBounds` - vault operations
 - `CampaignIsActive` - pause/modify operations
 - `CampaignIsUnstoppable` - pause/halt operations
@@ -107,6 +129,7 @@ The most critical instruction `claim_tokens_v0` has **NO TESTS WHATSOEVER**. Thi
 - `CampaignNotPermanentlyHalted` - reclaim_tokens_v0
 
 ### 📝 LOW PRIORITY
+
 - `InvalidIpfsHash` - activate_campaign_v0
 - `GoLiveSlotInPast` - activate_campaign_v0
 - `NoCohortsExpected` - initialize_campaign_v0
