@@ -17,7 +17,7 @@ fn test_vault_initialization_before_cohort() {
         .expect("campaign initialization failed");
 
     // Try to initialize vault without cohort
-    let result = test.jump_to(FixtureStage::VaultInitialized);
+    let result = test.jump_to(FixtureStage::VaultsInitialized);
 
     // This should fail because no cohort exists yet
     assert!(

@@ -10,6 +10,7 @@ use prism_protocol::{
     ID as PRISM_PROGRAM_ID, VAULT_SEED_PREFIX,
 };
 
+#[derive(Clone)]
 pub struct AddressFinder {
     pub program_id: Pubkey,
 

@@ -183,8 +183,12 @@ pub fn execute(campaign_db_in: PathBuf, admin_keypair: PathBuf, rpc_url: String)
     println!("\n🔍 Performing pre-flight checks...");
 
     // Calculate actual tokens needed (accounting for already-funded vaults)
-    let actual_tokens_needed =
-        calculate_actual_tokens_needed(&client, &campaign_info, &cohort_data, &vault_requirements)?;
+    let actual_tokens_needed = calculate_actual_tokens_needed(
+        &client, //
+        &campaign_info,
+        &cohort_data,
+        &vault_requirements,
+    )?;
 
     if actual_tokens_needed < total_tokens_needed {
         println!("💡 Some vaults are already funded:");
@@ -593,9 +597,10 @@ fn deploy_and_fund_cohort_vaults(
     for vault_req in vault_requirements {
         let vault_index = vault_req.vault_index as u8;
 
-        let (vault_address, _) = client
-            .address_finder()
-            .find_vault_v0_address(&cohort_address, vault_index);
+        let (vault_address, _) = client.address_finder().find_vault_v0_address(
+            &cohort_address, //
+            vault_index,
+        );
 
         println!(
             "        🏗️  Processing vault {} at {}",
