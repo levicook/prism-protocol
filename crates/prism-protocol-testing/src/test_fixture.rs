@@ -23,6 +23,7 @@ use {
     solana_sysvar::clock::Clock,
     solana_transaction::Transaction,
     spl_associated_token_account::get_associated_token_address,
+    std::collections::HashMap,
 };
 
 pub struct TestFixture {
@@ -289,6 +290,69 @@ impl TestFixture {
         self.send_transactions(txs)
     }
 
+    /// Fund vaults with custom amounts, falling back to compiled campaign amounts for unspecified vaults
+    ///
+    /// This method allows selective override of vault funding amounts while maintaining
+    /// the compiled campaign's calculated amounts for other vaults. This is essential
+    /// for edge case testing where we need to create scenarios like:
+    /// - Insufficient vault balance relative to expected claims
+    /// - Boundary condition testing (exact amounts, off-by-one errors)
+    /// - Vault funding mismatch scenarios
+    ///
+    /// # Arguments
+    /// * `custom_amounts` - HashMap mapping vault addresses to custom funding amounts
+    ///
+    /// # Example
+    /// ```rust
+    /// use std::collections::HashMap;
+    ///
+    /// let custom_funding = HashMap::from([
+    ///     (vault_address_1, 1000u64),  // Fund with only 1000 tokens
+    ///     (vault_address_2, 0u64),     // Fund with 0 tokens (empty vault)
+    /// ]);
+    ///
+    /// test.try_fund_vaults_with_custom_amounts(custom_funding)?;
+    /// ```
+    pub fn try_fund_vaults_with_custom_amounts(
+        &mut self,
+        custom_amounts: HashMap<Pubkey, u64>,
+    ) -> Result<(), FailedTransactionMetadata> {
+        let mut txs = Vec::new();
+
+        for cohort in &self.state.compiled_campaign.cohorts {
+            for vault in cohort.vaults.iter() {
+                // Use custom amount if specified, otherwise fall back to compiled campaign amount
+                let funding_amount =
+                    custom_amounts
+                        .get(&vault.address)
+                        .copied()
+                        .unwrap_or_else(|| {
+                            vault
+                                .required_tokens_u64()
+                                .expect("Required tokens too large")
+                        });
+
+                let ix = spl_token::instruction::mint_to(
+                    &self.state.address_finder.token_program_id,
+                    &self.state.compiled_campaign.mint,
+                    &vault.address,
+                    &self.state.admin_keypair.pubkey(),
+                    &[&self.state.admin_keypair.pubkey()],
+                    funding_amount,
+                )
+                .expect("Failed to build mint_to ix");
+
+                txs.push(Transaction::new(
+                    &[&self.state.admin_keypair],
+                    Message::new(&[ix], Some(&self.state.compiled_campaign.admin)),
+                    self.latest_blockhash(),
+                ));
+            }
+        }
+
+        self.send_transactions(txs)
+    }
+
     pub fn try_activate_vaults(&mut self) -> Result<(), FailedTransactionMetadata> {
         let mut txs = Vec::new();
 
@@ -297,6 +361,73 @@ impl TestFixture {
                 let expected_balance = vault
                     .required_tokens_u64()
                     .expect("Required tokens too large");
+
+                let (ix, _, _) = build_activate_vault_v0_ix(
+                    &self.state.address_finder,
+                    self.state.compiled_campaign.admin,
+                    self.state.compiled_campaign.fingerprint,
+                    cohort.merkle_root,
+                    vault_index.try_into().expect("Vault index too large"),
+                    expected_balance,
+                )
+                .expect("Failed to build activate vault v0 ix");
+
+                txs.push(Transaction::new(
+                    &[&self.state.admin_keypair],
+                    Message::new(&[ix], Some(&self.state.compiled_campaign.admin)),
+                    self.latest_blockhash(),
+                ));
+            }
+        }
+
+        self.send_transactions(txs)
+    }
+
+    /// Activate vaults with custom expected balance validation, falling back to compiled campaign amounts
+    ///
+    /// This method allows bypassing the strict balance validation in activate_vault_v0 by
+    /// specifying custom expected_balance parameters. This is crucial for edge case testing where:
+    /// - Vaults were intentionally funded with non-standard amounts
+    /// - Testing the interaction between funding and activation validation
+    /// - Creating scenarios where vaults pass activation but fail during claims
+    ///
+    /// The activate_vault_v0 instruction enforces: `vault.amount == expected_balance`
+    /// This method lets us satisfy that constraint with custom values.
+    ///
+    /// # Arguments
+    /// * `custom_expected_balance` - HashMap mapping vault addresses to custom expected balance values
+    ///
+    /// # Example
+    /// ```rust
+    /// use std::collections::HashMap;
+    ///
+    /// // First fund with custom amounts
+    /// let custom_funding = HashMap::from([(vault_addr, 1000u64)]);
+    /// test.try_fund_vaults_with_custom_amounts(custom_funding)?;
+    ///
+    /// // Then activate expecting the same amount (bypasses validation)
+    /// let custom_expectations = HashMap::from([(vault_addr, 1000u64)]);
+    /// test.try_activate_vaults_with_custom_expected_balance(custom_expectations)?;
+    ///
+    /// // Now vault is activated but has insufficient balance for larger claims!
+    /// ```
+    pub fn try_activate_vaults_with_custom_expected_balance(
+        &mut self,
+        custom_expected_balance: HashMap<Pubkey, u64>,
+    ) -> Result<(), FailedTransactionMetadata> {
+        let mut txs = Vec::new();
+
+        for cohort in &self.state.compiled_campaign.cohorts {
+            for (vault_index, vault) in cohort.vaults.iter().enumerate() {
+                // Use custom expected balance if specified, otherwise fall back to compiled campaign amount
+                let expected_balance = custom_expected_balance
+                    .get(&vault.address)
+                    .copied()
+                    .unwrap_or_else(|| {
+                        vault
+                            .required_tokens_u64()
+                            .expect("Required tokens too large")
+                    });
 
                 let (ix, _, _) = build_activate_vault_v0_ix(
                     &self.state.address_finder,
