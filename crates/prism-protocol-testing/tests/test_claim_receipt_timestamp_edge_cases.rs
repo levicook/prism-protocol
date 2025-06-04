@@ -2,7 +2,7 @@ use prism_protocol_testing::TestFixture;
 
 /// Test claim with extreme timestamp values → Timestamp validation edge cases
 ///
-/// **MEDIUM BUG POTENTIAL**: This test targets time handling assumptions that could 
+/// **MEDIUM BUG POTENTIAL**: This test targets time handling assumptions that could
 /// expose clock manipulation, overflow, or validation bugs.
 ///
 /// **What this tests:**
@@ -51,4 +51,4 @@ fn test_claim_receipt_timestamp_edge_cases() {
     let mut _test = TestFixture::default();
 
     todo!("Implement timestamp edge cases - Clock::get() validation");
-} 
+}

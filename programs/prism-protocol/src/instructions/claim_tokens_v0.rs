@@ -48,7 +48,7 @@ pub struct ClaimTokensV0<'info> {
         ],
         bump = cohort.bump,
         constraint = cohort.campaign == campaign.key() @ ErrorCode::CohortCampaignMismatch,
-        constraint = cohort.merkle_root == merkle_root @ ErrorCode::MerkleRootMismatch, // Ensure cohort found by seed matches arg
+        constraint = cohort.merkle_root == merkle_root @ ErrorCode::MerkleRootMismatch,
     )]
     pub cohort: Box<Account<'info, CohortV0>>,
 
@@ -76,7 +76,7 @@ pub struct ClaimTokensV0<'info> {
     #[account(
         init_if_needed,
         payer = claimant,
-        associated_token::mint = mint, // Use the renamed mint field
+        associated_token::mint = mint,
         associated_token::authority = claimant,
     )]
     pub claimant_token_account: Box<Account<'info, TokenAccount>>,

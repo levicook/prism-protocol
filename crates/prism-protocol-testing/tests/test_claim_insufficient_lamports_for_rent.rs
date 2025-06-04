@@ -1,11 +1,11 @@
 use prism_protocol_sdk::build_claim_tokens_v0_ix;
 use prism_protocol_testing::{deterministic_keypair, CampaignSnapshot, FixtureStage, TestFixture};
+use solana_instruction;
 use solana_message::Message;
 use solana_signer::Signer;
 use solana_transaction::Transaction;
-use spl_associated_token_account::get_associated_token_address;
 use solana_transaction_error;
-use solana_instruction;
+use spl_associated_token_account::get_associated_token_address;
 
 /// Test claim when claimant has insufficient lamports for ATA rent → Account creation failure
 ///
@@ -22,9 +22,9 @@ use solana_instruction;
 /// The `init_if_needed` constraint in claim_tokens_v0 creates an ATA for the claimant if it
 /// doesn't exist. This involves:
 /// 1. Rent calculation for new account
-/// 2. SOL deduction from claimant 
+/// 2. SOL deduction from claimant
 /// 3. Account creation with proper ownership
-/// 
+///
 /// Edge cases that could expose bugs:
 /// - Claimant has EXACTLY enough SOL for tx fees but not rent
 /// - Claimant has partial SOL (enough for fees, not enough for rent)
@@ -76,17 +76,27 @@ fn test_claim_insufficient_lamports_for_rent() {
     // Rent exemption for 165-byte account is approximately 2,039,280 lamports on mainnet
     // Using a conservative estimate for testing
     const ESTIMATED_ATA_RENT_REQUIREMENT: u64 = 2_500_000; // ~0.0025 SOL, conservative estimate
-    
+
     // The claim instruction ALSO creates a ClaimReceipt PDA account
     // From the logs we can see it needs ~1,677,360 lamports
     const ESTIMATED_CLAIM_RECEIPT_RENT_REQUIREMENT: u64 = 2_000_000; // ~0.002 SOL, conservative estimate
-    
-    // Total rent needed for both accounts
-    const TOTAL_ESTIMATED_RENT_REQUIREMENT: u64 = ESTIMATED_ATA_RENT_REQUIREMENT + ESTIMATED_CLAIM_RECEIPT_RENT_REQUIREMENT;
 
-    println!("💰 Estimated ATA rent requirement: {} lamports", ESTIMATED_ATA_RENT_REQUIREMENT);
-    println!("💰 Estimated ClaimReceipt rent requirement: {} lamports", ESTIMATED_CLAIM_RECEIPT_RENT_REQUIREMENT);
-    println!("💰 Total estimated rent requirement: {} lamports", TOTAL_ESTIMATED_RENT_REQUIREMENT);
+    // Total rent needed for both accounts
+    const TOTAL_ESTIMATED_RENT_REQUIREMENT: u64 =
+        ESTIMATED_ATA_RENT_REQUIREMENT + ESTIMATED_CLAIM_RECEIPT_RENT_REQUIREMENT;
+
+    println!(
+        "💰 Estimated ATA rent requirement: {} lamports",
+        ESTIMATED_ATA_RENT_REQUIREMENT
+    );
+    println!(
+        "💰 Estimated ClaimReceipt rent requirement: {} lamports",
+        ESTIMATED_CLAIM_RECEIPT_RENT_REQUIREMENT
+    );
+    println!(
+        "💰 Total estimated rent requirement: {} lamports",
+        TOTAL_ESTIMATED_RENT_REQUIREMENT
+    );
 
     // 5. Calculate rough transaction fee (conservative estimate)
     let estimated_tx_fee = 10_000; // ~0.00001 SOL for tx fees
@@ -126,7 +136,10 @@ fn test_claim_insufficient_lamports_for_rent() {
 
     println!("📊 State before insufficient rent claim attempt:");
     println!("  Vault balance: {}", vault_balance_before);
-    println!("  ATA exists: {}", test.account_exists(&claimant_token_account));
+    println!(
+        "  ATA exists: {}",
+        test.account_exists(&claimant_token_account)
+    );
 
     // 9. Generate proof for claim attempt
     let proof = {
@@ -172,35 +185,42 @@ fn test_claim_insufficient_lamports_for_rent() {
         }
         Err(failed_meta) => {
             println!("✅ Claim correctly failed: {:?}", failed_meta.err);
-            
+
             // The System Program returns Custom(1) for insufficient lamports for rent
             // This is exactly what we expect when ATA creation fails due to insufficient rent
             match failed_meta.err {
-                solana_transaction_error::TransactionError::InstructionError(_, solana_instruction::error::InstructionError::Custom(1)) => {
+                solana_transaction_error::TransactionError::InstructionError(
+                    _,
+                    solana_instruction::error::InstructionError::Custom(1),
+                ) => {
                     println!("✅ Confirmed insufficient lamports for rent error (System Program Custom(1))");
                 }
                 _ => {
                     // Also check for other potential rent-related errors
                     let error_str = format!("{:?}", failed_meta.err);
-                    let is_rent_related = error_str.contains("InsufficientFunds") 
-                        || error_str.contains("insufficient") 
+                    let is_rent_related = error_str.contains("InsufficientFunds")
+                        || error_str.contains("insufficient")
                         || error_str.contains("rent")
                         || error_str.contains("lamports");
-                        
+
                     if !is_rent_related {
                         panic!(
                             "Expected rent-related error (preferably System Program Custom(1)), got: {:?}",
                             failed_meta.err
                         );
                     }
-                    println!("✅ Confirmed other rent-related error: {:?}", failed_meta.err);
+                    println!(
+                        "✅ Confirmed other rent-related error: {:?}",
+                        failed_meta.err
+                    );
                 }
             }
         }
     }
 
     // 12. Verify no state changes occurred during failed attempt
-    let state_after_failed_claim = CampaignSnapshot::capture_with_claimants(&test, &[claimant_pubkey]);
+    let state_after_failed_claim =
+        CampaignSnapshot::capture_with_claimants(&test, &[claimant_pubkey]);
 
     assert_eq!(
         state_before_claim, state_after_failed_claim,
@@ -244,7 +264,7 @@ fn test_claim_insufficient_lamports_for_rent() {
         (leaf.assigned_vault_index, leaf.entitlements)
     };
 
-    // Give bonus claimant sufficient lamports for both rent and fees  
+    // Give bonus claimant sufficient lamports for both rent and fees
     let sufficient_balance = TOTAL_ESTIMATED_RENT_REQUIREMENT + estimated_tx_fee + 100_000; // Extra buffer
     test.airdrop(&bonus_claimant_pubkey, sufficient_balance);
 
@@ -321,4 +341,4 @@ fn test_claim_insufficient_lamports_for_rent() {
     //
     // 5. TESTING EDGE CASES: Boundary testing (insufficient vs sufficient rent) reveals
     //    the exact behavior of complex constraint combinations like `init_if_needed`.
-} 
+}

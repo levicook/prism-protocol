@@ -2,7 +2,7 @@ use prism_protocol_testing::TestFixture;
 
 /// Test claim with maximum instruction data size → Instruction size limit validation
 ///
-/// **MEDIUM BUG POTENTIAL**: This test targets serialization and network layer boundaries 
+/// **MEDIUM BUG POTENTIAL**: This test targets serialization and network layer boundaries
 /// that could expose size limits, DoS vectors, or data corruption bugs.
 ///
 /// **What this tests:**
@@ -46,4 +46,4 @@ fn test_claim_maximum_instruction_data_size() {
     let mut _test = TestFixture::default();
 
     todo!("Implement maximum instruction size test - serialization limits");
-} 
+}

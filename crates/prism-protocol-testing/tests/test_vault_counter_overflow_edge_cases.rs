@@ -2,7 +2,7 @@ use prism_protocol_testing::TestFixture;
 
 /// Test vault counter overflow edge cases → Counter arithmetic boundary validation
 ///
-/// **HIGH BUG POTENTIAL**: This test targets counter arithmetic that could expose 
+/// **HIGH BUG POTENTIAL**: This test targets counter arithmetic that could expose
 /// integer overflow, wraparound, or state corruption bugs.
 ///
 /// **What this tests:**
@@ -32,4 +32,4 @@ fn test_vault_counter_overflow_edge_cases() {
     let mut _test = TestFixture::default();
 
     todo!("Implement vault counter overflow test - u8::MAX boundary conditions");
-} 
+}

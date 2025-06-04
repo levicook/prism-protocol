@@ -683,6 +683,22 @@ impl TestFixture {
         self.svm.get_account(address).is_some()
     }
 
+    /// Create an additional mint (useful for testing edge cases like cross-mint scenarios)
+    pub fn create_ancillary_mint(
+        &mut self,
+        mint_keypair: &Keypair,
+        decimals: u8,
+    ) -> Result<(), FailedTransactionMetadata> {
+        create_mint(
+            &mut self.svm,
+            &self.state.admin_keypair,
+            mint_keypair,
+            decimals,
+            None,
+        )?;
+        Ok(())
+    }
+
     // TODO replace this with get_token_account -> TokenAccount
     /// Get token account balance, returns 0 if account doesn't exist
     pub fn get_token_account_balance(&self, token_account: &Pubkey) -> Result<u64, &'static str> {

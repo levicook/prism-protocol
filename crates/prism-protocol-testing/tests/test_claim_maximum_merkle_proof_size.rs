@@ -2,7 +2,7 @@ use prism_protocol_testing::TestFixture;
 
 /// Test claim with maximum merkle proof size → Resource limit validation
 ///
-/// **MEDIUM BUG POTENTIAL**: This test targets resource consumption boundaries that could 
+/// **MEDIUM BUG POTENTIAL**: This test targets resource consumption boundaries that could
 /// expose compute/memory limits, DoS vectors, or serialization bugs.
 ///
 /// **What this tests:**
@@ -31,4 +31,4 @@ fn test_claim_maximum_merkle_proof_size() {
     let mut _test = TestFixture::default();
 
     todo!("Implement maximum merkle proof size test - resource limit validation");
-} 
+}

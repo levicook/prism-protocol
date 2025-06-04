@@ -2,7 +2,7 @@ use prism_protocol_testing::TestFixture;
 
 /// Test claim with amount_per_entitlement = 0 → Zero arithmetic edge cases
 ///
-/// **HIGH BUG POTENTIAL**: This test targets zero arithmetic that could expose 
+/// **HIGH BUG POTENTIAL**: This test targets zero arithmetic that could expose
 /// division-by-zero, unexpected behavior, or configuration validation bugs.
 ///
 /// **What this tests:**
@@ -49,14 +49,12 @@ use prism_protocol_testing::TestFixture;
 fn test_claim_zero_amount_per_entitlement() {
     let mut _test = TestFixture::default();
 
-    todo!(
-        "Implement zero amount per entitlement test - 0 * entitlements = 0 edge cases"
-    );
+    todo!("Implement zero amount per entitlement test - 0 * entitlements = 0 edge cases");
 
     // Implementation strategy:
     // 1. Create custom campaign with amount_per_entitlement = 0
-    // 2. Set up valid claimant with normal entitlements  
+    // 2. Set up valid claimant with normal entitlements
     // 3. Attempt claim, observe zero arithmetic behavior
     // 4. Verify proper handling of zero-value operations
     // 5. Test vault funding and other operations with zero amounts
-} 
+}
