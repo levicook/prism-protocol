@@ -12,11 +12,11 @@ use crate::{CAMPAIGN_V0_SEED_PREFIX, CLAIM_RECEIPT_V0_SEED_PREFIX, COHORT_V0_SEE
 #[instruction(
     campaign_fingerprint: [u8; 32], // Used to find Campaign PDA
     merkle_root: [u8; 32], // Used to find Cohort PDA (this is the cohort.merkle_root)
-    merkle_proof: Vec<[u8; 32]>,
+    merkle_proof: Vec<Vec<[u8; 32]>>, // 256-ary tree proof structure
     assigned_vault_index: u8,
     entitlements: u64
 )]
-pub struct ClaimTokensV0<'info> {
+pub struct ClaimTokensV1<'info> {
     /// CHECK: This account is validated through the campaign PDA seeds constraint.
     /// The admin key is used as a seed for deriving the campaign PDA, ensuring
     /// that only the correct admin can be used for the specific campaign.
@@ -66,7 +66,7 @@ pub struct ClaimTokensV0<'info> {
     )]
     pub vault: Box<Account<'info, TokenAccount>>,
 
-    /// The mint of the token being distributed. Renamed from reward_token_mint.
+    /// The mint of the token being distributed.
     #[account(
         constraint = mint.key() == campaign.mint @ ErrorCode::MintMismatch
     )]
@@ -101,16 +101,16 @@ pub struct ClaimTokensV0<'info> {
     pub rent: Sysvar<'info, Rent>,
 }
 
-pub fn handle_claim_tokens_v0(
-    ctx: Context<ClaimTokensV0>,
+pub fn handle_claim_tokens_v1(
+    ctx: Context<ClaimTokensV1>,
     _campaign_fingerprint: [u8; 32], // Consumed by Accounts macro for seed derivation
     cohort_merkle_root: [u8; 32], // Consumed by Accounts macro for seed derivation, also checked in constraint
-    merkle_proof: Vec<[u8; 32]>,
+    merkle_proof: Vec<Vec<[u8; 32]>>, // 256-ary tree proof
     assigned_vault_index: u8,
     entitlements: u64,
 ) -> Result<()> {
-    // Create proof type for binary tree
-    let proof = ClaimProofType::from_binary(merkle_proof);
+    // Create proof type for 256-ary tree
+    let proof = ClaimProofType::from_wide(merkle_proof);
 
     // Delegate to common handler
     handle_claim_tokens_common(
@@ -127,4 +127,4 @@ pub fn handle_claim_tokens_v0(
         entitlements,
         ctx.bumps.claim_receipt,
     )
-}
+} 

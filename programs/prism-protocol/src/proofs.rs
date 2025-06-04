@@ -3,14 +3,60 @@ use anchor_lang::solana_program::hash::Hasher as SolanaHasher;
 
 use crate::ClaimLeaf;
 
+/// Unified proof type that can hold either binary (V0) or 256-ary (V1) merkle proofs.
+/// This enables code reuse between claim_tokens_v0 and claim_tokens_v1 handlers.
+#[derive(Clone, Debug)]
+pub enum ClaimProofType {
+    /// Binary merkle tree proof (V0)
+    V0(ClaimProofV0),
+    /// 256-ary merkle tree proof (V1)
+    V1(ClaimProofV1),
+}
+
+impl ClaimProofType {
+    /// Create a ProofType from a binary tree proof
+    pub fn from_binary(proof: Vec<[u8; 32]>) -> Self {
+        Self::V0(ClaimProofV0::new(proof))
+    }
+
+    /// Create a ProofType from a 256-ary tree proof
+    pub fn from_wide(proof: Vec<Vec<[u8; 32]>>) -> Self {
+        Self::V1(ClaimProofV1::new(proof))
+    }
+
+    /// Verify the proof against a root and leaf, regardless of proof type
+    pub fn verify(&self, root: &[u8; 32], leaf: &ClaimLeaf) -> bool {
+        match self {
+            ClaimProofType::V0(proof) => proof.verify(root, leaf),
+            ClaimProofType::V1(proof) => proof.verify(root, leaf),
+        }
+    }
+
+    /// Get a descriptive name for logging
+    pub fn description(&self) -> &'static str {
+        match self {
+            ClaimProofType::V0(_) => "Binary merkle proof",
+            ClaimProofType::V1(_) => "256-ary merkle proof",
+        }
+    }
+
+    /// Get the proof version for metrics/logging
+    pub fn version(&self) -> u8 {
+        match self {
+            ClaimProofType::V0(_) => 0,
+            ClaimProofType::V1(_) => 1,
+        }
+    }
+}
+
 /// Binary merkle tree proof for V0 claim instructions.
 ///
 /// This wraps a Vec<[u8; 32]> to provide type safety and ensure
 /// binary tree proofs can't be accidentally used with 256-ary tree verification.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, PartialEq)]
-pub struct ProofV0(pub Vec<[u8; 32]>);
+pub struct ClaimProofV0(pub Vec<[u8; 32]>);
 
-impl ProofV0 {
+impl ClaimProofV0 {
     /// Create a new binary tree proof
     pub fn new(proof: Vec<[u8; 32]>) -> Self {
         Self(proof)
@@ -75,9 +121,9 @@ impl ProofV0 {
 /// up to 255 sibling hashes (since we use 256-ary trees). This structure provides
 /// type safety and ensures 256-ary proofs can't be mixed with binary tree verification.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, PartialEq)]
-pub struct ProofV1(pub Vec<Vec<[u8; 32]>>);
+pub struct ClaimProofV1(pub Vec<Vec<[u8; 32]>>);
 
-impl ProofV1 {
+impl ClaimProofV1 {
     /// Create a new 256-ary tree proof
     pub fn new(proof: Vec<Vec<[u8; 32]>>) -> Self {
         Self(proof)
@@ -165,13 +211,13 @@ impl ProofV1 {
 }
 
 // Implement From traits for easy conversion from raw data
-impl From<Vec<[u8; 32]>> for ProofV0 {
+impl From<Vec<[u8; 32]>> for ClaimProofV0 {
     fn from(proof: Vec<[u8; 32]>) -> Self {
         Self::new(proof)
     }
 }
 
-impl From<Vec<Vec<[u8; 32]>>> for ProofV1 {
+impl From<Vec<Vec<[u8; 32]>>> for ClaimProofV1 {
     fn from(proof: Vec<Vec<[u8; 32]>>) -> Self {
         Self::new(proof)
     }
@@ -193,7 +239,7 @@ mod tests {
     fn test_proof_types_basic_functionality() {
         // Test ProofV0 (binary tree proof)
         let binary_proof_data = vec![[1u8; 32], [2u8; 32], [3u8; 32]];
-        let proof_v0 = ProofV0::new(binary_proof_data.clone());
+        let proof_v0 = ClaimProofV0::new(binary_proof_data.clone());
 
         assert_eq!(proof_v0.len(), 3);
         assert_eq!(proof_v0.as_slice(), &binary_proof_data);
@@ -208,7 +254,7 @@ mod tests {
             vec![[6u8; 32]],                       // Level 1: 1 sibling
             vec![[7u8; 32], [8u8; 32], [9u8; 32]], // Level 2: 3 siblings
         ];
-        let proof_v1 = ProofV1::new(wide_proof_data.clone());
+        let proof_v1 = ClaimProofV1::new(wide_proof_data.clone());
 
         assert_eq!(proof_v1.len(), 3); // 3 levels
         assert_eq!(proof_v1.total_hashes(), 6); // 2 + 1 + 3 = 6 total hashes
@@ -219,35 +265,39 @@ mod tests {
         assert_eq!(recovered_wide_data, wide_proof_data);
 
         // Test From trait conversions
-        let proof_v0_from: ProofV0 = binary_proof_data.into();
+        let proof_v0_from: ClaimProofV0 = binary_proof_data.into();
         assert_eq!(proof_v0_from.len(), 3);
 
-        let proof_v1_from: ProofV1 = wide_proof_data.into();
+        let proof_v1_from: ClaimProofV1 = wide_proof_data.into();
         assert_eq!(proof_v1_from.len(), 3);
     }
 
     #[test]
     fn test_proof_serialization() {
         // Test that proof types can be serialized/deserialized with Borsh
-        let binary_proof = ProofV0::new(vec![[1u8; 32], [2u8; 32]]);
+        let binary_proof = ClaimProofV0::new(vec![[1u8; 32], [2u8; 32]]);
         let serialized = binary_proof.try_to_vec().unwrap();
-        let deserialized: ProofV0 = ProofV0::try_from_slice(&serialized).unwrap();
+        let deserialized: ClaimProofV0 = ClaimProofV0::try_from_slice(&serialized).unwrap();
         assert_eq!(binary_proof, deserialized);
 
-        let wide_proof = ProofV1::new(vec![vec![[3u8; 32]], vec![[4u8; 32], [5u8; 32]]]);
+        let wide_proof = ClaimProofV1::new(vec![vec![[3u8; 32]], vec![[4u8; 32], [5u8; 32]]]);
         let serialized = wide_proof.try_to_vec().unwrap();
-        let deserialized: ProofV1 = ProofV1::try_from_slice(&serialized).unwrap();
+        let deserialized: ClaimProofV1 = ClaimProofV1::try_from_slice(&serialized).unwrap();
         assert_eq!(wide_proof, deserialized);
     }
 
     /// Example showing how proof types prevent accidental misuse.
     /// This demonstrates the benefit of type safety - you can't accidentally
     /// pass a V0 proof to a function expecting V1 proofs.
-    fn example_verify_binary_proof(proof: &ProofV0, leaf: &ClaimLeaf, root: &[u8; 32]) -> bool {
+    fn example_verify_binary_proof(
+        proof: &ClaimProofV0,
+        leaf: &ClaimLeaf,
+        root: &[u8; 32],
+    ) -> bool {
         proof.verify(root, leaf)
     }
 
-    fn example_verify_wide_proof(proof: &ProofV1, leaf: &ClaimLeaf, root: &[u8; 32]) -> bool {
+    fn example_verify_wide_proof(proof: &ClaimProofV1, leaf: &ClaimLeaf, root: &[u8; 32]) -> bool {
         proof.verify(root, leaf)
     }
 
@@ -256,8 +306,8 @@ mod tests {
         let leaf = create_test_leaf();
         let root = [42u8; 32];
 
-        let binary_proof = ProofV0::new(vec![[1u8; 32]]);
-        let wide_proof = ProofV1::new(vec![vec![[2u8; 32]]]);
+        let binary_proof = ClaimProofV0::new(vec![[1u8; 32]]);
+        let wide_proof = ClaimProofV1::new(vec![vec![[2u8; 32]]]);
 
         // This works - correct proof type for each function
         let _result1 = example_verify_binary_proof(&binary_proof, &leaf, &root);
@@ -294,7 +344,7 @@ mod tests {
         let expected_root = root_hasher.result().to_bytes();
 
         // Create proof with these siblings
-        let proof_v1 = ProofV1::new(vec![
+        let proof_v1 = ClaimProofV1::new(vec![
             vec![sibling_1, sibling_2, sibling_3], // Level 0: 3 siblings
         ]);
 
@@ -346,7 +396,7 @@ mod tests {
         let expected_root = root_hasher.result().to_bytes();
 
         // Create 2-level proof
-        let proof_v1 = ProofV1::new(vec![
+        let proof_v1 = ClaimProofV1::new(vec![
             vec![level_0_sibling_1, level_0_sibling_2], // Level 0: 2 siblings
             vec![level_1_sibling],                      // Level 1: 1 sibling
         ]);
@@ -386,7 +436,7 @@ mod tests {
         let expected_root = root_hasher.result().to_bytes();
 
         // Create proof with empty first level
-        let proof_v1 = ProofV1::new(vec![
+        let proof_v1 = ClaimProofV1::new(vec![
             vec![],                // Level 0: no siblings (empty)
             vec![level_1_sibling], // Level 1: 1 sibling
         ]);
@@ -420,9 +470,9 @@ mod tests {
         let expected_root = root_hasher.result().to_bytes();
 
         // Test different orderings of siblings in proof
-        let proof_order_1 = ProofV1::new(vec![vec![sibling_a, sibling_b, sibling_c]]);
-        let proof_order_2 = ProofV1::new(vec![vec![sibling_c, sibling_a, sibling_b]]);
-        let proof_order_3 = ProofV1::new(vec![vec![sibling_b, sibling_c, sibling_a]]);
+        let proof_order_1 = ClaimProofV1::new(vec![vec![sibling_a, sibling_b, sibling_c]]);
+        let proof_order_2 = ClaimProofV1::new(vec![vec![sibling_c, sibling_a, sibling_b]]);
+        let proof_order_3 = ClaimProofV1::new(vec![vec![sibling_b, sibling_c, sibling_a]]);
 
         // All should verify successfully (ordering shouldn't matter)
         assert!(
@@ -444,7 +494,7 @@ mod tests {
         let leaf = create_test_leaf();
 
         // Test empty proof (leaf is root)
-        let empty_proof = ProofV1::new(vec![]);
+        let empty_proof = ClaimProofV1::new(vec![]);
         let leaf_hash = leaf.to_hash();
         assert!(
             empty_proof.verify(&leaf_hash, &leaf),
@@ -452,7 +502,7 @@ mod tests {
         );
 
         // Test single empty level
-        let single_empty_level = ProofV1::new(vec![vec![]]);
+        let single_empty_level = ClaimProofV1::new(vec![vec![]]);
         let mut hasher = SolanaHasher::default();
         hasher.hash(&[0x01]);
         hasher.hash(&leaf_hash);

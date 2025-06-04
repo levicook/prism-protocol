@@ -8,8 +8,9 @@ name = "prism_protocol_merkle"
 path = "src/lib.rs"
 
 [dependencies]
-anchor-lang = { workspace = true }
 prism_protocol = { path = "../../programs/prism-protocol", features = [
     "no-entrypoint",
 ] }
+
+anchor-lang = { workspace = true }
 rs_merkle = { workspace = true }

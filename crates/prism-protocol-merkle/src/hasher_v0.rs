@@ -33,9 +33,9 @@ use rs_merkle::Hasher;
 /// This approach is used by Bitcoin, Ethereum, Certificate Transparency, and other
 /// security-critical merkle tree implementations.
 #[derive(Clone, Debug)]
-pub struct PrismHasher;
+pub struct ClaimHasherV0;
 
-impl Hasher for PrismHasher {
+impl Hasher for ClaimHasherV0 {
     type Hash = [u8; 32];
 
     fn hash(data: &[u8]) -> [u8; 32] {
@@ -75,7 +75,7 @@ impl Hasher for PrismHasher {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ClaimLeaf, PrismHasher};
+    use crate::{ClaimLeaf, ClaimHasherV0};
     use anchor_lang::{prelude::*, solana_program::hash::Hasher as SolanaHasher};
     use rs_merkle::Hasher as _;
 
@@ -96,7 +96,7 @@ mod tests {
 
         // Hash using our PrismHasher
         let leaf_data = leaf.try_to_vec().expect("Failed to serialize leaf");
-        let actual_hash = PrismHasher::hash(&leaf_data);
+        let actual_hash = ClaimHasherV0::hash(&leaf_data);
 
         assert_eq!(
             expected_hash, actual_hash,
@@ -110,8 +110,8 @@ mod tests {
         let hash2 = [2u8; 32];
 
         // Test both orderings produce the same result
-        let result1 = PrismHasher::concat_and_hash(&hash1, Some(&hash2));
-        let result2 = PrismHasher::concat_and_hash(&hash2, Some(&hash1));
+        let result1 = ClaimHasherV0::concat_and_hash(&hash1, Some(&hash2));
+        let result2 = ClaimHasherV0::concat_and_hash(&hash2, Some(&hash1));
 
         assert_eq!(
             result1, result2,

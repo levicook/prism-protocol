@@ -1,22 +1,70 @@
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::hash::Hasher as SolanaHasher;
 use rs_merkle::MerkleTree;
 use std::collections::HashMap;
 
-use crate::{ClaimLeaf, PrismHasher};
+use crate::{consistent_hash_vault_assignment, ClaimHasherV0, ClaimLeaf};
+
+/// Creates a merkle tree using consistent hashing to assign claimants to vaults.
+///
+/// This is the production function that implements the design goal of deterministic
+/// vault assignment via consistent hashing. Each claimant is mapped to a vault index
+/// (0, 1, 2, ..., vaults.len()-1) based on a hash of their pubkey.
+///
+/// ## Consistent Hashing Algorithm
+///
+/// For each claimant:
+/// 1. Hash the claimant's pubkey: `SHA256(claimant_pubkey.as_ref())`
+/// 2. Convert the first 8 bytes of the hash to u64 (little-endian)
+/// 3. Modulo by the number of vaults to get the vault index
+/// 4. Assign the claimant to `vaults[vault_index]`
+///
+/// This ensures:
+/// - **Deterministic assignment**: Same claimant always maps to same vault
+/// - **Even distribution**: Claimants are distributed roughly evenly across vaults
+/// - **Immutable mapping**: Vault assignment doesn't change if vault list order is preserved
+///
+/// ## Parameters
+/// - `claimant_entitlements`: List of (claimant_pubkey, entitlements) pairs
+/// - `vault_count`: Number of vaults
+///
+/// ## Returns
+/// A `ClaimMerkleTree` with leaves containing the assigned vault index for each claimant.
+pub fn create_claim_tree_v0(
+    claimant_entitlements: &[(Pubkey, u64)],
+    vault_count: usize,
+) -> Result<ClaimTreeV0> {
+    require!(!claimant_entitlements.is_empty(), ErrorCode::InvalidInput);
+    require!(vault_count > 0, ErrorCode::InvalidInput);
+
+    let leaves: Vec<ClaimLeaf> = claimant_entitlements
+        .iter()
+        .map(|(claimant, entitlements)| {
+            // Consistent hashing: hash the claimant pubkey to determine vault assignment
+            let vault_index = consistent_hash_vault_assignment(claimant, vault_count);
+
+            ClaimLeaf {
+                claimant: *claimant,
+                assigned_vault_index: vault_index as u8,
+                entitlements: *entitlements,
+            }
+        })
+        .collect();
+
+    ClaimTreeV0::from_leaves(leaves)
+}
 
 /// Result of building a merkle tree from claim leaves
 #[derive(Clone)]
-pub struct ClaimTree {
+pub struct ClaimTreeV0 {
     /// The underlying merkle tree
-    pub tree: MerkleTree<PrismHasher>,
+    pub tree: MerkleTree<ClaimHasherV0>,
     /// Mapping from claimant pubkey to their leaf index in the tree
     pub claimant_to_index: HashMap<Pubkey, usize>,
     /// The original leaves used to build the tree
     pub leaves: Vec<ClaimLeaf>,
 }
 
-impl ClaimTree {
+impl ClaimTreeV0 {
     /// Build a merkle tree from a list of claim leaves
     pub fn from_leaves(leaves: Vec<ClaimLeaf>) -> Result<Self> {
         require!(!leaves.is_empty(), ErrorCode::InvalidInput);
@@ -33,9 +81,9 @@ impl ClaimTree {
         let leaf_hashes: Vec<[u8; 32]> = leaves.iter().map(|leaf| leaf.to_hash()).collect();
 
         // Build the merkle tree
-        let tree = MerkleTree::<PrismHasher>::from_leaves(&leaf_hashes);
+        let tree = MerkleTree::<ClaimHasherV0>::from_leaves(&leaf_hashes);
 
-        Ok(ClaimTree {
+        Ok(ClaimTreeV0 {
             tree,
             claimant_to_index,
             leaves,
@@ -97,84 +145,10 @@ impl ClaimTree {
         let leaf = self.leaf_for_claimant(claimant)?;
         let leaf_hash = leaf.to_hash();
 
-        let merkle_proof = rs_merkle::MerkleProof::<PrismHasher>::new(proof.to_vec());
+        let merkle_proof = rs_merkle::MerkleProof::<ClaimHasherV0>::new(proof.to_vec());
 
         Ok(merkle_proof.verify(root, &[*index], &[leaf_hash], self.leaves.len()))
     }
-}
-
-/// Creates a merkle tree using consistent hashing to assign claimants to vaults.
-///
-/// This is the production function that implements the design goal of deterministic
-/// vault assignment via consistent hashing. Each claimant is mapped to a vault index
-/// (0, 1, 2, ..., vaults.len()-1) based on a hash of their pubkey.
-///
-/// ## Consistent Hashing Algorithm
-///
-/// For each claimant:
-/// 1. Hash the claimant's pubkey: `SHA256(claimant_pubkey.as_ref())`
-/// 2. Convert the first 8 bytes of the hash to u64 (little-endian)
-/// 3. Modulo by the number of vaults to get the vault index
-/// 4. Assign the claimant to `vaults[vault_index]`
-///
-/// This ensures:
-/// - **Deterministic assignment**: Same claimant always maps to same vault
-/// - **Even distribution**: Claimants are distributed roughly evenly across vaults
-/// - **Immutable mapping**: Vault assignment doesn't change if vault list order is preserved
-///
-/// ## Parameters
-/// - `claimant_entitlements`: List of (claimant_pubkey, entitlements) pairs
-/// - `vault_count`: Number of vaults
-///
-/// ## Returns
-/// A `ClaimMerkleTree` with leaves containing the assigned vault index for each claimant.
-pub fn create_merkle_tree(
-    claimant_entitlements: &[(Pubkey, u64)],
-    vault_count: usize,
-) -> Result<ClaimTree> {
-    require!(!claimant_entitlements.is_empty(), ErrorCode::InvalidInput);
-    require!(vault_count > 0, ErrorCode::InvalidInput);
-
-    let leaves: Vec<ClaimLeaf> = claimant_entitlements
-        .iter()
-        .map(|(claimant, entitlements)| {
-            // Consistent hashing: hash the claimant pubkey to determine vault assignment
-            let vault_index = consistent_hash_vault_assignment(claimant, vault_count);
-
-            ClaimLeaf {
-                claimant: *claimant,
-                assigned_vault_index: vault_index as u8,
-                entitlements: *entitlements,
-            }
-        })
-        .collect();
-
-    ClaimTree::from_leaves(leaves)
-}
-
-/// Performs consistent hashing to assign a claimant to a vault index.
-///
-/// Uses SHA256 hash of the claimant pubkey, takes first 8 bytes as u64,
-/// and modulos by vault count to get a deterministic vault index.
-fn consistent_hash_vault_assignment(claimant: &Pubkey, vault_count: usize) -> usize {
-    let mut hasher = SolanaHasher::default();
-    hasher.hash(claimant.as_ref());
-    let hash_bytes = hasher.result().to_bytes();
-
-    // Take first 8 bytes and convert to u64 (little-endian)
-    let hash_u64 = u64::from_le_bytes([
-        hash_bytes[0],
-        hash_bytes[1],
-        hash_bytes[2],
-        hash_bytes[3],
-        hash_bytes[4],
-        hash_bytes[5],
-        hash_bytes[6],
-        hash_bytes[7],
-    ]);
-
-    // Modulo to get vault index
-    (hash_u64 as usize) % vault_count
 }
 
 /// Custom error codes for merkle tree operations
@@ -222,7 +196,7 @@ mod tests {
             },
         ];
 
-        let merkle_tree = ClaimTree::from_leaves(leaves.clone()).unwrap();
+        let merkle_tree = ClaimTreeV0::from_leaves(leaves.clone()).unwrap();
 
         // Verify root exists
         assert!(merkle_tree.root().is_some());
@@ -253,7 +227,7 @@ mod tests {
             },
         ];
 
-        let merkle_tree = ClaimTree::from_leaves(leaves).unwrap();
+        let merkle_tree = ClaimTreeV0::from_leaves(leaves).unwrap();
 
         // Generate proof for first claimant
         let proof = merkle_tree.proof_for_claimant(&claimants[0]).unwrap();
@@ -284,7 +258,7 @@ mod tests {
             },
         ];
 
-        let result = ClaimTree::from_leaves(leaves);
+        let result = ClaimTreeV0::from_leaves(leaves);
         assert!(result.is_err());
     }
 
@@ -306,7 +280,7 @@ mod tests {
             .map(|(i, &claimant)| (claimant, (i + 1) as u64 * 100))
             .collect();
 
-        let merkle_tree = create_merkle_tree(&claimant_entitlements, vault_count).unwrap();
+        let merkle_tree = create_claim_tree_v0(&claimant_entitlements, vault_count).unwrap();
 
         // Verify tree was created successfully
         assert!(merkle_tree.root().is_some());
@@ -319,12 +293,12 @@ mod tests {
             assert_eq!(leaf.entitlements, *expected_entitlements);
 
             // Verify consistent hashing: same claimant should always get same vault
-            let vault_index = consistent_hash_vault_assignment(claimant, vault_count);
+            let vault_index = crate::consistent_hash_vault_assignment(claimant, vault_count);
             assert_eq!(leaf.assigned_vault_index as usize, vault_index);
         }
 
         // Test determinism: creating the tree again should produce identical assignments
-        let merkle_tree2 = create_merkle_tree(&claimant_entitlements, vault_count).unwrap();
+        let merkle_tree2 = create_claim_tree_v0(&claimant_entitlements, vault_count).unwrap();
         for (leaf1, leaf2) in merkle_tree.leaves.iter().zip(merkle_tree2.leaves.iter()) {
             assert_eq!(leaf1.claimant, leaf2.claimant);
             assert_eq!(
@@ -341,8 +315,8 @@ mod tests {
         let vault_count = 3;
 
         // Same claimant should always get same vault index
-        let index1 = consistent_hash_vault_assignment(&claimant, vault_count);
-        let index2 = consistent_hash_vault_assignment(&claimant, vault_count);
+        let index1 = crate::consistent_hash_vault_assignment(&claimant, vault_count);
+        let index2 = crate::consistent_hash_vault_assignment(&claimant, vault_count);
         assert_eq!(index1, index2);
 
         // Index should be within bounds
@@ -351,30 +325,22 @@ mod tests {
 
     #[test]
     fn test_consistent_hash_distribution() {
-        // Test that consistent hashing distributes claimants reasonably across vaults
-        let vault_count = 3;
-        let claimant_count = 300; // Large enough sample to test distribution
+        // Test that the hash function distributes claimants roughly evenly
+        let vault_count = 5;
+        let num_claimants = 1000;
 
-        let claimants: Vec<Pubkey> = (0..claimant_count).map(|_| Pubkey::new_unique()).collect();
+        let mut vault_counts = vec![0; vault_count];
 
-        let mut vault_assignments = vec![0; vault_count];
-
-        for claimant in &claimants {
-            let vault_index = consistent_hash_vault_assignment(claimant, vault_count);
-            vault_assignments[vault_index] += 1;
+        for i in 0..num_claimants {
+            let claimant = Pubkey::new_from_array([i as u8; 32]);
+            let vault_index = crate::consistent_hash_vault_assignment(&claimant, vault_count);
+            vault_counts[vault_index] += 1;
         }
 
-        // Each vault should get roughly 1/3 of claimants (within reasonable bounds)
-        let expected_per_vault = claimant_count / vault_count;
-        let tolerance = expected_per_vault / 4; // 25% tolerance
-
-        for count in vault_assignments {
-            assert!(
-                count >= expected_per_vault - tolerance && count <= expected_per_vault + tolerance,
-                "Vault assignment distribution is too uneven: got {}, expected ~{}",
-                count,
-                expected_per_vault
-            );
+        // Each vault should get roughly 200 claimants (1000/5)
+        // Allow some variance - each should be between 150-250
+        for count in vault_counts {
+            assert!(count >= 150 && count <= 250, "Vault count: {}", count);
         }
     }
 }

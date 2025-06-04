@@ -161,6 +161,25 @@ pub mod prism_protocol {
         )
     }
 
+    // claimant
+    pub fn claim_tokens_v1(
+        ctx: Context<ClaimTokensV1>,
+        campaign_fingerprint: [u8; 32],
+        cohort_merkle_root: [u8; 32],
+        merkle_proof: Vec<Vec<[u8; 32]>>,
+        assigned_vault_index: u8,
+        entitlements: u64,
+    ) -> Result<()> {
+        instructions::handle_claim_tokens_v1(
+            ctx,
+            campaign_fingerprint,
+            cohort_merkle_root,
+            merkle_proof,
+            assigned_vault_index,
+            entitlements,
+        )
+    }
+
     // admin
     pub fn reclaim_tokens_v0(
         ctx: Context<ReclaimTokensV0>,
