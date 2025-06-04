@@ -18,27 +18,42 @@ pub use prism_protocol::{ClaimLeaf, ClaimProofV0, ClaimProofV1};
 // Re-export key types from rs-merkle for convenience
 pub use rs_merkle::{MerkleProof, MerkleTree};
 
+/// Shared constants for merkle tree implementations
+pub mod claim_tree_constants {
+    /// Number of children per internal node in the 256-ary merkle tree
+    pub const BRANCHING_FACTOR: usize = 256;
+
+    /// Domain separation prefix for leaf nodes
+    pub const LEAF_PREFIX: u8 = prism_protocol::claim_tree_constants::LEAF_PREFIX;
+
+    /// Domain separation prefix for internal nodes
+    pub const INTERNAL_PREFIX: u8 = prism_protocol::claim_tree_constants::INTERNAL_PREFIX;
+}
+
 /// Performs consistent hashing to assign a claimant to a vault index.
-/// 
+///
 /// ## ⚠️ CRITICAL: This function must remain stable across all tree versions (V0, V1, etc.)
-/// 
+///
 /// This function implements deterministic vault assignment using SHA256 hashing
 /// of the claimant's pubkey. The algorithm must never change to ensure:
 /// - **Cross-version compatibility**: V0 and V1 trees assign the same claimant to the same vault
 /// - **Upgrade compatibility**: Existing deployments can safely upgrade tree versions
 /// - **Deterministic behavior**: Same input always produces same output
-/// 
+///
 /// ## Algorithm
 /// 1. SHA256 hash the claimant's pubkey bytes
 /// 2. Take the first 8 bytes as little-endian u64  
 /// 3. Modulo by vault_count to get vault index
-/// 
+///
 /// ## Usage
 /// Used by both `create_merkle_tree_v0` and `create_merkle_tree_v1` to ensure
 /// identical vault assignments regardless of tree structure.
-pub fn consistent_hash_vault_assignment(claimant: &anchor_lang::prelude::Pubkey, vault_count: usize) -> usize {
+pub fn consistent_hash_vault_assignment(
+    claimant: &anchor_lang::prelude::Pubkey,
+    vault_count: usize,
+) -> usize {
     use anchor_lang::solana_program::hash::Hasher;
-    
+
     let mut hasher = Hasher::default();
     hasher.hash(claimant.as_ref());
     let hash_bytes = hasher.result().to_bytes();
@@ -46,7 +61,7 @@ pub fn consistent_hash_vault_assignment(claimant: &anchor_lang::prelude::Pubkey,
     // Convert first 8 bytes to u64 (little-endian)
     let hash_u64 = u64::from_le_bytes([
         hash_bytes[0],
-        hash_bytes[1], 
+        hash_bytes[1],
         hash_bytes[2],
         hash_bytes[3],
         hash_bytes[4],

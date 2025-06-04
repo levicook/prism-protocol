@@ -1,4 +1,5 @@
 pub mod claim_leaf;
+pub mod claim_tree_constants;
 pub mod constants;
 pub mod error;
 pub mod instructions;

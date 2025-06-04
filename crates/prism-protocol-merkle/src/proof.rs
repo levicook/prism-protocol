@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use rs_merkle::MerkleProof;
 
-use crate::{ClaimLeaf, ClaimHasherV0};
+use crate::{ClaimHasherV0, ClaimLeaf};
 
 /// Verify a merkle proof against a root and leaf data
 /// This is a convenience wrapper around the on-chain verification logic

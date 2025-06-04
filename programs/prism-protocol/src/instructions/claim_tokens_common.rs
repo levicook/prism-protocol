@@ -8,7 +8,7 @@ use crate::state::{CampaignV0, ClaimReceiptV0, CohortV0};
 use crate::COHORT_V0_SEED_PREFIX;
 
 /// Common implementation for both claim_tokens_v0 and claim_tokens_v1.
-/// 
+///
 /// This function contains all the shared logic between the two claim handlers,
 /// with the only difference being the proof type verification.
 pub(crate) fn handle_claim_tokens_common<'info>(
@@ -100,4 +100,4 @@ pub(crate) fn handle_claim_tokens_common<'info>(
     });
 
     Ok(())
-} 
+}

@@ -1,6 +1,8 @@
 use anchor_lang::solana_program::hash::Hasher as SolanaHasher;
 use rs_merkle::Hasher;
 
+use crate::claim_tree_constants;
+
 /// Merkle tree hasher for the Prism Protocol that implements the same hashing logic
 /// as used in the claim_tokens verification. This ensures that merkle trees built with
 /// this hasher will produce proofs that can be verified on-chain.
@@ -41,7 +43,7 @@ impl Hasher for ClaimHasherV0 {
     fn hash(data: &[u8]) -> [u8; 32] {
         // This is used for leaf hashing
         let mut hasher = SolanaHasher::default();
-        hasher.hash(&[0x00]); // Leaf prefix - prevents leaf/internal node confusion attacks
+        hasher.hash(&[claim_tree_constants::LEAF_PREFIX]); // Leaf prefix - prevents leaf/internal node confusion attacks
         hasher.hash(data);
         hasher.result().to_bytes()
     }
@@ -51,7 +53,7 @@ impl Hasher for ClaimHasherV0 {
             Some(right_hash) => {
                 // This is used for internal node hashing
                 let mut hasher = SolanaHasher::default();
-                hasher.hash(&[0x01]); // Internal node prefix - provides domain separation from leaf nodes
+                hasher.hash(&[claim_tree_constants::INTERNAL_PREFIX]); // Internal node prefix - provides domain separation from leaf nodes
 
                 // Order hashes lexicographically (same as in verify_merkle_proof)
                 if left.as_ref() <= right_hash.as_ref() {
@@ -75,7 +77,7 @@ impl Hasher for ClaimHasherV0 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ClaimLeaf, ClaimHasherV0};
+    use crate::{claim_tree_constants, ClaimHasherV0, ClaimLeaf};
     use anchor_lang::{prelude::*, solana_program::hash::Hasher as SolanaHasher};
     use rs_merkle::Hasher as _;
 
@@ -120,7 +122,7 @@ mod tests {
 
         // Verify the result matches manual calculation
         let mut expected_hasher = SolanaHasher::default();
-        expected_hasher.hash(&[0x01]); // Internal node prefix
+        expected_hasher.hash(&[claim_tree_constants::INTERNAL_PREFIX]); // Internal node prefix
         expected_hasher.hash(&hash1); // hash1 < hash2 lexicographically
         expected_hasher.hash(&hash2);
         let expected = expected_hasher.result().to_bytes();

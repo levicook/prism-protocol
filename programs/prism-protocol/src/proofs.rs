@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::hash::Hasher as SolanaHasher;
 
-use crate::ClaimLeaf;
+use crate::{claim_tree_constants, ClaimLeaf};
 
 /// Unified proof type that can hold either binary (V0) or 256-ary (V1) merkle proofs.
 /// This enables code reuse between claim_tokens_v0 and claim_tokens_v1 handlers.
@@ -98,7 +98,7 @@ impl ClaimProofV0 {
 
         for p_elem in self.0.iter() {
             let mut hasher = SolanaHasher::default(); // Uses SHA256 by default
-            hasher.hash(&[0x01]); // Internal node prefix - provides domain separation from leaf nodes (0x00)
+            hasher.hash(&[claim_tree_constants::INTERNAL_PREFIX]); // Internal node prefix - provides domain separation from leaf nodes (0x00)
 
             // Correctly order H(L) and H(R) before hashing for the parent node.
             if computed_hash <= *p_elem {
@@ -197,7 +197,7 @@ impl ClaimProofV1 {
 
             // Hash the sorted children to get the parent node hash
             let mut hasher = SolanaHasher::default();
-            hasher.hash(&[0x01]); // Internal node prefix - provides domain separation from leaf nodes (0x00)
+            hasher.hash(&[claim_tree_constants::INTERNAL_PREFIX]); // Internal node prefix - provides domain separation from leaf nodes (0x00)
 
             for child_hash in level_hashes {
                 hasher.hash(&child_hash);
@@ -337,7 +337,7 @@ mod tests {
         all_hashes.sort(); // Must sort like the verification algorithm
 
         let mut root_hasher = SolanaHasher::default();
-        root_hasher.hash(&[0x01]); // Internal node prefix
+        root_hasher.hash(&[claim_tree_constants::INTERNAL_PREFIX]); // Internal node prefix
         for hash in all_hashes {
             root_hasher.hash(&hash);
         }
@@ -376,7 +376,7 @@ mod tests {
         level_0_hashes.sort();
 
         let mut level_1_hasher = SolanaHasher::default();
-        level_1_hasher.hash(&[0x01]);
+        level_1_hasher.hash(&[claim_tree_constants::INTERNAL_PREFIX]);
         for hash in level_0_hashes {
             level_1_hasher.hash(&hash);
         }
@@ -389,7 +389,7 @@ mod tests {
         level_1_all_hashes.sort();
 
         let mut root_hasher = SolanaHasher::default();
-        root_hasher.hash(&[0x01]);
+        root_hasher.hash(&[claim_tree_constants::INTERNAL_PREFIX]);
         for hash in level_1_all_hashes {
             root_hasher.hash(&hash);
         }
@@ -417,7 +417,7 @@ mod tests {
         // Level 0: just the leaf (no siblings) -> level_1_hash
         let level_0_hashes = vec![leaf_hash];
         let mut level_1_hasher = SolanaHasher::default();
-        level_1_hasher.hash(&[0x01]);
+        level_1_hasher.hash(&[claim_tree_constants::INTERNAL_PREFIX]);
         for hash in level_0_hashes {
             level_1_hasher.hash(&hash);
         }
@@ -429,7 +429,7 @@ mod tests {
         level_1_all_hashes.sort();
 
         let mut root_hasher = SolanaHasher::default();
-        root_hasher.hash(&[0x01]);
+        root_hasher.hash(&[claim_tree_constants::INTERNAL_PREFIX]);
         for hash in level_1_all_hashes {
             root_hasher.hash(&hash);
         }
@@ -463,7 +463,7 @@ mod tests {
         sorted_hashes.sort();
 
         let mut root_hasher = SolanaHasher::default();
-        root_hasher.hash(&[0x01]);
+        root_hasher.hash(&[claim_tree_constants::INTERNAL_PREFIX]);
         for hash in sorted_hashes {
             root_hasher.hash(&hash);
         }
@@ -504,7 +504,7 @@ mod tests {
         // Test single empty level
         let single_empty_level = ClaimProofV1::new(vec![vec![]]);
         let mut hasher = SolanaHasher::default();
-        hasher.hash(&[0x01]);
+        hasher.hash(&[claim_tree_constants::INTERNAL_PREFIX]);
         hasher.hash(&leaf_hash);
         let single_level_root = hasher.result().to_bytes();
         assert!(

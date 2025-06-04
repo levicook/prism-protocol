@@ -417,9 +417,10 @@ fn generate_merkle_trees(
             cohort.claimants.iter().map(|c| c.clone()).collect();
 
         // Create merkle tree with vault count
-        let merkle_tree = create_claim_tree_v0(&claimant_pairs, cohort.vault_count).map_err(|e| {
-            CompilerError::MerkleTree(format!("Failed to create merkle tree: {}", e))
-        })?;
+        let merkle_tree =
+            create_claim_tree_v0(&claimant_pairs, cohort.vault_count).map_err(|e| {
+                CompilerError::MerkleTree(format!("Failed to create merkle tree: {}", e))
+            })?;
 
         let merkle_root = merkle_tree
             .root()

@@ -1,5 +1,7 @@
-use anchor_lang::solana_program::hash::Hasher as SolanaHasher;
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::hash::Hasher as SolanaHasher;
+
+use crate::claim_tree_constants;
 
 /// Merkle tree hasher for 256-ary claim trees (V1) that implements the same domain
 /// separation scheme as ClaimHasherV0 but supports up to 256 children per internal node.
@@ -32,7 +34,7 @@ impl ClaimHasherV1 {
     /// This produces the same result as `ClaimLeaf::to_hash()`.
     pub fn hash_leaf(data: &[u8]) -> [u8; 32] {
         let mut hasher = SolanaHasher::default();
-        hasher.hash(&[0x00]); // Leaf prefix - prevents leaf/internal node confusion attacks
+        hasher.hash(&[claim_tree_constants::LEAF_PREFIX]); // Leaf prefix - prevents leaf/internal node confusion attacks
         hasher.hash(data);
         hasher.result().to_bytes()
     }
@@ -41,14 +43,18 @@ impl ClaimHasherV1 {
     /// Children are sorted lexicographically before hashing for deterministic results.
     pub fn hash_internal_node(children: &[[u8; 32]]) -> [u8; 32] {
         assert!(!children.is_empty(), "Cannot hash empty children");
-        assert!(children.len() <= 256, "Too many children for internal node (max 256)");
+        assert!(
+            children.len() <= claim_tree_constants::BRANCHING_FACTOR,
+            "Too many children for internal node (max {})",
+            claim_tree_constants::BRANCHING_FACTOR
+        );
 
         // Sort children for deterministic ordering
         let mut sorted_children = children.to_vec();
         sorted_children.sort();
 
         let mut hasher = SolanaHasher::default();
-        hasher.hash(&[0x01]); // Internal node prefix - provides domain separation from leaf nodes
+        hasher.hash(&[claim_tree_constants::INTERNAL_PREFIX]); // Internal node prefix - provides domain separation from leaf nodes
 
         for child_hash in sorted_children {
             hasher.hash(&child_hash);
@@ -76,7 +82,7 @@ impl ClaimHasherV1 {
             let mut next_level = Vec::new();
 
             // Process in chunks of up to 256 (256-ary tree)
-            for chunk in current_level.chunks(256) {
+            for chunk in current_level.chunks(claim_tree_constants::BRANCHING_FACTOR) {
                 let parent_hash = Self::hash_internal_node(chunk);
                 next_level.push(parent_hash);
             }
@@ -115,8 +121,12 @@ impl ClaimHasherV1 {
             let mut siblings = Vec::new();
 
             // Calculate which "group of 256" this index belongs to
-            let group_start = (current_index / 256) * 256;
-            let group_end = std::cmp::min(group_start + 256, level.len());
+            let group_start = (current_index / claim_tree_constants::BRANCHING_FACTOR)
+                * claim_tree_constants::BRANCHING_FACTOR;
+            let group_end = std::cmp::min(
+                group_start + claim_tree_constants::BRANCHING_FACTOR,
+                level.len(),
+            );
 
             // Collect all siblings in this group (exclude the current index)
             for i in group_start..group_end {
@@ -128,7 +138,7 @@ impl ClaimHasherV1 {
             proof.push(siblings);
 
             // Move to the next level - parent index is current_index / 256
-            current_index /= 256;
+            current_index /= claim_tree_constants::BRANCHING_FACTOR;
         }
 
         Ok(proof)
@@ -136,11 +146,7 @@ impl ClaimHasherV1 {
 
     /// Verify a 256-ary merkle proof.
     /// This is the same logic as in `ClaimProofV1::verify()` but as a standalone function.
-    pub fn verify_proof(
-        proof: &[Vec<[u8; 32]>],
-        root: &[u8; 32],
-        leaf_hash: &[u8; 32],
-    ) -> bool {
+    pub fn verify_proof(proof: &[Vec<[u8; 32]>], root: &[u8; 32], leaf_hash: &[u8; 32]) -> bool {
         let mut computed_hash = *leaf_hash;
 
         // Process each level of the proof from bottom to top
@@ -192,7 +198,7 @@ mod tests {
     fn test_leaf_hashing_compatibility() {
         // Test that ClaimHasherV1::hash_leaf produces the same result as ClaimLeaf::to_hash
         let leaf = create_test_leaf(42, 100);
-        
+
         let expected_hash = leaf.to_hash();
         let leaf_data = leaf.try_to_vec().expect("Failed to serialize leaf");
         let actual_hash = ClaimHasherV1::hash_leaf(&leaf_data);
@@ -219,11 +225,14 @@ mod tests {
 
         // Test single child
         let single_result = ClaimHasherV1::hash_internal_node(&[hash1]);
-        assert_ne!(single_result, hash1, "Internal node hash should differ from child hash");
+        assert_ne!(
+            single_result, hash1,
+            "Internal node hash should differ from child hash"
+        );
 
         // Verify the result matches manual calculation
         let mut expected_hasher = SolanaHasher::default();
-        expected_hasher.hash(&[0x01]); // Internal node prefix
+        expected_hasher.hash(&[claim_tree_constants::INTERNAL_PREFIX]); // Internal node prefix
         expected_hasher.hash(&hash1); // hash1 < hash2 < hash3 lexicographically
         expected_hasher.hash(&hash2);
         expected_hasher.hash(&hash3);
@@ -239,9 +248,16 @@ mod tests {
 
         let (root, levels) = ClaimHasherV1::build_tree(vec![leaf_hash]).unwrap();
 
-        assert_eq!(root, leaf_hash, "Single leaf tree root should be the leaf hash");
+        assert_eq!(
+            root, leaf_hash,
+            "Single leaf tree root should be the leaf hash"
+        );
         assert_eq!(levels.len(), 1, "Single leaf tree should have one level");
-        assert_eq!(levels[0], vec![leaf_hash], "Level should contain the leaf hash");
+        assert_eq!(
+            levels[0],
+            vec![leaf_hash],
+            "Level should contain the leaf hash"
+        );
     }
 
     #[test]
@@ -260,7 +276,10 @@ mod tests {
         assert_eq!(levels.len(), 2, "Should have 2 levels for multiple leaves");
         assert_eq!(levels[0], leaf_hashes, "First level should be leaf hashes");
         assert_eq!(levels[1].len(), 1, "Root level should have one hash");
-        assert_eq!(levels[1][0], root, "Root level should contain the root hash");
+        assert_eq!(
+            levels[1][0], root,
+            "Root level should contain the root hash"
+        );
 
         // Verify root is computed correctly
         let expected_root = ClaimHasherV1::hash_internal_node(&leaf_hashes);
