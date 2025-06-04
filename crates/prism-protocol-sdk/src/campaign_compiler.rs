@@ -59,13 +59,13 @@ struct CohortData {
 #[derive(Clone)]
 pub struct CompiledCohort {
     pub name: String,
+    pub address: Pubkey,
+    pub merkle_root: [u8; 32],
     pub amount_per_entitlement: Decimal,
     pub amount_per_entitlement_humane: String,
     pub vault_count: usize,
     pub vaults: Vec<CompiledVault>,
     pub merkle_tree: ClaimTree,
-    pub merkle_root: [u8; 32],
-    pub cohort_address: Pubkey,
 }
 
 /// Compiled vault with address and required funding
@@ -83,7 +83,7 @@ pub struct CompiledCampaign {
     pub admin: Pubkey,
     pub budget: Decimal,
     pub fingerprint: [u8; 32],
-    pub campaign_address: Pubkey,
+    pub address: Pubkey,
     pub cohorts: Vec<CompiledCohort>,
     pub total_claimants: usize,
     pub total_vaults: usize,
@@ -301,7 +301,7 @@ pub fn compile_campaign(
         admin,
         budget,
         fingerprint: campaign_fingerprint,
-        campaign_address,
+        address: campaign_address,
         cohorts: compiled_cohorts,
         total_claimants,
         total_vaults,
@@ -476,7 +476,7 @@ fn derive_addresses_and_finalize(
             vaults,
             merkle_tree,
             merkle_root,
-            cohort_address,
+            address: cohort_address,
         });
     }
 

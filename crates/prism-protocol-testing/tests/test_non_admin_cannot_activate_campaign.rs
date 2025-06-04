@@ -1,11 +1,9 @@
 use prism_protocol_sdk::build_activate_campaign_v0_ix;
-use prism_protocol_testing::{FixtureStage, TestFixture};
-use solana_instruction::error::InstructionError;
+use prism_protocol_testing::{demand_account_not_initialized_error, FixtureStage, TestFixture};
 use solana_keypair::Keypair;
 use solana_message::Message;
 use solana_signer::Signer;
 use solana_transaction::Transaction;
-use solana_transaction_error::TransactionError;
 
 /// Test that campaign activation is NOT permissionless
 ///
@@ -20,13 +18,12 @@ use solana_transaction_error::TransactionError;
 fn test_non_admin_cannot_activate_campaign() {
     let mut test = TestFixture::default();
 
-    test.jump_to(FixtureStage::CohortsActivated)
-        .expect("cohort activation failed");
+    test.jump_to(FixtureStage::CohortsActivated);
 
     // Create an attacker with sufficient funds
     let attacker = Keypair::new();
-    test.airdrop(&attacker.pubkey(), 1_000_000_000)
-        .expect("airdrop failed");
+
+    test.airdrop(&attacker.pubkey(), 1_000_000_000);
 
     let campaign_fingerprint = test.state.compiled_campaign.fingerprint;
 
@@ -49,33 +46,7 @@ fn test_non_admin_cannot_activate_campaign() {
     );
 
     let result = test.send_transaction(tx);
-
-    match result {
-        Ok(_) => {
-            panic!(
-                "❌ Campaign activation should have failed - instruction is not permissionless!"
-            );
-        }
-        Err(failed_meta) => {
-            // The instruction fails because the PDA derived from attacker's key doesn't exist
-            // This proves the security model: you can't access accounts you don't own
-            const EXPECTED_ERROR: u32 = 3012; // AccountNotInitialized
-
-            match failed_meta.err {
-                TransactionError::InstructionError(_, InstructionError::Custom(code)) => {
-                    assert_eq!(code, EXPECTED_ERROR, "Expected AccountNotInitialized error");
-                    println!("✅ Confirmed AccountNotInitialized error (code: {})", code);
-                    println!("✅ This proves the instruction is NOT permissionless");
-                }
-                _ => {
-                    panic!(
-                        "Expected TransactionError::InstructionError with AccountNotInitialized, got: {:?}",
-                        failed_meta.err
-                    );
-                }
-            }
-        }
-    }
+    demand_account_not_initialized_error(result);
 
     // Additional verification: show that the CORRECT admin CAN activate
     println!("🔐 Demonstrating that only the correct admin can activate...");

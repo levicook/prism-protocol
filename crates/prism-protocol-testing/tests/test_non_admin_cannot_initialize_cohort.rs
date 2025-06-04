@@ -14,7 +14,7 @@ use solana_transaction_error::TransactionError;
 /// - Knows all the public cohort parameters (campaign fingerprint, merkle root, etc.)
 /// - Has sufficient funds to pay transaction fees
 /// - Can construct a syntactically correct instruction
-/// 
+///
 /// They still CANNOT initialize the cohort because PDA derivation uses the admin's key.
 /// The instruction will fail with AccountNotInitialized, proving the security model works.
 #[test]
@@ -22,13 +22,11 @@ fn test_non_admin_cannot_initialize_cohort() {
     let mut test = TestFixture::default();
 
     // Set up: campaign initialized but cohorts not yet initialized
-    test.jump_to(FixtureStage::CampaignInitialized)
-        .expect("campaign initialization failed");
+    test.jump_to(FixtureStage::CampaignInitialized);
 
     // Create an attacker with sufficient funds
     let attacker = Keypair::new();
-    test.airdrop(&attacker.pubkey(), 1_000_000_000)
-        .expect("airdrop failed");
+    test.airdrop(&attacker.pubkey(), 1_000_000_000);
 
     let campaign_fingerprint = test.state.compiled_campaign.fingerprint;
     let first_cohort = &test.state.compiled_campaign.cohorts[0];
@@ -66,7 +64,9 @@ fn test_non_admin_cannot_initialize_cohort() {
 
     match result {
         Ok(_) => {
-            panic!("❌ Cohort initialization should have failed - instruction is not permissionless!");
+            panic!(
+                "❌ Cohort initialization should have failed - instruction is not permissionless!"
+            );
         }
         Err(failed_meta) => {
             // The instruction fails because the campaign PDA derived from attacker's key doesn't exist
@@ -91,7 +91,7 @@ fn test_non_admin_cannot_initialize_cohort() {
 
     // Additional verification: show that the CORRECT admin CAN initialize the cohort
     println!("🔐 Demonstrating that only the correct admin can initialize cohort...");
-    
+
     let (correct_ix, _, _) = build_initialize_cohort_v0_ix(
         &test.state.address_finder,
         test.state.compiled_campaign.admin, // Correct admin
@@ -113,4 +113,4 @@ fn test_non_admin_cannot_initialize_cohort() {
 
     println!("✅ Correct admin successfully initialized the cohort");
     println!("🎉 Security model verification complete!");
-} 
+}

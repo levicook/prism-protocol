@@ -6,11 +6,14 @@ pub enum FixtureStage {
     /// Campaign has been initialized but is inactive
     CampaignInitialized,
 
-    /// A cohort has been initialized and added to campaign
+    /// Cohorts have been initialized and added to campaign
     CohortsInitialized,
 
-    /// A vault has been created for the cohort but is empty
+    /// Vaults have been created for the cohort but are empty
     VaultsInitialized,
+
+    /// Vaults have been funded
+    VaultsFunded,
 
     /// The vault has been funded and activated
     VaultsActivated,
@@ -19,7 +22,7 @@ pub enum FixtureStage {
     CohortsActivated,
 
     /// The campaign has been activated and claims are allowed
-    CampaignsActivated,
+    CampaignActivated,
 }
 
 impl FixtureStage {
@@ -29,9 +32,10 @@ impl FixtureStage {
             FixtureStage::CampaignInitialized,
             FixtureStage::CohortsInitialized,
             FixtureStage::VaultsInitialized,
+            FixtureStage::VaultsFunded,
             FixtureStage::VaultsActivated,
             FixtureStage::CohortsActivated,
-            FixtureStage::CampaignsActivated,
+            FixtureStage::CampaignActivated,
         ]
     }
 
@@ -42,9 +46,10 @@ impl FixtureStage {
             FixtureStage::CampaignInitialized => 1,
             FixtureStage::CohortsInitialized => 2,
             FixtureStage::VaultsInitialized => 3,
-            FixtureStage::VaultsActivated => 4,
-            FixtureStage::CohortsActivated => 5,
-            FixtureStage::CampaignsActivated => 6,
+            FixtureStage::VaultsFunded => 4,
+            FixtureStage::VaultsActivated => 5,
+            FixtureStage::CohortsActivated => 6,
+            FixtureStage::CampaignActivated => 7,
         }
     }
 }
