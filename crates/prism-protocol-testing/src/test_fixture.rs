@@ -6,7 +6,7 @@ use {
         LiteSVM,
     },
     litesvm_token::spl_token::solana_program::native_token::LAMPORTS_PER_SOL,
-    prism_protocol::{CampaignV0, ClaimLeaf},
+    prism_protocol::{CampaignV0, ClaimLeaf, ClaimReceiptV0, CohortV0},
     prism_protocol_sdk::{
         build_activate_campaign_v0_ix, build_activate_cohort_v0_ix, build_activate_vault_v0_ix,
         build_claim_tokens_v0_ix, build_initialize_campaign_v0_ix, build_initialize_cohort_v0_ix,
@@ -15,6 +15,7 @@ use {
         build_reclaim_tokens_v0_ix, build_resume_campaign_v0_ix, CompiledCohort,
     },
     rust_decimal::prelude::ToPrimitive,
+    solana_account::Account,
     solana_instruction::Instruction,
     solana_keypair::Keypair,
     solana_message::Message,
@@ -303,15 +304,22 @@ impl TestFixture {
     /// * `custom_amounts` - HashMap mapping vault addresses to custom funding amounts
     ///
     /// # Example
-    /// ```rust
+    /// ```rust,no_run
     /// use std::collections::HashMap;
+    /// use solana_pubkey::Pubkey;
+    /// use litesvm::types::FailedTransactionMetadata;
+    ///
+    /// # let mut test_fixture = prism_protocol_testing::TestFixture::default();
+    /// let vault_address_1 = Pubkey::new_unique();
+    /// let vault_address_2 = Pubkey::new_unique();
     ///
     /// let custom_funding = HashMap::from([
     ///     (vault_address_1, 1000u64),  // Fund with only 1000 tokens
     ///     (vault_address_2, 0u64),     // Fund with 0 tokens (empty vault)
     /// ]);
     ///
-    /// test.try_fund_vaults_with_custom_amounts(custom_funding)?;
+    /// test_fixture.try_fund_vaults_with_custom_amounts(custom_funding)?;
+    /// # Ok::<(), FailedTransactionMetadata>(())
     /// ```
     pub fn try_fund_vaults_with_custom_amounts(
         &mut self,
@@ -398,18 +406,24 @@ impl TestFixture {
     /// * `custom_expected_balance` - HashMap mapping vault addresses to custom expected balance values
     ///
     /// # Example
-    /// ```rust
+    /// ```rust,no_run
     /// use std::collections::HashMap;
+    /// use solana_pubkey::Pubkey;
+    /// use litesvm::types::FailedTransactionMetadata;
+    ///
+    /// # let mut test_fixture = prism_protocol_testing::TestFixture::default();
+    /// let vault_addr = Pubkey::new_unique();
     ///
     /// // First fund with custom amounts
     /// let custom_funding = HashMap::from([(vault_addr, 1000u64)]);
-    /// test.try_fund_vaults_with_custom_amounts(custom_funding)?;
+    /// test_fixture.try_fund_vaults_with_custom_amounts(custom_funding)?;
     ///
     /// // Then activate expecting the same amount (bypasses validation)
     /// let custom_expectations = HashMap::from([(vault_addr, 1000u64)]);
-    /// test.try_activate_vaults_with_custom_expected_balance(custom_expectations)?;
+    /// test_fixture.try_activate_vaults_with_custom_expected_balance(custom_expectations)?;
     ///
     /// // Now vault is activated but has insufficient balance for larger claims!
+    /// # Ok::<(), FailedTransactionMetadata>(())
     /// ```
     pub fn try_activate_vaults_with_custom_expected_balance(
         &mut self,
@@ -672,10 +686,23 @@ impl TestFixture {
         Ok(())
     }
 
+    pub fn fetch_account(&self, address: &Pubkey) -> Option<Account> {
+        self.svm.get_account(address)
+    }
+
     pub fn fetch_campaign_account(&self) -> Option<CampaignV0> {
-        self.svm
-            .get_account(&self.state.compiled_campaign.address)
+        self.fetch_account(&self.state.compiled_campaign.address)
             .and_then(|a| CampaignV0::try_deserialize(&mut &a.data[..]).ok())
+    }
+
+    pub fn fetch_claim_receipt(&self, claim_receipt_address: &Pubkey) -> Option<ClaimReceiptV0> {
+        self.fetch_account(&claim_receipt_address)
+            .and_then(|a| ClaimReceiptV0::try_deserialize(&mut &a.data[..]).ok())
+    }
+
+    pub fn fetch_cohort(&self, cohort: &Pubkey) -> Option<CohortV0> {
+        self.fetch_account(cohort)
+            .and_then(|a| CohortV0::try_deserialize(&mut &a.data[..]).ok())
     }
 
     /// Check if an account exists
