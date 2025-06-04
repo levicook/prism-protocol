@@ -1,14 +1,17 @@
+pub mod claim_leaf;
+pub mod claim_tree_constants;
 pub mod constants;
 pub mod error;
 pub mod instructions;
-pub mod merkle_leaf;
+pub mod proofs;
 pub mod state;
 
+pub use claim_leaf::*;
 pub use constants::{
     CAMPAIGN_V0_SEED_PREFIX, CLAIM_RECEIPT_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX, VAULT_SEED_PREFIX,
 };
 pub use instructions::*;
-pub use merkle_leaf::*;
+pub use proofs::*;
 pub use state::*;
 
 use anchor_lang::prelude::*;
@@ -150,6 +153,25 @@ pub mod prism_protocol {
         entitlements: u64,
     ) -> Result<()> {
         instructions::handle_claim_tokens_v0(
+            ctx,
+            campaign_fingerprint,
+            cohort_merkle_root,
+            merkle_proof,
+            assigned_vault_index,
+            entitlements,
+        )
+    }
+
+    // claimant
+    pub fn claim_tokens_v1(
+        ctx: Context<ClaimTokensV1>,
+        campaign_fingerprint: [u8; 32],
+        cohort_merkle_root: [u8; 32],
+        merkle_proof: Vec<Vec<[u8; 32]>>,
+        assigned_vault_index: u8,
+        entitlements: u64,
+    ) -> Result<()> {
+        instructions::handle_claim_tokens_v1(
             ctx,
             campaign_fingerprint,
             cohort_merkle_root,

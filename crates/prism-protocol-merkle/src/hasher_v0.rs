@@ -1,6 +1,8 @@
 use anchor_lang::solana_program::hash::Hasher as SolanaHasher;
 use rs_merkle::Hasher;
 
+use crate::claim_tree_constants;
+
 /// Merkle tree hasher for the Prism Protocol that implements the same hashing logic
 /// as used in the claim_tokens verification. This ensures that merkle trees built with
 /// this hasher will produce proofs that can be verified on-chain.
@@ -33,15 +35,15 @@ use rs_merkle::Hasher;
 /// This approach is used by Bitcoin, Ethereum, Certificate Transparency, and other
 /// security-critical merkle tree implementations.
 #[derive(Clone, Debug)]
-pub struct PrismHasher;
+pub struct ClaimHasherV0;
 
-impl Hasher for PrismHasher {
+impl Hasher for ClaimHasherV0 {
     type Hash = [u8; 32];
 
     fn hash(data: &[u8]) -> [u8; 32] {
         // This is used for leaf hashing
         let mut hasher = SolanaHasher::default();
-        hasher.hash(&[0x00]); // Leaf prefix - prevents leaf/internal node confusion attacks
+        hasher.hash(&[claim_tree_constants::LEAF_PREFIX]); // Leaf prefix - prevents leaf/internal node confusion attacks
         hasher.hash(data);
         hasher.result().to_bytes()
     }
@@ -51,7 +53,7 @@ impl Hasher for PrismHasher {
             Some(right_hash) => {
                 // This is used for internal node hashing
                 let mut hasher = SolanaHasher::default();
-                hasher.hash(&[0x01]); // Internal node prefix - provides domain separation from leaf nodes
+                hasher.hash(&[claim_tree_constants::INTERNAL_PREFIX]); // Internal node prefix - provides domain separation from leaf nodes
 
                 // Order hashes lexicographically (same as in verify_merkle_proof)
                 if left.as_ref() <= right_hash.as_ref() {
@@ -75,7 +77,7 @@ impl Hasher for PrismHasher {
 
 #[cfg(test)]
 mod tests {
-    use crate::{hash_claim_leaf, ClaimLeaf, PrismHasher};
+    use crate::{claim_tree_constants, ClaimHasherV0, ClaimLeaf};
     use anchor_lang::{prelude::*, solana_program::hash::Hasher as SolanaHasher};
     use rs_merkle::Hasher as _;
 
@@ -92,11 +94,11 @@ mod tests {
         };
 
         // Hash using the existing hash_claim_leaf function
-        let expected_hash = hash_claim_leaf(&leaf);
+        let expected_hash = leaf.to_hash();
 
         // Hash using our PrismHasher
         let leaf_data = leaf.try_to_vec().expect("Failed to serialize leaf");
-        let actual_hash = PrismHasher::hash(&leaf_data);
+        let actual_hash = ClaimHasherV0::hash(&leaf_data);
 
         assert_eq!(
             expected_hash, actual_hash,
@@ -110,8 +112,8 @@ mod tests {
         let hash2 = [2u8; 32];
 
         // Test both orderings produce the same result
-        let result1 = PrismHasher::concat_and_hash(&hash1, Some(&hash2));
-        let result2 = PrismHasher::concat_and_hash(&hash2, Some(&hash1));
+        let result1 = ClaimHasherV0::concat_and_hash(&hash1, Some(&hash2));
+        let result2 = ClaimHasherV0::concat_and_hash(&hash2, Some(&hash1));
 
         assert_eq!(
             result1, result2,
@@ -120,7 +122,7 @@ mod tests {
 
         // Verify the result matches manual calculation
         let mut expected_hasher = SolanaHasher::default();
-        expected_hasher.hash(&[0x01]); // Internal node prefix
+        expected_hasher.hash(&[claim_tree_constants::INTERNAL_PREFIX]); // Internal node prefix
         expected_hasher.hash(&hash1); // hash1 < hash2 lexicographically
         expected_hasher.hash(&hash2);
         let expected = expected_hasher.result().to_bytes();

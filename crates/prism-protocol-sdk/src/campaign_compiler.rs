@@ -18,7 +18,7 @@ use crate::AddressFinder;
 use prism_protocol::ClaimLeaf;
 use prism_protocol_csvs::{validate_csv_consistency, CampaignCsvRow, CohortsCsvRow};
 use prism_protocol_db::CampaignDatabase;
-use prism_protocol_merkle::{create_merkle_tree, ClaimTree};
+use prism_protocol_merkle::{create_claim_tree_v0, ClaimTreeV0};
 use rust_decimal::{prelude::ToPrimitive, Decimal};
 use sha2::{Digest, Sha256};
 use solana_sdk::pubkey::Pubkey;
@@ -65,7 +65,7 @@ pub struct CompiledCohort {
     pub amount_per_entitlement_humane: String,
     pub vault_count: usize,
     pub vaults: Vec<CompiledVault>,
-    pub merkle_tree: ClaimTree,
+    pub merkle_tree: ClaimTreeV0,
 }
 
 /// Compiled vault with address and required funding
@@ -408,7 +408,7 @@ fn process_cohorts(
 /// Generate merkle trees for all cohorts
 fn generate_merkle_trees(
     cohort_data: Vec<CohortData>,
-) -> CompilerResult<Vec<(CohortData, ClaimTree, [u8; 32])>> {
+) -> CompilerResult<Vec<(CohortData, ClaimTreeV0, [u8; 32])>> {
     let mut cohort_merkle_data = Vec::new();
 
     for cohort in cohort_data {
@@ -417,9 +417,10 @@ fn generate_merkle_trees(
             cohort.claimants.iter().map(|c| c.clone()).collect();
 
         // Create merkle tree with vault count
-        let merkle_tree = create_merkle_tree(&claimant_pairs, cohort.vault_count).map_err(|e| {
-            CompilerError::MerkleTree(format!("Failed to create merkle tree: {}", e))
-        })?;
+        let merkle_tree =
+            create_claim_tree_v0(&claimant_pairs, cohort.vault_count).map_err(|e| {
+                CompilerError::MerkleTree(format!("Failed to create merkle tree: {}", e))
+            })?;
 
         let merkle_root = merkle_tree
             .root()
@@ -443,7 +444,7 @@ fn calculate_campaign_fingerprint(cohort_roots: &[[u8; 32]]) -> [u8; 32] {
 /// Derive addresses and finalize compilation
 fn derive_addresses_and_finalize(
     address_finder: &AddressFinder,
-    cohort_merkle_data: Vec<(CohortData, ClaimTree, [u8; 32])>,
+    cohort_merkle_data: Vec<(CohortData, ClaimTreeV0, [u8; 32])>,
     campaign_address: &Pubkey,
 ) -> CompilerResult<Vec<CompiledCohort>> {
     let mut compiled_cohorts = Vec::new();
