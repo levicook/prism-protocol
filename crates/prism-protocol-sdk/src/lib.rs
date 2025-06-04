@@ -28,7 +28,7 @@ pub use campaign_compiler::{
 pub use instruction_builders::*;
 pub use prism_protocol::state::*;
 pub use prism_protocol::ClaimLeaf;
-pub use prism_protocol_merkle::ClaimTree;
+pub use prism_protocol_merkle::ClaimTreeV0;
 
 // Re-export csv types
 pub use prism_protocol_csvs::{CampaignCsvRow, CohortsCsvRow};
