@@ -390,7 +390,11 @@ pub fn build_reclaim_tokens_v0_ix(
     campaign_fingerprint: [u8; 32],
     cohort_merkle_root_arg: [u8; 32],
     vault_index: u8,
-) -> Result<(Instruction, prism_protocol::accounts::ReclaimTokensV0)> {
+) -> Result<(
+    Instruction,
+    prism_protocol::accounts::ReclaimTokensV0,
+    prism_protocol::instruction::ReclaimTokensV0,
+)> {
     let (campaign, _) = address_finder.find_campaign_v0_address(&admin, &campaign_fingerprint);
 
     let (cohort, _) = address_finder.find_cohort_v0_address(&campaign, &cohort_merkle_root_arg);
@@ -418,5 +422,5 @@ pub fn build_reclaim_tokens_v0_ix(
         data: ix_data.data(),
     };
 
-    Ok((ix, ix_accounts))
+    Ok((ix, ix_accounts, ix_data))
 }

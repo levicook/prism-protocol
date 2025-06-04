@@ -1,4 +1,4 @@
-use prism_protocol_testing::{FixtureStage, TestFixture};
+use prism_protocol_testing::{demand_account_not_initialized_error, FixtureStage, TestFixture};
 
 /// Test vault initialization before cohort (wrong order) - should fail
 ///
@@ -8,21 +8,14 @@ use prism_protocol_testing::{FixtureStage, TestFixture};
 /// - Verify operation fails (vault requires cohort to exist first)
 /// - Ensure proper order dependencies are enforced
 #[test]
-#[ignore = "Test may need review - unclear if this order dependency actually exists in protocol"]
 fn test_vault_initialization_before_cohort() {
     let mut test = TestFixture::default();
 
-    // Setup campaign but not cohort
-    test.jump_to(FixtureStage::CampaignInitialized)
-        .expect("campaign initialization failed");
+    test.jump_to(FixtureStage::CampaignInitialized);
 
-    // Try to initialize vault without cohort
-    let result = test.jump_to(FixtureStage::VaultsInitialized);
+    let result = test.try_initialize_vaults();
 
-    // This should fail because no cohort exists yet
-    assert!(
-        result.is_err(),
-        "Expected vault initialization to fail without cohort"
-    );
-    println!("✅ Correctly prevented premature vault initialization");
+    demand_account_not_initialized_error(result);
+
+    println!("✅ Correctly prevented vault initialization before cohort");
 }

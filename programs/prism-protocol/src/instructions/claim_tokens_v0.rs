@@ -48,7 +48,7 @@ pub struct ClaimTokensV0<'info> {
         ],
         bump = cohort.bump,
         constraint = cohort.campaign == campaign.key() @ ErrorCode::CohortCampaignMismatch,
-        constraint = cohort.merkle_root == merkle_root @ ErrorCode::MerkleRootMismatch, // Ensure cohort found by seed matches arg
+        constraint = cohort.merkle_root == merkle_root @ ErrorCode::MerkleRootMismatch,
     )]
     pub cohort: Box<Account<'info, CohortV0>>,
 
@@ -76,7 +76,7 @@ pub struct ClaimTokensV0<'info> {
     #[account(
         init_if_needed,
         payer = claimant,
-        associated_token::mint = mint, // Use the renamed mint field
+        associated_token::mint = mint,
         associated_token::authority = claimant,
     )]
     pub claimant_token_account: Box<Account<'info, TokenAccount>>,
@@ -105,7 +105,7 @@ pub struct ClaimTokensV0<'info> {
 pub fn handle_claim_tokens_v0(
     ctx: Context<ClaimTokensV0>,
     _campaign_fingerprint: [u8; 32], // Consumed by Accounts macro for seed derivation
-    _cohort_merkle_root: [u8; 32], // Consumed by Accounts macro for seed derivation, also checked in constraint
+    cohort_merkle_root: [u8; 32], // Consumed by Accounts macro for seed derivation, also checked in constraint
     merkle_proof: Vec<[u8; 32]>,
     assigned_vault_index: u8,
     entitlements: u64,
@@ -164,7 +164,7 @@ pub fn handle_claim_tokens_v0(
     let cohort_seeds = &[
         COHORT_V0_SEED_PREFIX,
         campaign_key.as_ref(),
-        _cohort_merkle_root.as_ref(),
+        cohort_merkle_root.as_ref(),
         &[ctx.accounts.cohort.bump],
     ];
 

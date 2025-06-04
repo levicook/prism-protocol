@@ -19,8 +19,7 @@ fn test_full_campaign_flow_happy_path() {
 
     // Step 1-6: Complete deployment lifecycle
     println!("🚀 Deploying campaign through complete lifecycle...");
-    test.jump_to(FixtureStage::CampaignsActivated)
-        .expect("campaign activation failed");
+    test.jump_to(FixtureStage::CampaignActivated);
 
     // Step 7: Wait for go-live slot to pass
     println!("⏰ Advancing past go-live slot...");
@@ -79,7 +78,7 @@ fn test_claim_as_early_adopter_1(test: &mut TestFixture) {
             cohort.merkle_root,
             leaf.assigned_vault_index,
             leaf.entitlements,
-            cohort.cohort_address,
+            cohort.address,
         )
     };
 
@@ -87,8 +86,7 @@ fn test_claim_as_early_adopter_1(test: &mut TestFixture) {
     let claimant_token_account = get_associated_token_address(&claimant_pubkey, &mint);
 
     // Create token account if needed and airdrop for fees
-    test.airdrop(&claimant_pubkey, 1_000_000_000)
-        .expect("airdrop failed");
+    test.airdrop(&claimant_pubkey, 1_000_000_000);
 
     // Record balances BEFORE claim
     let vault_balance_before = test
@@ -230,8 +228,7 @@ fn test_claim_as_investor_2(test: &mut TestFixture) {
     // Same verification flow as early_adopter_1 but with different claimant
     let claimant_token_account = get_associated_token_address(&claimant_pubkey, &mint);
 
-    test.airdrop(&claimant_pubkey, 1_000_000_000)
-        .expect("airdrop failed");
+    test.airdrop(&claimant_pubkey, 1_000_000_000);
 
     // Record balances BEFORE claim
     let vault_balance_before = test
@@ -329,8 +326,8 @@ fn test_claim_multi_cohort_user(test: &mut TestFixture) {
     let fingerprint = test.state.compiled_campaign.fingerprint;
 
     let claimant_token_account = get_associated_token_address(&claimant_pubkey, &mint);
-    test.airdrop(&claimant_pubkey, 1_000_000_000)
-        .expect("airdrop failed");
+
+    test.airdrop(&claimant_pubkey, 1_000_000_000);
 
     let mut total_claimed = 0u64;
     let initial_balance = test

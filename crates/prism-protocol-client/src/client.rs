@@ -48,9 +48,8 @@ impl PrismProtocolClient {
             address_finder: Arc::new(address_finder),
         }
     }
-
     // ================================================================================================
-    // Protocol Account Operations (Versioned)
+    // Protocol Account Operations (Versioned) - Now much cleaner!
     // ================================================================================================
 
     /// Get campaign account (V0)
@@ -63,31 +62,7 @@ impl PrismProtocolClient {
             .address_finder
             .find_campaign_v0_address(admin, fingerprint);
 
-        let account_data = match self.rpc_client.get_account_data(&campaign_pda) {
-            Ok(data) => data,
-            Err(solana_client::client_error::ClientError {
-                kind:
-                    solana_client::client_error::ClientErrorKind::RpcError(
-                        solana_client::rpc_request::RpcError::RpcResponseError { .. },
-                    ),
-                ..
-            }) => return Ok(None), // Account doesn't exist
-            Err(e) => return Err(ClientError::Rpc(e)),
-        };
-
-        // Skip discriminator (first 8 bytes)
-        if account_data.len() < 8 {
-            return Err(ClientError::InvalidAccountData(
-                "Account data too short for discriminator".to_string(),
-            ));
-        }
-
-        let campaign: CampaignV0 = AccountDeserialize::try_deserialize(&mut &account_data[8..])
-            .map_err(|e| {
-                ClientError::InvalidAccountData(format!("Failed to deserialize campaign: {}", e))
-            })?;
-
-        Ok(Some(campaign))
+        self.fetch_account(&campaign_pda)
     }
 
     /// Get cohort account (V0)
@@ -100,30 +75,7 @@ impl PrismProtocolClient {
             .address_finder
             .find_cohort_v0_address(campaign, merkle_root);
 
-        let account_data = match self.rpc_client.get_account_data(&cohort_pda) {
-            Ok(data) => data,
-            Err(solana_client::client_error::ClientError {
-                kind:
-                    solana_client::client_error::ClientErrorKind::RpcError(
-                        solana_client::rpc_request::RpcError::RpcResponseError { .. },
-                    ),
-                ..
-            }) => return Ok(None),
-            Err(e) => return Err(ClientError::Rpc(e)),
-        };
-
-        if account_data.len() < 8 {
-            return Err(ClientError::InvalidAccountData(
-                "Account data too short for discriminator".to_string(),
-            ));
-        }
-
-        let cohort: CohortV0 = AccountDeserialize::try_deserialize(&mut &account_data[8..])
-            .map_err(|e| {
-                ClientError::InvalidAccountData(format!("Failed to deserialize cohort: {}", e))
-            })?;
-
-        Ok(Some(cohort))
+        self.fetch_account(&cohort_pda)
     }
 
     /// Get claim receipt account (V0) - Note: requires cohort address, not campaign
@@ -136,33 +88,7 @@ impl PrismProtocolClient {
             .address_finder
             .find_claim_receipt_v0_address(cohort, claimant);
 
-        let account_data = match self.rpc_client.get_account_data(&receipt_pda) {
-            Ok(data) => data,
-            Err(solana_client::client_error::ClientError {
-                kind:
-                    solana_client::client_error::ClientErrorKind::RpcError(
-                        solana_client::rpc_request::RpcError::RpcResponseError { .. },
-                    ),
-                ..
-            }) => return Ok(None),
-            Err(e) => return Err(ClientError::Rpc(e)),
-        };
-
-        if account_data.len() < 8 {
-            return Err(ClientError::InvalidAccountData(
-                "Account data too short for discriminator".to_string(),
-            ));
-        }
-
-        let receipt: ClaimReceiptV0 = AccountDeserialize::try_deserialize(&mut &account_data[8..])
-            .map_err(|e| {
-                ClientError::InvalidAccountData(format!(
-                    "Failed to deserialize claim receipt: {}",
-                    e
-                ))
-            })?;
-
-        Ok(Some(receipt))
+        self.fetch_account(&receipt_pda)
     }
 
     /// Get vault token account info - Note: requires cohort address and vault index
@@ -183,45 +109,12 @@ impl PrismProtocolClient {
 
     /// Get mint account using anchor_spl types
     pub fn get_mint(&self, mint: &Pubkey) -> ClientResult<Option<Mint>> {
-        let account_data = match self.rpc_client.get_account_data(mint) {
-            Ok(data) => data,
-            Err(solana_client::client_error::ClientError {
-                kind:
-                    solana_client::client_error::ClientErrorKind::RpcError(
-                        solana_client::rpc_request::RpcError::RpcResponseError { .. },
-                    ),
-                ..
-            }) => return Ok(None),
-            Err(e) => return Err(ClientError::Rpc(e)),
-        };
-
-        let mint_account: Mint =
-            AccountDeserialize::try_deserialize_unchecked(&mut &account_data[..])
-                .map_err(|e| ClientError::SplToken(format!("Failed to deserialize mint: {}", e)))?;
-
-        Ok(Some(mint_account))
+        self.fetch_unchecked_account(mint)
     }
 
     /// Get token account using anchor_spl types
     pub fn get_token_account(&self, address: &Pubkey) -> ClientResult<Option<TokenAccount>> {
-        let account_data = match self.rpc_client.get_account_data(address) {
-            Ok(data) => data,
-            Err(solana_client::client_error::ClientError {
-                kind:
-                    solana_client::client_error::ClientErrorKind::RpcError(
-                        solana_client::rpc_request::RpcError::RpcResponseError { .. },
-                    ),
-                ..
-            }) => return Ok(None),
-            Err(e) => return Err(ClientError::Rpc(e)),
-        };
-
-        let token_account: TokenAccount =
-            AccountDeserialize::try_deserialize_unchecked(&mut &account_data[..]).map_err(|e| {
-                ClientError::SplToken(format!("Failed to deserialize token account: {}", e))
-            })?;
-
-        Ok(Some(token_account))
+        self.fetch_unchecked_account(address)
     }
 
     /// Convenience method to check if a mint is WSOL
@@ -348,5 +241,23 @@ impl PrismProtocolClient {
     /// Get the program ID
     pub fn program_id(&self) -> &Pubkey {
         &self.address_finder.program_id
+    }
+
+    /// Helper method to fetch and deserialize any account (RPC errors bubble up, deserialization errors become None)
+    fn fetch_account<T>(&self, address: &Pubkey) -> ClientResult<Option<T>>
+    where
+        T: AccountDeserialize,
+    {
+        let account_data = self.rpc_client.get_account_data(address)?;
+        Ok(T::try_deserialize(&mut &account_data[..]).ok())
+    }
+
+    /// Helper method for SPL token accounts (no discriminators)
+    fn fetch_unchecked_account<T>(&self, address: &Pubkey) -> ClientResult<Option<T>>
+    where
+        T: AccountDeserialize,
+    {
+        let account_data = self.rpc_client.get_account_data(address)?;
+        Ok(T::try_deserialize_unchecked(&mut &account_data[..]).ok())
     }
 }
