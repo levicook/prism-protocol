@@ -75,7 +75,7 @@ impl Hasher for PrismHasher {
 
 #[cfg(test)]
 mod tests {
-    use crate::{hash_claim_leaf, ClaimLeaf, PrismHasher};
+    use crate::{ClaimLeaf, PrismHasher};
     use anchor_lang::{prelude::*, solana_program::hash::Hasher as SolanaHasher};
     use rs_merkle::Hasher as _;
 
@@ -92,7 +92,7 @@ mod tests {
         };
 
         // Hash using the existing hash_claim_leaf function
-        let expected_hash = hash_claim_leaf(&leaf);
+        let expected_hash = leaf.to_hash();
 
         // Hash using our PrismHasher
         let leaf_data = leaf.try_to_vec().expect("Failed to serialize leaf");

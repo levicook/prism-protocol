@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use rs_merkle::MerkleProof;
 
-use crate::{hash_claim_leaf, ClaimLeaf, PrismHasher};
+use crate::{ClaimLeaf, PrismHasher};
 
 /// Verify a merkle proof against a root and leaf data
 /// This is a convenience wrapper around the on-chain verification logic
@@ -12,7 +12,7 @@ pub fn verify_claim_proof(
     leaf_index: usize,
     total_leaves: usize,
 ) -> bool {
-    let leaf_hash = hash_claim_leaf(leaf);
+    let leaf_hash = leaf.to_hash();
     let merkle_proof = MerkleProof::<PrismHasher>::new(proof.to_vec());
 
     merkle_proof.verify(*root, &[leaf_index], &[leaf_hash], total_leaves)
@@ -34,7 +34,7 @@ pub fn generate_proof_for_leaf(
         .ok_or(ErrorCode::ClaimantNotFound)?;
 
     // Hash all leaves
-    let leaf_hashes: Vec<[u8; 32]> = leaves.iter().map(|leaf| hash_claim_leaf(leaf)).collect();
+    let leaf_hashes: Vec<[u8; 32]> = leaves.iter().map(|leaf| leaf.to_hash()).collect();
 
     // Build tree and generate proof
     let tree = rs_merkle::MerkleTree::<PrismHasher>::from_leaves(&leaf_hashes);
@@ -62,7 +62,7 @@ pub fn extract_root_from_proof(
     leaf_index: usize,
     total_leaves: usize,
 ) -> Option<[u8; 32]> {
-    let leaf_hash = hash_claim_leaf(leaf);
+    let leaf_hash = leaf.to_hash();
     let merkle_proof = MerkleProof::<PrismHasher>::new(proof.to_vec());
 
     merkle_proof
@@ -117,7 +117,7 @@ mod tests {
         let proof = generate_proof_for_leaf(&leaves, target_leaf).unwrap();
 
         // Build tree to get root
-        let leaf_hashes: Vec<[u8; 32]> = leaves.iter().map(|leaf| hash_claim_leaf(leaf)).collect();
+        let leaf_hashes: Vec<[u8; 32]> = leaves.iter().map(|leaf| leaf.to_hash()).collect();
         let tree = rs_merkle::MerkleTree::<PrismHasher>::from_leaves(&leaf_hashes);
         let root = tree.root().unwrap();
 
@@ -140,7 +140,7 @@ mod tests {
         let proof = generate_proof_for_leaf(&leaves, target_leaf).unwrap();
 
         // Build tree to get expected root
-        let leaf_hashes: Vec<[u8; 32]> = leaves.iter().map(|leaf| hash_claim_leaf(leaf)).collect();
+        let leaf_hashes: Vec<[u8; 32]> = leaves.iter().map(|leaf| leaf.to_hash()).collect();
         let tree = rs_merkle::MerkleTree::<PrismHasher>::from_leaves(&leaf_hashes);
         let expected_root = tree.root().unwrap();
 
@@ -164,7 +164,7 @@ mod tests {
             .collect();
 
         // Build tree to get root
-        let leaf_hashes: Vec<[u8; 32]> = leaves.iter().map(|leaf| hash_claim_leaf(leaf)).collect();
+        let leaf_hashes: Vec<[u8; 32]> = leaves.iter().map(|leaf| leaf.to_hash()).collect();
         let tree = rs_merkle::MerkleTree::<PrismHasher>::from_leaves(&leaf_hashes);
         let root = tree.root().unwrap();
 

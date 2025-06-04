@@ -3,7 +3,7 @@ use anchor_lang::solana_program::hash::Hasher as SolanaHasher;
 use rs_merkle::MerkleTree;
 use std::collections::HashMap;
 
-use crate::{hash_claim_leaf, ClaimLeaf, PrismHasher};
+use crate::{ClaimLeaf, PrismHasher};
 
 /// Result of building a merkle tree from claim leaves
 #[derive(Clone)]
@@ -30,7 +30,7 @@ impl ClaimTree {
         }
 
         // Hash all leaves
-        let leaf_hashes: Vec<[u8; 32]> = leaves.iter().map(|leaf| hash_claim_leaf(leaf)).collect();
+        let leaf_hashes: Vec<[u8; 32]> = leaves.iter().map(|leaf| leaf.to_hash()).collect();
 
         // Build the merkle tree
         let tree = MerkleTree::<PrismHasher>::from_leaves(&leaf_hashes);
@@ -95,7 +95,7 @@ impl ClaimTree {
             .get(claimant)
             .ok_or(ErrorCode::ClaimantNotFound)?;
         let leaf = self.leaf_for_claimant(claimant)?;
-        let leaf_hash = hash_claim_leaf(leaf);
+        let leaf_hash = leaf.to_hash();
 
         let merkle_proof = rs_merkle::MerkleProof::<PrismHasher>::new(proof.to_vec());
 

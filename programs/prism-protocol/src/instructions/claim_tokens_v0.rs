@@ -1,12 +1,12 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
+use crate::claim_leaf::ClaimLeaf;
 use crate::constants::VAULT_SEED_PREFIX;
 use crate::error::ErrorCode;
-use crate::merkle_leaf::{hash_claim_leaf, ClaimLeaf};
+use crate::proofs::ProofV0;
 use crate::state::{CampaignStatus, CampaignV0, ClaimReceiptV0, CohortV0};
 use crate::{CAMPAIGN_V0_SEED_PREFIX, CLAIM_RECEIPT_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX};
-use anchor_lang::solana_program::hash::Hasher as SolanaHasher; // Alias to avoid conflict if Hasher trait is in scope elsewhere
 
 #[derive(Accounts)]
 #[instruction(
@@ -135,10 +135,10 @@ pub fn handle_claim_tokens_v0(
         assigned_vault_index,
         entitlements,
     };
-    let leaf_hash = hash_claim_leaf(&leaf);
 
     // 4. Verify the Merkle proof using our hashing scheme (SHA256)
-    if !verify_merkle_proof(&merkle_proof, &cohort.merkle_root, &leaf_hash) {
+    let proof = ProofV0::new(merkle_proof);
+    if !proof.verify(&cohort.merkle_root, &leaf) {
         return err!(ErrorCode::InvalidMerkleProof);
     }
     msg!("Merkle proof verified successfully.");
@@ -191,34 +191,3 @@ pub fn handle_claim_tokens_v0(
 
     Ok(())
 }
-
-/// Verifies a Merkle proof using our hashing scheme (SHA256 hashing).
-///
-/// ## Security: Domain Separation
-/// This function enforces the same prefix-based domain separation as our off-chain
-/// merkle tree generation to prevent second preimage attacks:
-/// - Leaf nodes are hashed as: SHA256(0x00 || borsh_serialized_leaf_data)
-/// - Internal nodes are hashed as: SHA256(0x01 || H(LeftChild) || H(RightChild))
-/// - Child hashes are ordered lexicographically before concatenation.
-///
-/// The prefix bytes ensure that leaf hashes can never equal internal node hashes,
-/// preventing attackers from forging proofs by substituting node types.
-fn verify_merkle_proof(proof: &[[u8; 32]], root: &[u8; 32], leaf: &[u8; 32]) -> bool {
-    let mut computed_hash = *leaf;
-    for p_elem in proof.iter() {
-        let mut hasher = SolanaHasher::default(); // Uses SHA256 by default
-        hasher.hash(&[0x01]); // Internal node prefix - provides domain separation from leaf nodes (0x00)
-                              // Correctly order H(L) and H(R) before hashing for the parent node.
-        if computed_hash <= *p_elem {
-            hasher.hash(&computed_hash);
-            hasher.hash(p_elem);
-        } else {
-            hasher.hash(p_elem);
-            hasher.hash(&computed_hash);
-        }
-        computed_hash = hasher.result().to_bytes();
-    }
-    computed_hash == *root
-}
-
-// Original handler with placeholder/incorrect Keccak logic has been removed.

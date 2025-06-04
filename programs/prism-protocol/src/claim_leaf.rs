@@ -15,23 +15,23 @@ pub struct ClaimLeaf {
     pub entitlements: u64,
 }
 
-/// Hashes a `ClaimLeaf` to produce a 32-byte hash suitable for Merkle tree construction.
-/// This follows our merkle tree hashing scheme: SHA256(0x00 || borsh_serialized_leaf_data).
-pub fn hash_claim_leaf(leaf_data: &ClaimLeaf) -> [u8; 32] {
-    let mut hasher = Hasher::default();
+impl ClaimLeaf {
+    /// Hash this ClaimLeaf to produce a 32-byte hash suitable for Merkle tree construction.
+    /// This follows our merkle tree hashing scheme: SHA256(0x00 || borsh_serialized_leaf_data).
+    pub fn to_hash(&self) -> [u8; 32] {
+        let mut hasher = Hasher::default();
 
-    // Prepend 0x00 for a leaf node, following common Solana merkle tree patterns
-    hasher.hash(&[0x00]);
+        // Prepend 0x00 for a leaf node, following common Solana merkle tree patterns
+        hasher.hash(&[0x00]);
 
-    // Serialize the leaf data using Borsh
-    let serialized_leaf = leaf_data
-        .try_to_vec()
-        .expect("Failed to serialize ClaimLeaf");
+        // Serialize the leaf data using Borsh
+        let serialized_leaf = self.try_to_vec().expect("Failed to serialize ClaimLeaf");
 
-    // Hash the serialized data
-    hasher.hash(&serialized_leaf);
+        // Hash the serialized data
+        hasher.hash(&serialized_leaf);
 
-    hasher.result().to_bytes()
+        hasher.result().to_bytes()
+    }
 }
 
 #[cfg(test)]
@@ -59,9 +59,9 @@ mod tests {
             entitlements: 5,
         };
 
-        let hash1_v1 = hash_claim_leaf(&leaf1_v1);
-        let hash1_v2 = hash_claim_leaf(&leaf1_v2);
-        let hash2 = hash_claim_leaf(&leaf2);
+        let hash1_v1 = leaf1_v1.to_hash();
+        let hash1_v2 = leaf1_v2.to_hash();
+        let hash2 = leaf2.to_hash();
 
         assert_eq!(
             hash1_v1, hash1_v2,
@@ -84,8 +84,8 @@ mod tests {
         };
         let serialized_leaf = leaf.try_to_vec().unwrap();
 
-        // Hash with 0x00 prefix (as done by hash_claim_leaf)
-        let prefixed_hash_bytes = hash_claim_leaf(&leaf);
+        // Hash with 0x00 prefix (as done by to_hash)
+        let prefixed_hash_bytes = leaf.to_hash();
 
         // Manual hash without 0x00 prefix
         let mut direct_hasher = Hasher::default();
@@ -105,7 +105,7 @@ mod tests {
 
         assert_eq!(
             prefixed_hash_bytes, manual_prefixed_hash_bytes,
-            "hash_claim_leaf should match manual prefixed hashing."
+            "to_hash should match manual prefixed hashing."
         );
     }
 }

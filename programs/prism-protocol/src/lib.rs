@@ -1,14 +1,16 @@
+pub mod claim_leaf;
 pub mod constants;
 pub mod error;
 pub mod instructions;
-pub mod merkle_leaf;
+pub mod proofs;
 pub mod state;
 
+pub use claim_leaf::*;
 pub use constants::{
     CAMPAIGN_V0_SEED_PREFIX, CLAIM_RECEIPT_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX, VAULT_SEED_PREFIX,
 };
 pub use instructions::*;
-pub use merkle_leaf::*;
+pub use proofs::*;
 pub use state::*;
 
 use anchor_lang::prelude::*;
