@@ -39,18 +39,30 @@ let cohort_allocation = allocator.calculate_cohort_allocation(
 
 // Step 2: Cohort → Vault allocation
 let vault_allocation = allocator.calculate_vault_allocation(
-    cohort_allocation.cohort_budget, // Use cohort budget
+    cohort_allocation.cohort_budget_human, // Use cohort budget
     dec!(3), // 3 entitlements in this vault
     dec!(7) // 7 total entitlements in cohort
 ).expect("Failed to calculate vault allocation");
 
 // Precision is maintained through both levels
-assert!(vault_allocation.dust_amount >= dec!(0)); // Dust is tracked
+assert!(vault_allocation.dust_amount_human >= dec!(0)); // Dust is tracked
 ```
 */
 
-use rust_decimal::Decimal;
+use rust_decimal::prelude::*;
 use thiserror::Error;
+
+/// Maximum supported mint decimals when using u64 for token amounts
+///
+/// With u64::MAX ≈ 1.84 × 10^19:
+/// - 18 decimals: max ~18 tokens (still restrictive but technically possible)
+/// - 19+ decimals: max ~1.8 tokens (essentially unusable)
+///
+/// Real-world comparison:
+/// - SOL: 9 decimals (max ~18.4 billion tokens) ✅
+/// - USDC: 6 decimals (max ~18.4 trillion tokens) ✅
+/// - ETH: 18 decimals (uses u256, not u64!) ⚠️
+const MAX_SUPPORTED_DECIMALS: u8 = 18;
 
 /// Errors that can occur during budget allocation
 #[derive(Debug, Error)]
@@ -58,7 +70,7 @@ pub enum AllocationError {
     #[error("Budget allocation failed: {0}")]
     AllocationFailed(String),
 
-    #[error("Max decimals exceeded: {0} (max 28 decimals supported)")]
+    #[error("Max decimals exceeded: {0} (max {MAX_SUPPORTED_DECIMALS} decimals supported with u64 token amounts)")]
     MaxDecimalsExceeded(u8),
 
     #[error("Invalid percentage: {0}% (must be 0-100)")]
@@ -79,27 +91,39 @@ pub type AllocationResult<T> = Result<T, AllocationError>;
 /// Result of vault budget allocation calculation
 #[derive(Debug, Clone, PartialEq)]
 pub struct VaultAllocation {
-    /// Total allocation for this vault (in budget tokens)
-    pub vault_budget: Decimal,
+    /// Total allocation for this vault (human-readable amount)
+    pub vault_budget_human: Decimal,
+    /// Total allocation for this vault (token amount)
+    pub vault_budget_tokens: u64,
 
-    /// Amount per entitlement (respects mint decimals)
-    pub amount_per_entitlement: Decimal,
+    /// Amount per entitlement (human-readable amount)
+    pub amount_per_entitlement_human: Decimal,
+    /// Amount per entitlement (token amount)
+    pub amount_per_entitlement_tokens: u64,
 
-    /// Amount that couldn't be allocated due to mint constraints
-    pub dust_amount: Decimal,
+    /// Amount that couldn't be allocated due to mint constraints (human-readable)
+    pub dust_amount_human: Decimal,
+    /// Amount that couldn't be allocated due to mint constraints (token amount)
+    pub dust_amount_tokens: u64,
 }
 
 /// Result of budget allocation calculation
 #[derive(Debug, Clone, PartialEq)]
 pub struct CohortAllocation {
-    /// Total allocation for this cohort (in budget tokens)
-    pub cohort_budget: Decimal,
+    /// Total allocation for this cohort (human-readable amount)
+    pub cohort_budget_human: Decimal,
+    /// Total allocation for this cohort (token amount)
+    pub cohort_budget_tokens: u64,
 
-    /// Amount per entitlement (respects mint decimals)
-    pub amount_per_entitlement: Decimal,
+    /// Amount per entitlement (human-readable amount)
+    pub amount_per_entitlement_human: Decimal,
+    /// Amount per entitlement (token amount)
+    pub amount_per_entitlement_tokens: u64,
 
-    /// Amount that couldn't be allocated due to mint constraints
-    pub dust_amount: Decimal,
+    /// Amount that couldn't be allocated due to mint constraints (human-readable)
+    pub dust_amount_human: Decimal,
+    /// Amount that couldn't be allocated due to mint constraints (token amount)
+    pub dust_amount_tokens: u64,
 }
 
 /// Budget allocator with mint decimal constraints
@@ -111,13 +135,14 @@ pub struct CohortAllocation {
 pub struct BudgetAllocator {
     campaign_budget: Decimal,
     decimal_precision: Decimal,
+    mint_decimals: u8,
 }
 
 impl BudgetAllocator {
     /// Create new allocator with budget and mint decimal constraints
     pub fn new(campaign_budget: Decimal, mint_decimals: u8) -> AllocationResult<Self> {
-        // rust_decimal has a maximum precision of 28 decimal places
-        if mint_decimals as u32 > Decimal::MAX_SCALE {
+        // Practical limit for u64 token amounts (not theoretical Decimal limit)
+        if mint_decimals > MAX_SUPPORTED_DECIMALS {
             return Err(AllocationError::MaxDecimalsExceeded(mint_decimals));
         }
 
@@ -127,6 +152,7 @@ impl BudgetAllocator {
         Ok(Self {
             campaign_budget,
             decimal_precision,
+            mint_decimals,
         })
     }
 
@@ -163,10 +189,19 @@ impl BudgetAllocator {
         let actual_total_allocated = amount_per_entitlement * total_entitlements;
         let dust_amount = cohort_budget - actual_total_allocated;
 
+        // Convert to token amounts
+        let cohort_budget_tokens = convert_to_token_amount(cohort_budget, self.mint_decimals)?;
+        let amount_per_entitlement_tokens =
+            convert_to_token_amount(amount_per_entitlement, self.mint_decimals)?;
+        let dust_amount_tokens = convert_to_token_amount(dust_amount, self.mint_decimals)?;
+
         Ok(CohortAllocation {
-            cohort_budget,
-            amount_per_entitlement,
-            dust_amount,
+            cohort_budget_human: cohort_budget,
+            cohort_budget_tokens,
+            amount_per_entitlement_human: amount_per_entitlement,
+            amount_per_entitlement_tokens,
+            dust_amount_human: dust_amount,
+            dust_amount_tokens,
         })
     }
 
@@ -240,10 +275,19 @@ impl BudgetAllocator {
         let actual_total_allocated = amount_per_entitlement * vault_entitlements;
         let dust_amount = vault_budget - actual_total_allocated;
 
+        // Convert to token amounts
+        let vault_budget_tokens = convert_to_token_amount(vault_budget, self.mint_decimals)?;
+        let amount_per_entitlement_tokens =
+            convert_to_token_amount(amount_per_entitlement, self.mint_decimals)?;
+        let dust_amount_tokens = convert_to_token_amount(dust_amount, self.mint_decimals)?;
+
         Ok(VaultAllocation {
-            vault_budget,
-            amount_per_entitlement,
-            dust_amount,
+            vault_budget_human: vault_budget,
+            vault_budget_tokens,
+            amount_per_entitlement_human: amount_per_entitlement,
+            amount_per_entitlement_tokens,
+            dust_amount_human: dust_amount,
+            dust_amount_tokens,
         })
     }
 
@@ -257,7 +301,7 @@ impl BudgetAllocator {
         for (share_percentage, total_entitlements) in cohort_shares {
             let allocation =
                 self.calculate_cohort_allocation(*share_percentage, *total_entitlements)?;
-            total_dust += allocation.dust_amount;
+            total_dust += allocation.dust_amount_human;
         }
 
         Ok(total_dust)
@@ -277,6 +321,33 @@ impl BudgetAllocator {
     pub fn decimal_precision(&self) -> Decimal {
         self.decimal_precision
     }
+}
+
+/// Convert human amount (Decimal) to token amount (u64) respecting mint decimals
+///
+/// # Arguments
+/// * `human_amount` - Amount in human-readable units (e.g., 33.5 SOL)
+/// * `mint_decimals` - Number of decimals for the mint (e.g., 9 for SOL)
+///
+/// # Returns
+/// * Token amount in smallest units (e.g., 33500000000 lamports)
+pub fn convert_to_token_amount(human_amount: Decimal, mint_decimals: u8) -> AllocationResult<u64> {
+    if mint_decimals > MAX_SUPPORTED_DECIMALS {
+        return Err(AllocationError::MaxDecimalsExceeded(mint_decimals));
+    }
+
+    // Calculate scale factor (10^mint_decimals)
+    // Safe to use i64::pow since we've limited mint_decimals to ≤18
+    let scale_factor = Decimal::new(10_i64.pow(mint_decimals as u32), 0);
+
+    let token_amount = human_amount * scale_factor;
+
+    token_amount.floor().to_u64().ok_or_else(|| {
+        AllocationError::Overflow(format!(
+            "Token amount overflow: {} * 10^{} = {}",
+            human_amount, mint_decimals, token_amount
+        ))
+    })
 }
 
 #[cfg(test)]
@@ -301,9 +372,14 @@ mod tests {
 
         // 50% of 1000 SOL = 500 SOL
         // 500 SOL / 100 entitlements = 5 SOL per entitlement
-        assert_eq!(allocation.cohort_budget, dec!(500));
-        assert_eq!(allocation.amount_per_entitlement, dec!(5));
-        assert_eq!(allocation.dust_amount, dec!(0));
+        assert_eq!(allocation.cohort_budget_human, dec!(500));
+        assert_eq!(allocation.amount_per_entitlement_human, dec!(5));
+        assert_eq!(allocation.dust_amount_human, dec!(0));
+
+        // Test token amounts (5 SOL = 5,000,000,000 lamports)
+        assert_eq!(allocation.cohort_budget_tokens, 500_000_000_000);
+        assert_eq!(allocation.amount_per_entitlement_tokens, 5_000_000_000);
+        assert_eq!(allocation.dust_amount_tokens, 0);
     }
 
     #[test]
@@ -326,8 +402,8 @@ mod tests {
         // Actual allocated: 333.374485596 * 3 = 1000.123456788
         // Dust: 1000.123456789 - 1000.123456788 = 0.000000001 SOL
 
-        assert_eq!(allocation.amount_per_entitlement, dec!(333.374485596));
-        assert_eq!(allocation.dust_amount, dec!(0.000000001));
+        assert_eq!(allocation.amount_per_entitlement_human, dec!(333.374485596));
+        assert_eq!(allocation.dust_amount_human, dec!(0.000000001));
     }
 
     #[test]
@@ -349,8 +425,8 @@ mod tests {
         // 2500.125 / 7 = 357.160714... USDC per entitlement
         // Rounded to USDC precision: 357.160714 USDC per entitlement
 
-        assert_eq!(allocation.cohort_budget, dec!(2500.125));
-        assert_eq!(allocation.amount_per_entitlement, dec!(357.160714));
+        assert_eq!(allocation.cohort_budget_human, dec!(2500.125));
+        assert_eq!(allocation.amount_per_entitlement_human, dec!(357.160714));
     }
 
     #[test]
@@ -371,8 +447,8 @@ mod tests {
         // 1000 / 3 = 333.333... but must round down to 333 whole tokens
         // Dust = 1000 - (333 * 3) = 1 token
 
-        assert_eq!(allocation.amount_per_entitlement, dec!(333));
-        assert_eq!(allocation.dust_amount, dec!(1));
+        assert_eq!(allocation.amount_per_entitlement_human, dec!(333));
+        assert_eq!(allocation.dust_amount_human, dec!(1));
     }
 
     #[test]
@@ -409,8 +485,8 @@ mod tests {
 
     #[test]
     fn test_high_decimal_precision() {
-        // Test high precision (20 decimals) - safely below rust_decimal's 28 limit
-        let allocator = BudgetAllocator::new(dec!(1000), 20).unwrap();
+        // Test high precision (18 decimals) - maximum supported with u64 token amounts
+        let allocator = BudgetAllocator::new(dec!(1), 18).unwrap();
 
         let allocation = allocator
             .calculate_cohort_allocation(
@@ -419,24 +495,24 @@ mod tests {
             )
             .unwrap();
 
-        // Should handle 20 decimal places without issues
-        assert_eq!(allocation.cohort_budget, dec!(1000));
-        assert_eq!(allocation.amount_per_entitlement, dec!(500));
-        assert_eq!(allocation.dust_amount, dec!(0));
+        // Should handle 18 decimal places without issues
+        assert_eq!(allocation.cohort_budget_human, dec!(1));
+        assert_eq!(allocation.amount_per_entitlement_human, dec!(0.5));
+        assert_eq!(allocation.dust_amount_human, dec!(0));
     }
 
     #[test]
     fn test_excessive_decimal_precision() {
-        // Test that excessive precision (>28) fails gracefully with proper error
-        let result = BudgetAllocator::new(dec!(1), 30);
+        // Test that excessive precision (>18) fails gracefully with proper error
+        let result = BudgetAllocator::new(dec!(1), 19);
 
         // Should return proper error, not panic
         assert!(result.is_err());
         match result.unwrap_err() {
-            AllocationError::MaxDecimalsExceeded(30) => {
+            AllocationError::MaxDecimalsExceeded(19) => {
                 // Expected error
             }
-            _ => panic!("Expected InvalidDecimals error"),
+            _ => panic!("Expected MaxDecimalsExceeded error"),
         }
     }
 
@@ -496,9 +572,9 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(allocation.cohort_budget, dec!(999999999999999999));
+        assert_eq!(allocation.cohort_budget_human, dec!(999999999999999999));
         // Should handle the calculation without overflow or panic
-        assert!(allocation.amount_per_entitlement >= Decimal::ZERO);
+        assert!(allocation.amount_per_entitlement_human >= Decimal::ZERO);
         // Even if rounded to zero, the calculation should work
     }
 
@@ -539,9 +615,9 @@ mod tests {
             .unwrap();
 
         // Should get 50 SOL and 10 SOL per entitlement
-        assert_eq!(vault_allocation.vault_budget, dec!(50));
-        assert_eq!(vault_allocation.amount_per_entitlement, dec!(10));
-        assert_eq!(vault_allocation.dust_amount, dec!(0));
+        assert_eq!(vault_allocation.vault_budget_human, dec!(50));
+        assert_eq!(vault_allocation.amount_per_entitlement_human, dec!(10));
+        assert_eq!(vault_allocation.dust_amount_human, dec!(0));
     }
 
     #[test]
@@ -562,9 +638,9 @@ mod tests {
 
         // Vault gets 30% of budget = 300.15 USDC
         // 300.15 / 30 = 10.005 USDC per entitlement
-        assert_eq!(vault_allocation.vault_budget, dec!(300.15));
-        assert_eq!(vault_allocation.amount_per_entitlement, dec!(10.005));
-        assert_eq!(vault_allocation.dust_amount, dec!(0));
+        assert_eq!(vault_allocation.vault_budget_human, dec!(300.15));
+        assert_eq!(vault_allocation.amount_per_entitlement_human, dec!(10.005));
+        assert_eq!(vault_allocation.dust_amount_human, dec!(0));
     }
 
     #[test]
@@ -589,12 +665,12 @@ mod tests {
             allocator.round_to_mint_precision(expected_budget / dec!(3));
         let expected_dust = expected_budget - (expected_amount_per_entitlement * dec!(3));
 
-        assert_eq!(vault_allocation.vault_budget, expected_budget);
+        assert_eq!(vault_allocation.vault_budget_human, expected_budget);
         assert_eq!(
-            vault_allocation.amount_per_entitlement,
+            vault_allocation.amount_per_entitlement_human,
             expected_amount_per_entitlement
         );
-        assert_eq!(vault_allocation.dust_amount, expected_dust);
+        assert_eq!(vault_allocation.dust_amount_human, expected_dust);
     }
 
     #[test]
@@ -628,10 +704,10 @@ mod tests {
             .unwrap();
 
         // Basic checks: vault should get some budget and create dust
-        assert!(vault_allocation.vault_budget > dec!(3));
-        assert!(vault_allocation.vault_budget < dec!(4));
-        assert_eq!(vault_allocation.amount_per_entitlement, dec!(3)); // Rounded down
-        assert!(vault_allocation.dust_amount > dec!(0)); // Should have dust
+        assert!(vault_allocation.vault_budget_human > dec!(3));
+        assert!(vault_allocation.vault_budget_human < dec!(4));
+        assert_eq!(vault_allocation.amount_per_entitlement_human, dec!(3)); // Rounded down
+        assert!(vault_allocation.dust_amount_human > dec!(0)); // Should have dust
     }
 
     #[test]
@@ -653,9 +729,9 @@ mod tests {
 
         // Should be exactly 100 SOL now with precision fix
         // (300 * 10) / 30 = 3000 / 30 = 100 exactly
-        assert_eq!(vault_allocation.vault_budget, dec!(100));
-        assert_eq!(vault_allocation.amount_per_entitlement, dec!(10));
-        assert_eq!(vault_allocation.dust_amount, dec!(0));
+        assert_eq!(vault_allocation.vault_budget_human, dec!(100));
+        assert_eq!(vault_allocation.amount_per_entitlement_human, dec!(10));
+        assert_eq!(vault_allocation.dust_amount_human, dec!(0));
     }
 
     #[test]
@@ -674,16 +750,16 @@ mod tests {
         // Step 2: Cohort -> Vault allocation
         let vault_allocation = allocator
             .calculate_vault_allocation(
-                cohort_allocation.cohort_budget,
+                cohort_allocation.cohort_budget_human,
                 dec!(3), // 3 of 7 entitlements
                 dec!(7),
             )
             .unwrap();
 
         // Should maintain precision through both levels
-        assert!(vault_allocation.vault_budget > dec!(140)); // Rough check
-        assert!(vault_allocation.vault_budget < dec!(150)); // Rough check
-        assert!(vault_allocation.amount_per_entitlement > dec!(0)); // Should not round to zero
+        assert!(vault_allocation.vault_budget_human > dec!(140)); // Rough check
+        assert!(vault_allocation.vault_budget_human < dec!(150)); // Rough check
+        assert!(vault_allocation.amount_per_entitlement_human > dec!(0)); // Should not round to zero
 
         // Most importantly: calculations should complete without error
     }
@@ -702,9 +778,9 @@ mod tests {
             .unwrap();
 
         // Should get exactly 1 SOL: (1000000 * 1) / 1000000 = 1
-        assert_eq!(vault_allocation.vault_budget, dec!(1));
-        assert_eq!(vault_allocation.amount_per_entitlement, dec!(1));
-        assert_eq!(vault_allocation.dust_amount, dec!(0));
+        assert_eq!(vault_allocation.vault_budget_human, dec!(1));
+        assert_eq!(vault_allocation.amount_per_entitlement_human, dec!(1));
+        assert_eq!(vault_allocation.dust_amount_human, dec!(0));
     }
 
     #[test]
@@ -723,9 +799,12 @@ mod tests {
             .unwrap();
 
         // Should preserve the tiny amount exactly
-        assert_eq!(vault_allocation.vault_budget, dec!(0.000000001));
-        assert_eq!(vault_allocation.amount_per_entitlement, dec!(0.000000001));
-        assert_eq!(vault_allocation.dust_amount, dec!(0));
+        assert_eq!(vault_allocation.vault_budget_human, dec!(0.000000001));
+        assert_eq!(
+            vault_allocation.amount_per_entitlement_human,
+            dec!(0.000000001)
+        );
+        assert_eq!(vault_allocation.dust_amount_human, dec!(0));
     }
 
     #[test]
@@ -740,27 +819,29 @@ mod tests {
         ];
 
         for (decimals, description) in test_cases {
-            let allocator = BudgetAllocator::new(dec!(1000), decimals).unwrap();
+            // Use appropriate budget size based on decimals to avoid overflow
+            let budget = if decimals >= 18 { dec!(1) } else { dec!(1000) };
+            let allocator = BudgetAllocator::new(budget, decimals).unwrap();
 
             // Test a tricky division case
             let vault_allocation = allocator
                 .calculate_vault_allocation(
-                    dec!(1000), // Budget
-                    dec!(3),    // 3 entitlements
-                    dec!(7),    // Out of 7 total
+                    budget,  // Use same budget as allocator
+                    dec!(3), // 3 entitlements
+                    dec!(7), // Out of 7 total
                 )
                 .unwrap();
 
             // Should not panic and should respect decimal constraints
-            assert!(vault_allocation.vault_budget > dec!(0));
-            assert!(vault_allocation.amount_per_entitlement >= dec!(0));
-            assert!(vault_allocation.dust_amount >= dec!(0));
+            assert!(vault_allocation.vault_budget_human > dec!(0));
+            assert!(vault_allocation.amount_per_entitlement_human >= dec!(0));
+            assert!(vault_allocation.dust_amount_human >= dec!(0));
 
             // Verify precision is respected (dust + allocated = budget)
-            let total_allocated = vault_allocation.amount_per_entitlement * dec!(3);
-            let reconstructed_budget = total_allocated + vault_allocation.dust_amount;
+            let total_allocated = vault_allocation.amount_per_entitlement_human * dec!(3);
+            let reconstructed_budget = total_allocated + vault_allocation.dust_amount_human;
             assert_eq!(
-                reconstructed_budget, vault_allocation.vault_budget,
+                reconstructed_budget, vault_allocation.vault_budget_human,
                 "Precision test failed for {}",
                 description
             );
@@ -788,9 +869,9 @@ mod tests {
                 )
                 .unwrap();
 
-            total_dust += vault_allocation.dust_amount;
+            total_dust += vault_allocation.dust_amount_human;
             total_allocated +=
-                vault_allocation.amount_per_entitlement * Decimal::from(vault_entitlements);
+                vault_allocation.amount_per_entitlement_human * Decimal::from(vault_entitlements);
         }
 
         // Total dust should be bounded (less than 1 lamport per vault typically)
@@ -798,5 +879,230 @@ mod tests {
 
         // Verify we don't over-allocate
         assert!(total_allocated + total_dust <= cohort_budget);
+    }
+
+    // =====================================================================
+    // INTEGRATION TEST VALUE VERIFICATION
+    // =====================================================================
+    // These tests use the EXACT same values as test_full_campaign_flow_happy_path
+    // to prove the budget allocator produces the precise values in our static assertions.
+
+    #[test]
+    fn test_integration_values_early_adopters_cohort() {
+        // EXACT values from test_full_campaign_flow_happy_path
+        let campaign_budget = dec!(1000000000); // 1B SOL (DEFAULT_BUDGET)
+        let mint_decimals = 9; // DEFAULT_MINT_DECIMALS
+        let early_adopters_share = dec!(5); // 5% from fixture
+        let total_entitlements = dec!(3); // early_adopter_1(1) + early_adopter_2(2)
+
+        let allocator = BudgetAllocator::new(campaign_budget, mint_decimals).unwrap();
+
+        let allocation = allocator
+            .calculate_cohort_allocation(early_adopters_share, total_entitlements)
+            .unwrap();
+
+        // These should match EXACTLY what the integration test expects
+        println!("🔍 EarlyAdopters Budget Allocator Results:");
+        println!("   Cohort budget human: {}", allocation.cohort_budget_human);
+        println!(
+            "   Cohort budget token: {}",
+            allocation.cohort_budget_tokens
+        );
+        println!(
+            "   Amount per entitlement human: {}",
+            allocation.amount_per_entitlement_human
+        );
+        println!(
+            "   Amount per entitlement token: {}",
+            allocation.amount_per_entitlement_tokens
+        );
+        println!("   Dust amount human: {}", allocation.dust_amount_human);
+        println!("   Dust amount token: {}", allocation.dust_amount_tokens);
+
+        // Verify key mathematical properties
+        assert_eq!(allocation.cohort_budget_human, dec!(50000000)); // 5% of 1B = 50M SOL
+        assert_eq!(allocation.cohort_budget_tokens, 50_000_000_000_000_000); // 50M SOL in lamports
+
+        // The critical value: amount per entitlement
+        // 50M SOL / 3 entitlements = 16,666,666.666666666... SOL
+        // Rounded down to mint precision: 16,666,666.666666666 SOL
+        assert_eq!(
+            allocation.amount_per_entitlement_human,
+            dec!(16666666.666666666)
+        );
+        assert_eq!(
+            allocation.amount_per_entitlement_tokens,
+            16_666_666_666_666_666
+        ); // lamports
+
+        // Dust calculation: what can't be allocated due to rounding
+        // 50M - (16,666,666.666666666 * 3) = 50M - 49,999,999.999999998 = 0.000000002 SOL = 2 lamports
+        assert_eq!(allocation.dust_amount_human, dec!(0.000000002));
+        assert_eq!(allocation.dust_amount_tokens, 2);
+
+        // Prove the math: allocated + dust = budget
+        let total_allocated_human = allocation.amount_per_entitlement_human * total_entitlements;
+        let total_allocated_tokens = allocation.amount_per_entitlement_tokens * 3;
+
+        assert_eq!(
+            total_allocated_human + allocation.dust_amount_human,
+            allocation.cohort_budget_human
+        );
+        assert_eq!(
+            total_allocated_tokens + allocation.dust_amount_tokens,
+            allocation.cohort_budget_tokens
+        );
+    }
+
+    #[test]
+    fn test_integration_values_early_adopter_claims() {
+        // Prove the exact claim amounts from the integration test
+        let amount_per_entitlement_tokens = 16_666_666_666_666_666u64; // From allocator test above
+
+        // early_adopter_1: 1 entitlement
+        let early_adopter_1_claim = amount_per_entitlement_tokens * 1;
+        assert_eq!(early_adopter_1_claim, 16_666_666_666_666_666);
+
+        // early_adopter_2: 2 entitlements
+        let early_adopter_2_claim = amount_per_entitlement_tokens * 2;
+        assert_eq!(early_adopter_2_claim, 33_333_333_333_333_332);
+
+        // Total claimed
+        let total_claimed = early_adopter_1_claim + early_adopter_2_claim;
+        assert_eq!(total_claimed, 49_999_999_999_999_998);
+
+        // Vault remainder (the famous 2 lamports of dust!)
+        let vault_budget = 50_000_000_000_000_000u64;
+        let vault_remainder = vault_budget - total_claimed;
+        assert_eq!(vault_remainder, 2);
+
+        println!("🎯 EarlyAdopters Claim Math Verification:");
+        println!(
+            "   early_adopter_1 claim: {} lamports",
+            early_adopter_1_claim
+        );
+        println!(
+            "   early_adopter_2 claim: {} lamports",
+            early_adopter_2_claim
+        );
+        println!("   Total claimed: {} lamports", total_claimed);
+        println!("   Vault budget: {} lamports", vault_budget);
+        println!(
+            "   Vault remainder: {} lamports (mathematical dust)",
+            vault_remainder
+        );
+    }
+
+    #[test]
+    fn test_integration_values_power_users_cohort() {
+        // Verify PowerUsers cohort calculations
+        let campaign_budget = dec!(1000000000); // 1B SOL
+        let power_users_share = dec!(10); // 10% from fixture
+        let total_entitlements = dec!(11); // power_user_1(1) + power_user_2(2) + power_user_3(3) + multi_cohort_user(5)
+
+        let allocator = BudgetAllocator::new(campaign_budget, 9).unwrap();
+
+        let allocation = allocator
+            .calculate_cohort_allocation(power_users_share, total_entitlements)
+            .unwrap();
+
+        println!("🔍 PowerUsers Budget Allocator Results:");
+        println!("   Cohort budget human: {}", allocation.cohort_budget_human);
+        println!(
+            "   Amount per entitlement token: {}",
+            allocation.amount_per_entitlement_tokens
+        );
+
+        // Key calculations
+        assert_eq!(allocation.cohort_budget_human, dec!(100000000)); // 10% of 1B = 100M SOL
+        assert_eq!(allocation.cohort_budget_tokens, 100_000_000_000_000_000); // 100M SOL in lamports
+
+        // multi_cohort_user has 5 entitlements
+        let multi_cohort_user_claim = allocation.amount_per_entitlement_tokens * 5;
+
+        // This should match the static assertion value from the integration test
+        assert_eq!(multi_cohort_user_claim, 45_454_545_454_545_450);
+
+        println!(
+            "   multi_cohort_user claim (5 entitlements): {} lamports",
+            multi_cohort_user_claim
+        );
+    }
+
+    #[test]
+    fn test_integration_values_mathematical_dust_proof() {
+        // Prove that "dust" is mathematically unavoidable, not a bug
+
+        // Example 1: EarlyAdopters (50M SOL, 3 entitlements)
+        let budget1 = 50_000_000_000_000_000u64; // lamports
+        let entitlements1 = 3u64;
+        let quotient1 = budget1 / entitlements1;
+        let remainder1 = budget1 % entitlements1;
+
+        assert_eq!(quotient1, 16_666_666_666_666_666); // amount_per_entitlement
+        assert_eq!(remainder1, 2); // unavoidable dust
+
+        // Example 2: Any indivisible case
+        let budget2 = 10u64;
+        let entitlements2 = 3u64;
+        let quotient2 = budget2 / entitlements2;
+        let remainder2 = budget2 % entitlements2;
+
+        assert_eq!(quotient2, 3); // amount_per_entitlement
+        assert_eq!(remainder2, 1); // unavoidable dust
+
+        println!("📐 Mathematical Dust Proof:");
+        println!(
+            "   Case 1: {} ÷ {} = {} remainder {} (EarlyAdopters)",
+            budget1, entitlements1, quotient1, remainder1
+        );
+        println!(
+            "   Case 2: {} ÷ {} = {} remainder {} (simple example)",
+            budget2, entitlements2, quotient2, remainder2
+        );
+        println!(
+            "   ✅ Integer division always creates remainder when budget not evenly divisible"
+        );
+        println!("   ✅ This is mathematical reality, not a precision bug");
+    }
+
+    #[test]
+    fn test_integration_values_all_cohorts_comprehensive() {
+        // Test ALL cohorts from the integration test to verify complete precision behavior
+        let campaign_budget = dec!(1000000000); // 1B SOL
+        let allocator = BudgetAllocator::new(campaign_budget, 9).unwrap();
+
+        // All cohort configurations from fixture
+        let cohorts = [
+            ("EarlyAdopters", dec!(5), dec!(3)), // 5%, 3 entitlements
+            ("Investors", dec!(10), dec!(2)),    // 10%, 2 entitlements
+            ("PowerUsers", dec!(10), dec!(11)),  // 10%, 11 entitlements
+            ("Team", dec!(75), dec!(16)),        // 75%, 16 entitlements
+        ];
+
+        let mut total_budget = dec!(0);
+        let mut total_dust = dec!(0);
+
+        println!("🔍 Complete Campaign Budget Allocation:");
+
+        for (name, share, entitlements) in cohorts {
+            let allocation = allocator
+                .calculate_cohort_allocation(share, entitlements)
+                .unwrap();
+
+            total_budget += allocation.cohort_budget_human;
+            total_dust += allocation.dust_amount_human;
+
+            println!(
+                "   {}: {}% → {} SOL, dust: {} SOL",
+                name, share, allocation.cohort_budget_human, allocation.dust_amount_human
+            );
+        }
+
+        // Verify totals
+        assert_eq!(total_budget, campaign_budget); // All budget allocated
+        println!("   📊 Total budget: {} SOL", total_budget);
+        println!("   📊 Total dust: {} SOL", total_dust);
+        println!("   ✅ Budget allocation is mathematically sound");
     }
 }

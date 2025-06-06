@@ -9,9 +9,12 @@ pub struct Model {
     pub vault_address: String,
     pub cohort_address: String,
     pub vault_index: i16,
-    pub vault_budget: String,
-    pub vault_dust: String,
-    pub amount_per_entitlement: String,
+    pub vault_budget_human: String,
+    pub vault_budget_token: String,
+    pub vault_dust_human: String,
+    pub vault_dust_token: String,
+    pub amount_per_entitlement_human: String,
+    pub amount_per_entitlement_token: String,
     pub total_entitlements: String,
 }
 

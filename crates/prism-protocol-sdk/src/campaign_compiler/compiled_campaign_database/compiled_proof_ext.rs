@@ -21,7 +21,7 @@ impl CompiledProofExt for compiled_proofs::Model {
     }
 
     fn merkle_proof_v0(&self) -> Vec<[u8; 32]> {
-        let merkle_proof_bytes = hex::decode(self.merkle_proof.as_bytes());
+        let merkle_proof_bytes = hex::decode(&self.merkle_proof);
         debug_assert!(
             merkle_proof_bytes.is_ok(),
             "Invalid hex in merkle proof: {}",

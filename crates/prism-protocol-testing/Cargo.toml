@@ -36,3 +36,6 @@ solana-transaction = { workspace = true }
 solana-transaction-error = { workspace = true }
 spl-associated-token-account = { workspace = true }
 spl-token = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }

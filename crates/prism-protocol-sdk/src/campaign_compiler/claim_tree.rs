@@ -52,7 +52,7 @@ impl ClaimTree {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ClaimTreeType {
     V0,
     V1,

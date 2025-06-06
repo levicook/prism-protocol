@@ -73,7 +73,7 @@ impl CompiledCampaignDatabase {
                 let (ix, _, _) = build_initialize_cohort_v0_ix(
                     &self.address_finder,
                     cohort.merkle_root(),
-                    cohort.amount_per_entitlement(),
+                    cohort.amount_per_entitlement_token(),
                     cohort.vault_count(),
                 )?;
                 Ok(ix)
@@ -104,14 +104,22 @@ impl CompiledCampaignDatabase {
 
     pub async fn build_fund_vault_ixs(&self) -> anchor_lang::Result<Vec<Instruction>> {
         let mut ix_vec = Vec::new();
+
+        // Use AddressFinder to get admin's associated token account
+        let admin_token_account = self.address_finder.find_admin_token_account();
+
         for vault in self.compiled_vaults().await {
+            // Fund vault with budget minus dust (dust can never be claimed due to rounding)
+            // This ensures perfect vault drainage when all entitlements are claimed
+            let claimable_amount = vault.vault_budget_token() - vault.vault_dust_token();
+
             ix_vec.push(spl_token::instruction::transfer(
                 &self.address_finder.token_program_id,
-                &self.address_finder.admin,    // from
-                &vault.vault_address(),        // to
-                &self.address_finder.admin,    // authority
+                &admin_token_account,          // from: admin's ATA
+                &vault.vault_address(),        // to: vault token account
+                &self.address_finder.admin,    // authority: admin signs
                 &[&self.address_finder.admin], // signers
-                vault.vault_budget(),          // amount
+                claimable_amount,              // amount (excluding mathematical dust)
             )?);
         }
         Ok(ix_vec)
@@ -124,11 +132,14 @@ impl CompiledCampaignDatabase {
                 .compiled_vaults_by_cohort_address(cohort.address())
                 .await;
             for vault in vaults {
+                // Expect vault balance to match funded amount (budget minus dust)
+                let expected_balance = vault.vault_budget_token() - vault.vault_dust_token();
+
                 let (ix, _, _) = build_activate_vault_v0_ix(
                     &self.address_finder,
                     cohort.merkle_root(),
                     vault.vault_index(),
-                    vault.vault_budget(),
+                    expected_balance,
                 )?;
                 ix_vec.push(ix);
             }

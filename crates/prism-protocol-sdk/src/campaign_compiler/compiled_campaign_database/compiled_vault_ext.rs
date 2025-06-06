@@ -6,9 +6,12 @@ pub trait CompiledVaultExt {
     fn vault_address(&self) -> Pubkey;
     fn cohort_address(&self) -> Pubkey;
     fn vault_index(&self) -> u8;
-    fn vault_budget(&self) -> u64;
-    fn vault_dust(&self) -> Decimal;
-    fn amount_per_entitlement(&self) -> Decimal;
+    fn vault_budget_human(&self) -> Decimal;
+    fn vault_budget_token(&self) -> u64;
+    fn vault_dust_human(&self) -> Decimal;
+    fn vault_dust_token(&self) -> u64;
+    fn amount_per_entitlement_human(&self) -> Decimal;
+    fn amount_per_entitlement_token(&self) -> u64;
     fn total_entitlements(&self) -> Decimal;
 }
 
@@ -43,30 +46,64 @@ impl CompiledVaultExt for compiled_vaults::Model {
         vault_index.unwrap()
     }
 
-    fn vault_budget(&self) -> u64 {
-        let vault_budget = self.vault_budget.parse::<u64>();
+    fn vault_budget_human(&self) -> Decimal {
+        let result = self.vault_budget_human.parse::<Decimal>();
         debug_assert!(
-            vault_budget.is_ok(),
+            result.is_ok(),
             "Invalid vault budget {}",
-            self.vault_budget
+            self.vault_budget_human
         );
-        vault_budget.unwrap()
+        result.unwrap()
     }
 
-    fn vault_dust(&self) -> Decimal {
-        let vault_dust = self.vault_dust.parse::<Decimal>();
-        debug_assert!(vault_dust.is_ok(), "Invalid vault dust {}", self.vault_dust);
-        vault_dust.unwrap()
-    }
-
-    fn amount_per_entitlement(&self) -> Decimal {
-        let amount_per_entitlement = self.amount_per_entitlement.parse::<Decimal>();
+    fn vault_budget_token(&self) -> u64 {
+        let result = self.vault_budget_token.parse::<u64>();
         debug_assert!(
-            amount_per_entitlement.is_ok(),
-            "Invalid amount per entitlement {}",
-            self.amount_per_entitlement
+            result.is_ok(),
+            "Invalid vault budget {}",
+            self.vault_budget_token
         );
-        amount_per_entitlement.unwrap()
+        result.unwrap()
+    }
+
+    fn vault_dust_human(&self) -> Decimal {
+        let result = self.vault_dust_human.parse::<Decimal>();
+        debug_assert!(
+            result.is_ok(),
+            "Invalid vault dust {}",
+            self.vault_dust_human
+        );
+        result.unwrap()
+    }
+
+    fn vault_dust_token(&self) -> u64 {
+        let result = self.vault_dust_token.parse::<u64>();
+        debug_assert!(
+            result.is_ok(),
+            "Invalid vault dust {}",
+            self.vault_dust_token
+        );
+        result.unwrap()
+    }
+
+    fn amount_per_entitlement_human(&self) -> Decimal {
+        let result = self.amount_per_entitlement_human.parse::<Decimal>();
+        debug_assert!(
+            result.is_ok(),
+            "Invalid amount per entitlement {}",
+            self.amount_per_entitlement_human
+        );
+        result.unwrap()
+    }
+
+    fn amount_per_entitlement_token(&self) -> u64 {
+        let result = self.amount_per_entitlement_token.parse::<u64>();
+        debug_assert!(
+            result.is_ok(),
+            "Invalid amount per entitlement {}",
+            self.amount_per_entitlement_token
+        );
+        result.unwrap()
     }
 
     fn total_entitlements(&self) -> Decimal {

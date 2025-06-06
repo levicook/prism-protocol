@@ -34,7 +34,7 @@ pub(super) async fn import_cohorts(
     };
 
     let budget_allocator = BudgetAllocator::new(
-        campaign.campaign_budget.parse()?, //
+        campaign.campaign_budget_human.parse()?, //
         campaign.mint_decimals.try_into()?,
     )?;
 
@@ -60,12 +60,29 @@ pub(super) async fn import_cohorts(
                 &claim_tree_type,
             )
             .await?;
+
+            // 🔍 Debug assertion: Each cohort should have claimants
+            debug_assert!(
+                !cohort_metadata.claimant_entitlements.is_empty(),
+                "Cohort '{}' should have at least one claimant",
+                cohort_csv_row.cohort
+            );
+
             // map of claim_leaf.vault_index -> total_entitlements
             let mut vault_total_entitlements: HashMap<u8, Decimal> = HashMap::new();
 
             for (claimant, entitlements) in &cohort_metadata.claimant_entitlements {
                 let claim_leaf = cohort_metadata.claim_tree.claimant_leaf(claimant)?;
                 let claim_proof = cohort_metadata.claim_tree.claimant_proof(claimant)?;
+
+                // 🔍 Debug assertions: Validate claim tree data consistency
+                debug_assert!(
+                    claim_leaf.vault_index < cohort_metadata.vault_count,
+                    "Vault index {} should be less than vault count {}",
+                    claim_leaf.vault_index,
+                    cohort_metadata.vault_count
+                );
+                debug_assert!(*entitlements > 0, "Entitlements should be greater than 0");
 
                 vault_total_entitlements
                     .entry(claim_leaf.vault_index)
@@ -76,6 +93,9 @@ pub(super) async fn import_cohorts(
                     ClaimProof::V0(proof) => hex::encode(proof.try_to_vec()?),
                     ClaimProof::V1(proof) => hex::encode(proof.try_to_vec()?),
                 };
+
+                // 🔍 Debug assertion: Validate merkle proof was generated
+                debug_assert!(!merkle_proof.is_empty(), "Merkle proof should not be empty");
 
                 leaves.push(compiled_leaves::ActiveModel {
                     cohort_address: Set(cohort_metadata.cohort_address.to_string()),
@@ -99,11 +119,14 @@ pub(super) async fn import_cohorts(
 
                 // Calculate vault budget using budget allocator
                 let VaultAllocation {
-                    vault_budget,
-                    amount_per_entitlement,
-                    dust_amount,
+                    vault_budget_human,
+                    vault_budget_tokens: vault_budget_token,
+                    amount_per_entitlement_human,
+                    amount_per_entitlement_tokens: amount_per_entitlement_token,
+                    dust_amount_human,
+                    dust_amount_tokens: dust_amount_token,
                 } = budget_allocator.calculate_vault_allocation(
-                    cohort_metadata.cohort_budget,
+                    cohort_metadata.cohort_budget_human,
                     vault_entitlements,
                     cohort_metadata.total_entitlements,
                 )?;
@@ -113,9 +136,12 @@ pub(super) async fn import_cohorts(
                         &address_finder,
                         &cohort_metadata,
                         vault_index,
-                        vault_budget,
-                        dust_amount,
-                        amount_per_entitlement,
+                        vault_budget_human,
+                        vault_budget_token,
+                        dust_amount_human,
+                        dust_amount_token,
+                        amount_per_entitlement_human,
+                        amount_per_entitlement_token,
                         vault_entitlements,
                     )
                     .await?,
@@ -142,12 +168,30 @@ pub(super) async fn import_cohorts(
             .await?;
     }
 
+    // 🔍 Debug assertion: Verify data was actually inserted
+    debug_assert!(
+        compiled_cohorts::Entity::find().count(db).await? > 0,
+        "No cohorts found after insertion"
+    );
+    debug_assert!(
+        compiled_leaves::Entity::find().count(db).await? > 0,
+        "No leaves found after insertion"
+    );
+    debug_assert!(
+        compiled_proofs::Entity::find().count(db).await? > 0,
+        "No proofs found after insertion"
+    );
+    debug_assert!(
+        compiled_vaults::Entity::find().count(db).await? > 0,
+        "No vaults found after insertion"
+    );
+
     Ok(())
 }
 
 struct CohortMetadata {
     cohort_address: Pubkey,
-    cohort_budget: Decimal,
+    cohort_budget_human: Decimal,
     total_entitlements: Decimal,
     claimant_entitlements: Vec<(Pubkey, u64)>,
     claim_tree: ClaimTree,
@@ -201,9 +245,12 @@ async fn build_compiled_cohort_and_metadata(
     let (cohort_address, _) = address_finder.find_cohort_v0_address(&merkle_root);
 
     let CohortAllocation {
-        cohort_budget,
-        amount_per_entitlement,
-        dust_amount,
+        cohort_budget_human,
+        cohort_budget_tokens: cohort_budget_token,
+        amount_per_entitlement_human,
+        amount_per_entitlement_tokens: amount_per_entitlement_token,
+        dust_amount_human,
+        dust_amount_tokens: dust_amount_token,
     } = budget_allocator.calculate_cohort_allocation(
         cohort_csv_row.share_percentage.parse()?,
         total_entitlements,
@@ -215,14 +262,18 @@ async fn build_compiled_cohort_and_metadata(
         merkle_root: Set(hex::encode(merkle_root)),
         vault_count: Set(vault_count.to_string()),
         total_entitlements: Set(total_entitlements.to_string()),
-        cohort_budget: Set(cohort_budget.to_string()),
-        amount_per_entitlement: Set(amount_per_entitlement.to_string()),
-        dust_amount: Set(dust_amount.to_string()),
+        // Store both human and token amounts
+        cohort_budget_human: Set(cohort_budget_human.to_string()),
+        cohort_budget_token: Set(cohort_budget_token.to_string()),
+        amount_per_entitlement_human: Set(amount_per_entitlement_human.to_string()),
+        amount_per_entitlement_token: Set(amount_per_entitlement_token.to_string()),
+        dust_amount_human: Set(dust_amount_human.to_string()),
+        dust_amount_token: Set(dust_amount_token.to_string()),
     };
 
     let metadata = CohortMetadata {
         cohort_address,
-        cohort_budget,
+        cohort_budget_human,
         total_entitlements,
         claimant_entitlements,
         claim_tree,
@@ -236,9 +287,12 @@ async fn build_compiled_vault(
     address_finder: &AddressFinder,
     cohort_metadata: &CohortMetadata,
     vault_index: u8,
-    vault_budget: Decimal,
-    vault_dust: Decimal,
-    amount_per_entitlement: Decimal,
+    vault_budget_human: Decimal,
+    vault_budget_token: u64,
+    vault_dust_human: Decimal,
+    vault_dust_token: u64,
+    amount_per_entitlement_human: Decimal,
+    amount_per_entitlement_token: u64,
     total_entitlements: Decimal,
 ) -> CompilerResult<compiled_vaults::ActiveModel> {
     debug_assert!(total_entitlements > Decimal::ZERO);
@@ -252,9 +306,12 @@ async fn build_compiled_vault(
         vault_address: Set(vault_address.to_string()),
         cohort_address: Set(cohort_metadata.cohort_address.to_string()),
         vault_index: Set(vault_index.into()),
-        vault_budget: Set(vault_budget.to_string()),
-        vault_dust: Set(vault_dust.to_string()),
-        amount_per_entitlement: Set(amount_per_entitlement.to_string()),
+        vault_budget_human: Set(vault_budget_human.to_string()),
+        vault_budget_token: Set(vault_budget_token.to_string()),
+        vault_dust_human: Set(vault_dust_human.to_string()),
+        vault_dust_token: Set(vault_dust_token.to_string()),
+        amount_per_entitlement_human: Set(amount_per_entitlement_human.to_string()),
+        amount_per_entitlement_token: Set(amount_per_entitlement_token.to_string()),
         total_entitlements: Set(total_entitlements.to_string()),
     })
 }

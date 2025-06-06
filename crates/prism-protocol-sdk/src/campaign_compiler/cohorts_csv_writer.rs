@@ -15,9 +15,10 @@ pub(super) async fn import_cohorts_csv_rows(
     let models = cohorts_csv_rows
         .iter()
         .enumerate()
-        .map(|(id, row)| {
+        .map(|(row_index, row)| {
+            let row_id = row_index + 1;
             Ok(ActiveModel {
-                id: Set(id.try_into()?),
+                id: Set(row_id.try_into()?),
                 cohort: Set(row.cohort.clone()),
                 share_percentage: Set(row.share_percentage.to_string()),
             })

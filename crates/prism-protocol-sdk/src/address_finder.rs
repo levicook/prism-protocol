@@ -92,6 +92,10 @@ impl AddressFinder {
         )
     }
 
+    pub fn find_admin_token_account(&self) -> Pubkey {
+        get_associated_token_address(&self.admin, &self.mint)
+    }
+
     pub fn find_claimant_token_account(&self, claimant: &Pubkey) -> Pubkey {
         get_associated_token_address(claimant, &self.mint)
     }

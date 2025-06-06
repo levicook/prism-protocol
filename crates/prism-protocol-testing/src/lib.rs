@@ -24,8 +24,12 @@ use {
 
 pub use campaign_snapshot::{AccountChange, CampaignSnapshot};
 pub use fixture_stage::FixtureStage;
-pub use fixture_state::FixtureState;
-use litesvm_token::MintTo;
+pub use fixture_state::{
+    default_admin_keypair, default_admin_pubkey, default_campaign_csv_rows,
+    default_cohorts_csv_rows, default_mint_keypair, default_mint_pubkey, FixtureState,
+    DEFAULT_BUDGET, DEFAULT_CLAIMANTS_PER_VAULT, DEFAULT_MINT_DECIMALS,
+};
+use litesvm_token::{CreateAssociatedTokenAccountIdempotent, MintTo};
 pub use test_fixture::TestFixture;
 
 /// Assert that a transaction failed with a specific custom error code
@@ -163,5 +167,15 @@ pub fn mint_to(
     destination: &Pubkey,
     amount: u64,
 ) -> Result<(), FailedTransactionMetadata> {
-    MintTo::new(svm, fee_payer, mint, destination, amount).send()
+    // First, create the associated token account if it doesn't exist
+    // The idempotent version won't fail if the account already exists
+    CreateAssociatedTokenAccountIdempotent::new(svm, fee_payer, mint)
+        .owner(destination)
+        .send()?;
+
+    // Get the actual ATA address to mint to
+    let ata_address = spl_associated_token_account::get_associated_token_address(destination, mint);
+
+    // Now mint to the associated token account
+    MintTo::new(svm, fee_payer, mint, &ata_address, amount).send()
 }

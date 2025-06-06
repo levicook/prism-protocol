@@ -1,15 +1,15 @@
 use prism_protocol_entities::compiled_campaigns::{ActiveModel, Entity};
-use rust_decimal::Decimal;
+use rust_decimal::{prelude::ToPrimitive, Decimal};
 use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait as _};
 use solana_sdk::pubkey::Pubkey;
 
-use super::{ClaimTreeType, CompilerResult};
+use super::{ClaimTreeType, CompilerError, CompilerResult};
 
 pub(super) async fn import_campaign(
     db: &DatabaseConnection,
     campaign_address: Pubkey,
     campaign_admin: Pubkey,
-    campaign_budget: Decimal,
+    campaign_budget_human: Decimal,
     campaign_mint: Pubkey,
     mint_decimals: u8,
     claimants_per_vault: usize,
@@ -24,7 +24,7 @@ pub(super) async fn import_campaign(
         "admin must be non-zero"
     );
     debug_assert!(
-        campaign_budget > Decimal::ZERO,
+        campaign_budget_human > Decimal::ZERO,
         "budget must be greater than 0"
     );
     debug_assert!(campaign_mint != Pubkey::default(), "mint must be non-zero");
@@ -34,10 +34,21 @@ pub(super) async fn import_campaign(
         "claimants_per_vault must be greater than 0"
     );
 
+    // Convert to token amount
+    let campaign_budget_token = (campaign_budget_human
+        * Decimal::from(10_u64.pow(mint_decimals as u32)))
+    .floor()
+    .to_u64()
+    .ok_or_else(|| CompilerError::AmountConversionFailed {
+        amount: campaign_budget_human,
+        decimals: mint_decimals,
+    })?;
+
     let model = ActiveModel {
         address: Set(campaign_address.to_string()),
         campaign_admin: Set(campaign_admin.to_string()),
-        campaign_budget: Set(campaign_budget.to_string()),
+        campaign_budget_human: Set(campaign_budget_human.to_string()),
+        campaign_budget_token: Set(campaign_budget_token.to_string()),
         campaign_mint: Set(campaign_mint.to_string()),
         mint_decimals: Set(mint_decimals as i16), // infallible conversion
         claimants_per_vault: Set(claimants_per_vault.try_into()?),

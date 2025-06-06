@@ -47,7 +47,7 @@ impl TestFixture {
             &state.admin_keypair(),
             &state.mint_address(),
             &state.admin_address(),
-            state.campaign_budget().await,
+            state.campaign_budget_token().await,
         )?;
 
         Ok(Self {
@@ -185,7 +185,7 @@ impl TestFixture {
             .expect("Failed to build initialize campaign v0 ix");
 
         let tx = Transaction::new(
-            &[&self.state.admin_keypair()],
+            &[&self.state.admin_keypair(), &self.state.campaign_keypair()],
             Message::new(&[ix], Some(&self.state.admin_address())),
             self.latest_blockhash(),
         );
@@ -199,7 +199,7 @@ impl TestFixture {
         self.send_transactions(
             self.state
                 .ccdb
-                .build_initialize_vault_ixs()
+                .build_initialize_cohort_ixs()
                 .await
                 .expect("Failed to build initialize cohort v0 ix")
                 .into_iter()

@@ -45,7 +45,8 @@ impl MigrationTrait for Migration {
                     .col(string(CompiledCampaigns::Address).primary_key())
                     .col(string(CompiledCampaigns::CampaignAdmin))
                     .col(string(CompiledCampaigns::CampaignMint))
-                    .col(string(CompiledCampaigns::CampaignBudget))
+                    .col(string(CompiledCampaigns::CampaignBudgetHuman)) // Decimal
+                    .col(string(CompiledCampaigns::CampaignBudgetToken)) // u64
                     .col(small_unsigned(CompiledCampaigns::MintDecimals))
                     .col(unsigned(CompiledCampaigns::ClaimantsPerVault))
                     .col(string(CompiledCampaigns::ClaimTreeType))
@@ -63,9 +64,19 @@ impl MigrationTrait for Migration {
                     .col(string(CompiledCohorts::MerkleRoot))
                     .col(string(CompiledCohorts::VaultCount))
                     .col(string(CompiledCohorts::TotalEntitlements))
-                    .col(string(CompiledCohorts::CohortBudget))
-                    .col(string(CompiledCohorts::AmountPerEntitlement))
-                    .col(string(CompiledCohorts::DustAmount))
+                    .col(string(CompiledCohorts::CohortBudgetHuman)) // Decimal
+                    .col(string(CompiledCohorts::CohortBudgetToken)) // u64
+                    .col(string(CompiledCohorts::AmountPerEntitlementHuman)) // Decimal
+                    .col(string(CompiledCohorts::AmountPerEntitlementToken)) // u64
+                    .col(string(CompiledCohorts::DustAmountHuman)) // Decimal
+                    .col(string(CompiledCohorts::DustAmountToken)) // u64
+                    .foreign_key(
+                        ForeignKey::create()
+                            .from(CompiledCohorts::Table, CompiledCohorts::CohortCsvRowId)
+                            .to(CohortsCsvRows::Table, CohortsCsvRows::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -78,10 +89,20 @@ impl MigrationTrait for Migration {
                     .col(string(CompiledVaults::VaultAddress).primary_key())
                     .col(string(CompiledVaults::CohortAddress))
                     .col(small_unsigned(CompiledVaults::VaultIndex))
-                    .col(string(CompiledVaults::VaultBudget))
-                    .col(string(CompiledVaults::VaultDust))
-                    .col(string(CompiledVaults::AmountPerEntitlement))
+                    .col(string(CompiledVaults::VaultBudgetHuman)) // Decimal
+                    .col(string(CompiledVaults::VaultBudgetToken)) // u64
+                    .col(string(CompiledVaults::VaultDustHuman)) // Decimal
+                    .col(string(CompiledVaults::VaultDustToken)) // u64
+                    .col(string(CompiledVaults::AmountPerEntitlementHuman)) // Decimal
+                    .col(string(CompiledVaults::AmountPerEntitlementToken)) // u64
                     .col(string(CompiledVaults::TotalEntitlements))
+                    .foreign_key(
+                        ForeignKey::create()
+                            .from(CompiledVaults::Table, CompiledVaults::CohortAddress)
+                            .to(CompiledCohorts::Table, CompiledCohorts::Address)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -101,6 +122,13 @@ impl MigrationTrait for Migration {
                             .col(CompiledLeaves::Claimant)
                             .primary(),
                     )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .from(CompiledLeaves::Table, CompiledLeaves::CohortAddress)
+                            .to(CompiledCohorts::Table, CompiledCohorts::Address)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -118,6 +146,13 @@ impl MigrationTrait for Migration {
                             .col(CompiledProofs::CohortAddress)
                             .col(CompiledProofs::Claimant)
                             .primary(),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .from(CompiledProofs::Table, CompiledProofs::CohortAddress)
+                            .to(CompiledCohorts::Table, CompiledCohorts::Address)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
                     )
                     .to_owned(),
             )
@@ -175,7 +210,8 @@ enum CompiledCampaigns {
     Address,
     CampaignAdmin,
     CampaignMint,
-    CampaignBudget,
+    CampaignBudgetHuman, // campaign budget (Decimal, ie: SOL)
+    CampaignBudgetToken, // campaign budget (u64, ie: lamports)
     MintDecimals,
     ClaimantsPerVault,
     ClaimTreeType,
@@ -190,42 +226,51 @@ enum CompiledCohorts {
 
     VaultCount, // number of vaults in the cohort (campaign.claimants_per_vault / count(claimants))
 
-    TotalEntitlements,    // sum of all entitlements in the cohort
-    CohortBudget,         // budget allocated to the cohort
-    AmountPerEntitlement, // amount per entitlement
-    DustAmount,           // amount that couldn't be allocated due to mint constraints
+    TotalEntitlements, // sum of all entitlements in the cohort
+
+    CohortBudgetHuman, // budget allocated to the cohort (Decimal, ie: SOL)
+    CohortBudgetToken, // budget allocated to the cohort (u64, ie: lamports)
+
+    AmountPerEntitlementHuman, // amount per entitlement (Decimal, ie: SOL)
+    AmountPerEntitlementToken, // amount per entitlement (u64, ie: lamports)
+
+    DustAmountHuman, // amount that couldn't be allocated due to mint constraints (Decimal, ie: SOL)
+    DustAmountToken, // amount that couldn't be allocated due to mint constraints (u64, ie: lamports)
 }
 
 #[derive(DeriveIden)]
 enum CompiledVaults {
     Table,
-    CohortAddress,        // foreign key to cohorts.address
-    VaultAddress,         // pubkey of the vault
-    VaultIndex,           // index of the vault
-    VaultBudget,          // budget allocated to the vault
-    VaultDust,            // amount that couldn't be allocated due to mint constraints
-    AmountPerEntitlement, // amount per entitlement (per the allocator)
-    TotalEntitlements,    // sum of all entitlements in the vault
+    CohortAddress, // foreign key to cohorts.address
+    VaultAddress,  // pubkey of the vault
+    VaultIndex,    // index of the vault
+
+    VaultBudgetHuman, // budget allocated to the vault (Decimal, ie: SOL)
+    VaultBudgetToken, // budget allocated to the vault (u64, ie: lamports)
+
+    VaultDustHuman, // amount that couldn't be allocated due to mint constraints (Decimal, ie: SOL)
+    VaultDustToken, // amount that couldn't be allocated due to mint constraints (u64, ie: lamports)
+
+    AmountPerEntitlementHuman, // amount per entitlement (per the allocator) (Decimal, ie: SOL)
+    AmountPerEntitlementToken, // amount per entitlement (per the allocator) (u64, ie: lamports)
+
+    TotalEntitlements, // sum of all entitlements in the vault
 }
 
 #[derive(DeriveIden)]
 enum CompiledLeaves {
     Table,
-
     CohortAddress, // foreign key to cohorts.address
 
-    // Merkle Leaf:
-    Claimant,
-    Entitlements,
-    VaultIndex,
+    Claimant,     // -------\
+    Entitlements, //         +---- Claim Leaf
+    VaultIndex,   // -------/
 }
 
 #[derive(DeriveIden)]
 enum CompiledProofs {
     Table,
-
     CohortAddress, // foreign key to cohorts.address
-
     Claimant,
     MerkleProof,
 }

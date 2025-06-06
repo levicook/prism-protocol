@@ -5,6 +5,9 @@ pub enum CompilerError {
     #[error(transparent)]
     Allocation(#[from] crate::budget_allocation::AllocationError),
 
+    #[error("Failed to convert amount {amount} with {decimals} decimals to token amount")]
+    AmountConversionFailed { amount: Decimal, decimals: u8 },
+
     #[error(transparent)] // TODO -- i think this can be removed
     ClaimTree(#[from] anchor_lang::prelude::Error), // THIS IS A HACK (merkle create didn't encapsulate errors well)
 

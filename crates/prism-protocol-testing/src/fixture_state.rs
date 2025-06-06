@@ -5,7 +5,7 @@ use {
         compile_campaign, AddressFinder, CampaignCsvRow, ClaimTreeType, CohortsCsvRow,
         CompiledCampaignDatabase, CompiledCampaignExt as _,
     },
-    rust_decimal::Decimal,
+    rust_decimal::{dec, Decimal},
     solana_keypair::Keypair,
     solana_pubkey::Pubkey,
     solana_signer::Signer as _,
@@ -62,8 +62,8 @@ impl FixtureState {
         self.ccdb.address_finder.campaign
     }
 
-    pub async fn campaign_budget(&self) -> u64 {
-        self.ccdb.compiled_campaign().await.campaign_budget()
+    pub async fn campaign_budget_token(&self) -> u64 {
+        self.ccdb.compiled_campaign().await.campaign_budget_token()
     }
 
     pub fn mint_address(&self) -> Pubkey {
@@ -93,9 +93,16 @@ impl FixtureState {
     pub fn prism_program_id(&self) -> Pubkey {
         self.ccdb.address_finder.prism_program_id
     }
+
+    pub fn campaign_keypair(&self) -> &Keypair {
+        self.ccdb
+            .campaign_keypair
+            .as_ref()
+            .expect("Campaign keypair should exist")
+    }
 }
 
-pub const DEFAULT_BUDGET: Decimal = rust_decimal::dec!(1_000_000_000);
+pub const DEFAULT_BUDGET: Decimal = dec!(1_000_000_000);
 
 pub fn default_campaign_csv_rows() -> Vec<CampaignCsvRow> {
     vec![

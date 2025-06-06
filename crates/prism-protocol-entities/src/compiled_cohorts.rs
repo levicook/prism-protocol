@@ -11,9 +11,12 @@ pub struct Model {
     pub merkle_root: String,
     pub vault_count: String,
     pub total_entitlements: String,
-    pub cohort_budget: String,
-    pub amount_per_entitlement: String,
-    pub dust_amount: String,
+    pub cohort_budget_human: String,
+    pub cohort_budget_token: String,
+    pub amount_per_entitlement_human: String,
+    pub amount_per_entitlement_token: String,
+    pub dust_amount_human: String,
+    pub dust_amount_token: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
