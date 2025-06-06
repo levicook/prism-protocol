@@ -1,10 +1,8 @@
-use crate::error::ErrorCode;
-use crate::state::{CampaignStatus, CampaignV0};
-use crate::CAMPAIGN_V0_SEED_PREFIX;
 use anchor_lang::prelude::*;
 
+use crate::{CampaignStatus, CampaignV0, ErrorCode};
+
 #[derive(Accounts)]
-#[instruction(campaign_fingerprint: [u8; 32], mint_pubkey: Pubkey, expected_cohort_count: u8)]
 pub struct InitializeCampaignV0<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
@@ -12,13 +10,8 @@ pub struct InitializeCampaignV0<'info> {
     #[account(
         init,
         payer = admin,
+        signer,
         space = 8 + CampaignV0::INIT_SPACE,
-        seeds = [
-            CAMPAIGN_V0_SEED_PREFIX,
-            admin.key().as_ref(),
-            campaign_fingerprint.as_ref()
-        ],
-        bump
     )]
     pub campaign: Account<'info, CampaignV0>,
 
@@ -27,7 +20,6 @@ pub struct InitializeCampaignV0<'info> {
 
 pub fn handle_initialize_campaign_v0(
     ctx: Context<InitializeCampaignV0>,
-    campaign_fingerprint: [u8; 32],
     mint: Pubkey,
     expected_cohort_count: u8,
 ) -> Result<()> {
@@ -37,7 +29,6 @@ pub fn handle_initialize_campaign_v0(
     campaign.set_inner(CampaignV0 {
         admin: ctx.accounts.admin.key(),
         mint,
-        fingerprint: campaign_fingerprint,
         campaign_db_ipfs_hash: [0; 32],   // Set during activation
         expected_cohort_count,            // Set during campaign initialization
         initialized_cohort_count: 0,      // Incremented during cohort init
@@ -45,7 +36,7 @@ pub fn handle_initialize_campaign_v0(
         status: CampaignStatus::Inactive, // Starts inactive until activated
         unstoppable: false,               // Starts stoppable, can be made unstoppable later
         go_live_slot: 0,                  // Set during activation
-        bump: ctx.bumps.campaign,
+        bump: 0,                          // No longer needed since we're not using PDA
     });
 
     Ok(())

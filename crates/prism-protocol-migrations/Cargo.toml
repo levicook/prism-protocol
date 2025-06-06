@@ -1,0 +1,20 @@
+[package]
+name = "prism-protocol-migrations"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "prism_protocol_migrations"
+path = "src/lib.rs"
+
+[dependencies]
+async-std = { version = "1", features = ["attributes", "tokio1"] }
+
+[dependencies.sea-orm-migration]
+workspace = true
+features = [
+  "runtime-tokio-rustls", # `ASYNC_RUNTIME` feature
+  "sqlx-sqlite",          # `DATABASE_DRIVER` feature
+  "with-rust_decimal",
+]

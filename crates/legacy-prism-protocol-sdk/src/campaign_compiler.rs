@@ -265,7 +265,7 @@ pub fn compile_campaign(
     )?;
 
     // Step 3: Generate merkle trees
-    let cohort_merkle_data = generate_merkle_trees(cohort_data)?;
+    let cohort_merkle_data = generate_claim_tree_v0(cohort_data)?;
 
     // Step 4: Calculate campaign fingerprint
     let cohort_roots: Vec<[u8; 32]> = cohort_merkle_data
@@ -406,7 +406,7 @@ fn process_cohorts(
 }
 
 /// Generate merkle trees for all cohorts
-fn generate_merkle_trees(
+fn generate_claim_tree_v0(
     cohort_data: Vec<CohortData>,
 ) -> CompilerResult<Vec<(CohortData, ClaimTreeV0, [u8; 32])>> {
     let mut cohort_merkle_data = Vec::new();

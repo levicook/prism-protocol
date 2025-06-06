@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(dirname "$0")/common.sh"
+cd "$PROJECT_ROOT"
+
+sea-orm-cli migrate \
+    --database-url "${DATABASE_URL}" \
+    --migration-dir="./crates/${PROJECT_NAME}-migrations" \
+    "$@"

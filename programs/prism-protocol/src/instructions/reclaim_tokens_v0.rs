@@ -1,29 +1,21 @@
-use crate::constants::VAULT_SEED_PREFIX;
-use crate::error::ErrorCode;
-use crate::state::{CampaignStatus, CampaignV0, CohortV0};
-use crate::{CAMPAIGN_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX};
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
+use crate::{
+    CampaignStatus, CampaignV0, CohortV0, ErrorCode, COHORT_V0_SEED_PREFIX, VAULT_SEED_PREFIX,
+};
+
 #[derive(Accounts)]
 #[instruction(
-    campaign_fingerprint: [u8; 32],
     cohort_merkle_root: [u8; 32],
     vault_index: u8
 )]
 pub struct ReclaimTokensV0<'info> {
-    #[account(mut)] // admin pays for tx, not mutated itself
+    #[account(mut)]
     pub admin: Signer<'info>,
 
     #[account(
-        seeds = [
-            CAMPAIGN_V0_SEED_PREFIX,
-            admin.key().as_ref(),
-            campaign_fingerprint.as_ref(),
-        ],
-        bump = campaign.bump,
         has_one = admin @ ErrorCode::CampaignAdminMismatch,
-        constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::CampaignFingerprintMismatch,
     )]
     pub campaign: Account<'info, CampaignV0>,
 
@@ -63,8 +55,7 @@ pub struct ReclaimTokensV0<'info> {
 
 pub fn handle_reclaim_tokens_v0(
     ctx: Context<ReclaimTokensV0>,
-    _campaign_fingerprint: [u8; 32],   // Consumed by Accounts macro
-    _cohort_merkle_root_arg: [u8; 32], // Consumed by Accounts macro
+    cohort_merkle_root: [u8; 32],
     vault_index: u8,
 ) -> Result<()> {
     let campaign = &ctx.accounts.campaign;
@@ -102,7 +93,7 @@ pub fn handle_reclaim_tokens_v0(
     let cohort_seeds = &[
         COHORT_V0_SEED_PREFIX,
         campaign_key.as_ref(),
-        _cohort_merkle_root_arg.as_ref(),
+        cohort_merkle_root.as_ref(),
         &[ctx.accounts.cohort.bump],
     ];
     let signer_seeds = &[&cohort_seeds[..]];

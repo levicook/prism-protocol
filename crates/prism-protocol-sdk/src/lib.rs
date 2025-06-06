@@ -15,25 +15,22 @@ This crate provides the core SDK functionality for Prism Protocol, including:
 */
 
 mod address_finder;
-pub mod budget_allocation;
-pub mod campaign_compiler;
+mod budget_allocation;
+mod campaign_compiler;
+mod campaign_database;
 mod instruction_builders;
 
 // Re-export main types
 pub use address_finder::AddressFinder;
-pub use budget_allocation::{AllocationError, AllocationResult, BudgetAllocator};
-pub use campaign_compiler::{
-    compile_campaign, CompiledCampaign, CompiledCohort, CompilerError, CompilerResult,
+pub use budget_allocation::{
+    AllocationError, AllocationResult, BudgetAllocator, CohortAllocation, VaultAllocation,
 };
+pub use campaign_compiler::{CompilerError, CompilerResult, compile_campaign};
 pub use instruction_builders::*;
-pub use prism_protocol::state::*;
 pub use prism_protocol::ClaimLeaf;
-pub use prism_protocol_merkle::ClaimTreeV0;
+pub use prism_protocol::state::*;
+
+// pub use prism_protocol_merkle::ClaimTreeV0;
 
 // Re-export csv types
 pub use prism_protocol_csvs::{CampaignCsvRow, CohortsCsvRow};
-
-// Re-export database types
-pub use prism_protocol_db::{
-    CampaignDatabase, CampaignInfo, ClaimProof, CohortInfo, EligibilityInfo, VaultRequirement,
-};

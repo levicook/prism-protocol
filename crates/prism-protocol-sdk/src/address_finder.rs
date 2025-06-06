@@ -6,14 +6,16 @@ use anchor_spl::{
     associated_token::ID as ASSOCIATED_TOKEN_PROGRAM_ID, token::ID as TOKEN_PROGRAM_ID,
 };
 use prism_protocol::{
-    CAMPAIGN_V0_SEED_PREFIX, CLAIM_RECEIPT_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX,
-    ID as PRISM_PROGRAM_ID, VAULT_SEED_PREFIX,
+    CLAIM_RECEIPT_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX, ID as PRISM_PROGRAM_ID, VAULT_SEED_PREFIX,
 };
 
 #[derive(Clone)]
 pub struct AddressFinder {
-    pub program_id: Pubkey,
+    pub admin: Pubkey,
+    pub campaign: Pubkey,
+    pub mint: Pubkey,
 
+    pub prism_program_id: Pubkey,
     pub associated_token_program_id: Pubkey,
     pub rent_id: Pubkey,
     pub system_program_id: Pubkey,
@@ -21,15 +23,34 @@ pub struct AddressFinder {
 }
 
 impl AddressFinder {
-    pub fn new(
-        program_id: Pubkey,
+    pub fn new(admin: Pubkey, campaign: Pubkey, mint: Pubkey) -> Self {
+        Self::new_with_program_ids(
+            admin,
+            campaign,
+            mint,
+            PRISM_PROGRAM_ID,
+            ASSOCIATED_TOKEN_PROGRAM_ID,
+            RENT_ID,
+            SYSTEM_PROGRAM_ID,
+            TOKEN_PROGRAM_ID,
+        )
+    }
+
+    pub fn new_with_program_ids(
+        admin: Pubkey,
+        campaign: Pubkey,
+        mint: Pubkey,
+        prism_program_id: Pubkey,
         associated_token_program_id: Pubkey,
         rent_id: Pubkey,
         system_program_id: Pubkey,
         token_program_id: Pubkey,
     ) -> Self {
         Self {
-            program_id,
+            admin,
+            campaign,
+            mint,
+            prism_program_id,
             associated_token_program_id,
             rent_id,
             system_program_id,
@@ -37,67 +58,36 @@ impl AddressFinder {
         }
     }
 
-    pub fn find_campaign_v0_address(
-        &self,
-        authority: &Pubkey,
-        fingerprint: &[u8; 32],
-    ) -> (Pubkey, u8) {
-        Pubkey::find_program_address(
-            &[
-                CAMPAIGN_V0_SEED_PREFIX,
-                authority.as_ref(),
-                fingerprint.as_ref(),
-            ],
-            &self.program_id,
-        )
-    }
-
-    pub fn find_cohort_v0_address(
-        &self,
-        campaign_address: &Pubkey,
-        cohort_merkle_root: &[u8; 32],
-    ) -> (Pubkey, u8) {
+    pub fn find_cohort_v0_address(&self, merkle_root: &[u8; 32]) -> (Pubkey, u8) {
         Pubkey::find_program_address(
             &[
                 COHORT_V0_SEED_PREFIX,
-                campaign_address.as_ref(),
-                cohort_merkle_root.as_ref(),
+                self.campaign.as_ref(),
+                merkle_root.as_ref(),
             ],
-            &self.program_id,
+            &self.prism_program_id,
+        )
+    }
+
+    pub fn find_vault_v0_address(&self, cohort: &Pubkey, vault_index: u8) -> (Pubkey, u8) {
+        Pubkey::find_program_address(
+            &[VAULT_SEED_PREFIX, cohort.as_ref(), &[vault_index]],
+            &self.prism_program_id,
         )
     }
 
     pub fn find_claim_receipt_v0_address(
         &self,
-        cohort_address: &Pubkey,
-        claimant_address: &Pubkey,
+        cohort: &Pubkey,
+        claimant: &Pubkey,
     ) -> (Pubkey, u8) {
         Pubkey::find_program_address(
             &[
                 CLAIM_RECEIPT_V0_SEED_PREFIX,
-                cohort_address.as_ref(),
-                claimant_address.as_ref(),
+                cohort.as_ref(),
+                claimant.as_ref(),
             ],
-            &self.program_id,
-        )
-    }
-
-    pub fn find_vault_v0_address(&self, cohort_address: &Pubkey, vault_index: u8) -> (Pubkey, u8) {
-        Pubkey::find_program_address(
-            &[VAULT_SEED_PREFIX, cohort_address.as_ref(), &[vault_index]],
-            &self.program_id,
-        )
-    }
-}
-
-impl Default for AddressFinder {
-    fn default() -> Self {
-        Self::new(
-            PRISM_PROGRAM_ID,
-            ASSOCIATED_TOKEN_PROGRAM_ID,
-            RENT_ID,
-            SYSTEM_PROGRAM_ID,
-            TOKEN_PROGRAM_ID,
+            &self.prism_program_id,
         )
     }
 }

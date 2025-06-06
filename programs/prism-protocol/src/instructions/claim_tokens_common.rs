@@ -1,11 +1,9 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
-use crate::claim_leaf::ClaimLeaf;
-use crate::error::ErrorCode;
-use crate::proofs::ClaimProofType;
-use crate::state::{CampaignV0, ClaimReceiptV0, CohortV0};
-use crate::COHORT_V0_SEED_PREFIX;
+use crate::{
+    CampaignV0, ClaimLeaf, ClaimProof, ClaimReceiptV0, CohortV0, ErrorCode, COHORT_V0_SEED_PREFIX,
+};
 
 /// Common implementation for both claim_tokens_v0 and claim_tokens_v1.
 ///
@@ -20,7 +18,7 @@ pub(crate) fn handle_claim_tokens_common<'info>(
     claim_receipt: &mut Account<'info, ClaimReceiptV0>,
     token_program: &Program<'info, Token>,
     cohort_merkle_root: [u8; 32],
-    proof: ClaimProofType,
+    proof: ClaimProof,
     assigned_vault_index: u8,
     entitlements: u64,
     claim_receipt_bump: u8,
@@ -43,8 +41,9 @@ pub(crate) fn handle_claim_tokens_common<'info>(
 
     // 3. Construct the leaf node from the transaction data
     let leaf = ClaimLeaf {
+        campaign: campaign.key(),
         claimant: claimant.key(),
-        assigned_vault_index,
+        vault_index: assigned_vault_index,
         entitlements,
     };
 

@@ -1,16 +1,14 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
-use crate::constants::VAULT_SEED_PREFIX;
-use crate::error::ErrorCode;
-use crate::instructions::claim_tokens_common::handle_claim_tokens_common;
-use crate::proofs::ClaimProofType;
-use crate::state::{CampaignStatus, CampaignV0, ClaimReceiptV0, CohortV0};
-use crate::{CAMPAIGN_V0_SEED_PREFIX, CLAIM_RECEIPT_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX};
+use crate::{
+    claim_tokens_common::handle_claim_tokens_common, CampaignStatus, CampaignV0, ClaimProof,
+    ClaimReceiptV0, CohortV0, ErrorCode, CLAIM_RECEIPT_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX,
+    VAULT_SEED_PREFIX,
+};
 
 #[derive(Accounts)]
 #[instruction(
-    campaign_fingerprint: [u8; 32], // Used to find Campaign PDA
     merkle_root: [u8; 32], // Used to find Cohort PDA (this is the cohort.merkle_root)
     merkle_proof: Vec<Vec<[u8; 32]>>, // 256-ary tree proof structure
     assigned_vault_index: u8,
@@ -28,15 +26,8 @@ pub struct ClaimTokensV1<'info> {
     pub claimant: Signer<'info>,
 
     #[account(
-        seeds = [
-            CAMPAIGN_V0_SEED_PREFIX,
-            admin.key().as_ref(),
-            campaign_fingerprint.as_ref(),
-        ],
-        bump = campaign.bump,
         constraint = campaign.status == CampaignStatus::Active @ ErrorCode::CampaignNotActive,
         constraint = campaign.mint == mint.key() @ ErrorCode::MintMismatch,
-        constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::CampaignFingerprintMismatch,
     )]
     pub campaign: Box<Account<'info, CampaignV0>>,
 
@@ -103,14 +94,13 @@ pub struct ClaimTokensV1<'info> {
 
 pub fn handle_claim_tokens_v1(
     ctx: Context<ClaimTokensV1>,
-    _campaign_fingerprint: [u8; 32], // Consumed by Accounts macro for seed derivation
     cohort_merkle_root: [u8; 32], // Consumed by Accounts macro for seed derivation, also checked in constraint
     merkle_proof: Vec<Vec<[u8; 32]>>, // 256-ary tree proof
     assigned_vault_index: u8,
     entitlements: u64,
 ) -> Result<()> {
     // Create proof type for 256-ary tree
-    let proof = ClaimProofType::from_wide(merkle_proof);
+    let proof = ClaimProof::from_wide(merkle_proof);
 
     // Delegate to common handler
     handle_claim_tokens_common(

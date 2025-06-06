@@ -27,9 +27,10 @@ pub fn generate_proof_for_leaf(
     let leaf_index = leaves
         .iter()
         .position(|leaf| {
-            leaf.claimant == target_leaf.claimant
-                && leaf.assigned_vault_index == target_leaf.assigned_vault_index
+            leaf.campaign == target_leaf.campaign
+                && leaf.claimant == target_leaf.claimant
                 && leaf.entitlements == target_leaf.entitlements
+                && leaf.vault_index == target_leaf.vault_index
         })
         .ok_or(ErrorCode::ClaimantNotFound)?;
 
@@ -83,6 +84,7 @@ mod tests {
     use super::*;
 
     fn create_test_leaves() -> Vec<ClaimLeaf> {
+        let campaign = Pubkey::new_unique();
         let claimants = [
             Pubkey::new_unique(),
             Pubkey::new_unique(),
@@ -91,18 +93,21 @@ mod tests {
 
         vec![
             ClaimLeaf {
+                campaign,
                 claimant: claimants[0],
-                assigned_vault_index: 0,
                 entitlements: 100,
+                vault_index: 0,
             },
             ClaimLeaf {
+                campaign,
                 claimant: claimants[1],
-                assigned_vault_index: 0,
                 entitlements: 200,
+                vault_index: 0,
             },
             ClaimLeaf {
+                campaign,
                 claimant: claimants[2],
-                assigned_vault_index: 1,
+                vault_index: 1,
                 entitlements: 300,
             },
         ]
@@ -188,11 +193,13 @@ mod tests {
 
     #[test]
     fn test_leaf_not_found_error() {
+        let campaign = Pubkey::new_unique();
         let leaves = create_test_leaves();
         let non_existent_leaf = ClaimLeaf {
+            campaign,
             claimant: Pubkey::new_unique(),
-            assigned_vault_index: 2,
             entitlements: 999,
+            vault_index: 2,
         };
 
         let result = generate_proof_for_leaf(&leaves, &non_existent_leaf);

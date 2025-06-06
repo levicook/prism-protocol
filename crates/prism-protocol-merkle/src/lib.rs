@@ -15,9 +15,6 @@ pub use proof::{
 // Re-export merkle leaf and proof types from prism protocol
 pub use prism_protocol::{ClaimLeaf, ClaimProofV0, ClaimProofV1};
 
-// Re-export key types from rs-merkle for convenience
-pub use rs_merkle::{MerkleProof, MerkleTree};
-
 /// Shared constants for merkle tree implementations
 pub mod claim_tree_constants {
     /// Number of children per internal node in the 256-ary merkle tree
@@ -48,10 +45,10 @@ pub mod claim_tree_constants {
 /// ## Usage
 /// Used by both `create_merkle_tree_v0` and `create_merkle_tree_v1` to ensure
 /// identical vault assignments regardless of tree structure.
-pub fn consistent_hash_vault_assignment(
+pub(crate) fn consistent_hash_vault_assignment(
     claimant: &anchor_lang::prelude::Pubkey,
-    vault_count: usize,
-) -> usize {
+    vault_count: u8,
+) -> u8 {
     use anchor_lang::solana_program::hash::Hasher;
 
     let mut hasher = Hasher::default();
@@ -70,34 +67,37 @@ pub fn consistent_hash_vault_assignment(
         hash_bytes[7],
     ]);
 
-    (hash_u64 as usize) % vault_count
+    (hash_u64 as u8) % vault_count
 }
 
 #[cfg(test)]
 mod tests {
+    use anchor_lang::prelude::Pubkey;
+
     use super::*;
 
     #[test]
     fn test_cross_version_vault_assignment_compatibility() {
+        let campaign = Pubkey::new_unique();
         // 🔒 CRITICAL TEST: Ensure V0 and V1 trees assign claimants to identical vaults
         let claimants = [
-            anchor_lang::prelude::Pubkey::new_unique(),
-            anchor_lang::prelude::Pubkey::new_unique(),
-            anchor_lang::prelude::Pubkey::new_unique(),
-            anchor_lang::prelude::Pubkey::new_unique(),
-            anchor_lang::prelude::Pubkey::new_unique(),
+            Pubkey::new_unique(),
+            Pubkey::new_unique(),
+            Pubkey::new_unique(),
+            Pubkey::new_unique(),
+            Pubkey::new_unique(),
         ];
         let vault_count = 3;
 
-        let claimant_entitlements: Vec<(anchor_lang::prelude::Pubkey, u64)> = claimants
+        let claimant_entitlements: Vec<(Pubkey, u64)> = claimants
             .iter()
             .enumerate()
             .map(|(i, &claimant)| (claimant, (i + 1) as u64 * 100))
             .collect();
 
         // Create both V0 and V1 trees
-        let tree_v0 = create_claim_tree_v0(&claimant_entitlements, vault_count).unwrap();
-        let tree_v1 = create_claim_tree_v1(&claimant_entitlements, vault_count).unwrap();
+        let tree_v0 = create_claim_tree_v0(campaign, &claimant_entitlements, vault_count).unwrap();
+        let tree_v1 = create_claim_tree_v1(campaign, &claimant_entitlements, vault_count).unwrap();
 
         // Verify that every claimant gets assigned to the same vault in both versions
         for (claimant, _entitlements) in claimant_entitlements.iter() {
@@ -105,14 +105,15 @@ mod tests {
             let v1_leaf = tree_v1.leaf_for_claimant(claimant).unwrap();
 
             assert_eq!(
-                v0_leaf.assigned_vault_index, v1_leaf.assigned_vault_index,
+                v0_leaf.vault_index, v1_leaf.vault_index,
                 "Claimant {:?} assigned to different vaults: V0={}, V1={}",
-                claimant, v0_leaf.assigned_vault_index, v1_leaf.assigned_vault_index
+                claimant, v0_leaf.vault_index, v1_leaf.vault_index
             );
 
-            // Also verify entitlements are identical
-            assert_eq!(v0_leaf.entitlements, v1_leaf.entitlements);
+            // Also verify campaign, claimant, and entitlements are identical
+            assert_eq!(v0_leaf.campaign, v1_leaf.campaign);
             assert_eq!(v0_leaf.claimant, v1_leaf.claimant);
+            assert_eq!(v0_leaf.entitlements, v1_leaf.entitlements);
         }
 
         println!("✅ Cross-version compatibility verified: V0 and V1 trees assign identical vault assignments");

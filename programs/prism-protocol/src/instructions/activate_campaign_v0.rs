@@ -1,25 +1,14 @@
-use crate::{
-    error::ErrorCode,
-    state::{CampaignStatus, CampaignV0},
-    CAMPAIGN_V0_SEED_PREFIX,
-};
 use anchor_lang::prelude::*;
 
+use crate::{CampaignStatus, CampaignV0, ErrorCode};
+
 #[derive(Accounts)]
-#[instruction(campaign_fingerprint: [u8; 32])]
 pub struct ActivateCampaignV0<'info> {
     pub admin: Signer<'info>,
 
     #[account(
         mut,
-        seeds = [
-            CAMPAIGN_V0_SEED_PREFIX,
-            admin.key().as_ref(),
-            campaign_fingerprint.as_ref(),
-        ],
-        bump = campaign.bump,
         has_one = admin @ ErrorCode::CampaignAdminMismatch,
-        constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::CampaignFingerprintMismatch,
         constraint = campaign.status == CampaignStatus::Inactive @ ErrorCode::CampaignAlreadyActivated,
     )]
     pub campaign: Account<'info, CampaignV0>,
@@ -35,7 +24,6 @@ pub struct CampaignActivated {
 
 pub fn handle_activate_campaign_v0(
     ctx: Context<ActivateCampaignV0>,
-    _campaign_fingerprint: [u8; 32], // Used by Accounts macro for seed derivation
     final_db_ipfs_hash: [u8; 32],
     go_live_slot: u64,
 ) -> Result<()> {

@@ -186,11 +186,13 @@ mod tests {
 
     fn create_test_leaf(claimant_seed: u8, entitlements: u64) -> ClaimLeaf {
         // Create deterministic pubkey for testing
+        let campaign = Pubkey::new_unique();
         let claimant = Pubkey::new_from_array([claimant_seed; 32]);
         ClaimLeaf {
+            campaign,
             claimant,
-            assigned_vault_index: 0,
             entitlements,
+            vault_index: 0,
         }
     }
 
