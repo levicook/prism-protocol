@@ -19,6 +19,7 @@ litesvm = { workspace = true, features = [] }
 litesvm-token = { workspace = true }
 prism-protocol-entities = { path = "../../crates/prism-protocol-entities" }
 prism-protocol-sdk = { path = "../../crates/prism-protocol-sdk" }
+rand = { workspace = true }
 rust_decimal = { workspace = true, features = ["macros"] }
 sha2 = { workspace = true }
 solana-account = { workspace = true }

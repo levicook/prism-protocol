@@ -22,7 +22,7 @@ use spl_associated_token_account::get_associated_token_address;
 /// - Multiple claimants across different cohorts
 #[tokio::test]
 async fn test_full_campaign_flow_happy_path() {
-    let state = FixtureState::new().await;
+    let state = FixtureState::rand().await;
 
     let mut test = TestFixture::new(state, LiteSVM::new())
         .await

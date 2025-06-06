@@ -7,7 +7,9 @@ use {
     },
     litesvm_token::spl_token::solana_program::native_token::LAMPORTS_PER_SOL,
     prism_protocol::{CampaignV0, ClaimReceiptV0, CohortV0},
-    prism_protocol_sdk::{build_activate_vault_v0_ix, CompiledCohortExt as _, CompiledVaultExt as _},
+    prism_protocol_sdk::{
+        build_activate_vault_v0_ix, CompiledCohortExt as _, CompiledVaultExt as _,
+    },
     solana_account::Account,
     solana_instruction::Instruction,
     solana_keypair::Keypair,
@@ -87,6 +89,36 @@ impl TestFixture {
 
     pub fn enable_send_transaction_logging(&mut self) {
         self.log_send_transaction_results = true;
+    }
+
+    /// Mint tokens to a specified token account
+    ///
+    /// This is a convenience method for minting additional tokens during tests,
+    /// useful for scenarios like funding excess amounts or testing edge cases.
+    ///
+    /// # Arguments
+    /// * `to` - The token account to mint tokens to
+    /// * `amount` - The number of tokens to mint (in smallest denomination)
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # let mut test_fixture = prism_protocol_testing::TestFixture::default();
+    /// let admin_token_account = test_fixture.state.address_finder().find_admin_token_account();
+    /// test_fixture.mint_to(&admin_token_account, 1000)?;
+    /// # Ok::<(), litesvm::types::FailedTransactionMetadata>(())
+    /// ```
+    pub fn mint_to(&mut self, to: &Pubkey, amount: u64) -> TransactionResult {
+        let mint_ix = spl_token::instruction::mint_to(
+            &self.state.address_finder().token_program_id,
+            &self.state.mint_address(),
+            to,
+            &self.state.admin_address(),
+            &[&self.state.admin_address()],
+            amount,
+        )
+        .expect("Failed to build mint_to instruction");
+
+        self.send_instructions(&[mint_ix])
     }
 
     pub fn send_instructions(&mut self, instructions: &[Instruction]) -> TransactionResult {
@@ -301,11 +333,11 @@ impl TestFixture {
 
             let ix = spl_token::instruction::transfer(
                 &self.state.address_finder().token_program_id,
-                &admin_token_account,                // from: admin's ATA
-                &vault.vault_address(),              // to: vault token account
-                &self.state.admin_address(),         // authority: admin signs
-                &[&self.state.admin_address()],      // signers
-                funding_amount,                      // amount
+                &admin_token_account,           // from: admin's ATA
+                &vault.vault_address(),         // to: vault token account
+                &self.state.admin_address(),    // authority: admin signs
+                &[&self.state.admin_address()], // signers
+                funding_amount,                 // amount
             )
             .expect("Failed to build transfer ix");
 

@@ -23,7 +23,7 @@ use solana_transaction::Transaction;
 /// - The instruction fails with admin mismatch error
 #[tokio::test]
 async fn test_non_admin_cannot_initialize_vault() {
-    let state = FixtureState::new().await;
+    let state = FixtureState::rand().await;
     let mut test = TestFixture::new(state, LiteSVM::new())
         .await
         .expect("Failed to create test fixture");
@@ -90,8 +90,12 @@ async fn test_non_admin_cannot_initialize_vault() {
     let result = test.send_transaction(tx);
 
     // Use the demand_prism_error helper with the proper constant
-    demand_prism_error(result, ErrorCode::CampaignAdminMismatch as u32, "CampaignAdminMismatch");
-    
+    demand_prism_error(
+        result,
+        ErrorCode::CampaignAdminMismatch as u32,
+        "CampaignAdminMismatch",
+    );
+
     println!("✅ Attacker cannot sign as admin to initialize vaults");
 
     // Verification: our legitimate admin CAN initialize the vault

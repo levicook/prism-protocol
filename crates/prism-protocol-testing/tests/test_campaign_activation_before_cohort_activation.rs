@@ -11,7 +11,7 @@ use prism_protocol_testing::{demand_prism_error, FixtureStage, FixtureState, Tes
 /// - Ensure proper order dependencies are enforced
 #[tokio::test]
 async fn test_campaign_activation_before_cohort_activation() {
-    let state = FixtureState::new().await;
+    let state = FixtureState::rand().await;
     let mut test = TestFixture::new(state, LiteSVM::new())
         .await
         .expect("Failed to create test fixture");

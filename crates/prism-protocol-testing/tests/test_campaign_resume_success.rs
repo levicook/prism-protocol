@@ -1,4 +1,5 @@
-use prism_protocol_testing::TestFixture;
+use litesvm::LiteSVM;
+use prism_protocol_testing::{FixtureState, TestFixture};
 
 /// Test successful campaign resume (Paused → Active)
 ///
@@ -7,10 +8,13 @@ use prism_protocol_testing::TestFixture;
 /// - Resume the campaign successfully
 /// - Verify campaign status transitions to Active
 /// - Verify claims work again after resume
-#[test]
+#[tokio::test]
 #[ignore]
-fn test_campaign_resume_success() {
-    let mut _test = TestFixture::default();
+async fn test_campaign_resume_success() {
+    let state = FixtureState::rand().await;
+    let mut _test = TestFixture::new(state, LiteSVM::new())
+        .await
+        .expect("Failed to create test fixture");
 
     todo!("Implement successful campaign resume test");
 }

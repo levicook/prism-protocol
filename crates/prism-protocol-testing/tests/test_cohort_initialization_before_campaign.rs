@@ -1,5 +1,7 @@
 use litesvm::LiteSVM;
-use prism_protocol_testing::{demand_account_not_initialized_error, FixtureStage, FixtureState, TestFixture};
+use prism_protocol_testing::{
+    demand_account_not_initialized_error, FixtureStage, FixtureState, TestFixture,
+};
 
 /// Test cohort initialization before campaign (wrong order) - should fail
 ///
@@ -10,7 +12,7 @@ use prism_protocol_testing::{demand_account_not_initialized_error, FixtureStage,
 /// - Ensure proper order dependencies are enforced
 #[tokio::test]
 async fn test_cohort_initialization_before_campaign() {
-    let state = FixtureState::new().await;
+    let state = FixtureState::rand().await;
     let mut test = TestFixture::new(state, LiteSVM::new())
         .await
         .expect("Failed to create test fixture");

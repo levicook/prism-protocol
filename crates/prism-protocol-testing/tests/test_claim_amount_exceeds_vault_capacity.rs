@@ -1,6 +1,7 @@
 use litesvm::LiteSVM;
 use prism_protocol_sdk::{
-    build_claim_tokens_v1_ix, CompiledCohortExt as _, CompiledLeafExt as _, CompiledProofExt as _, CompiledVaultExt as _,
+    build_claim_tokens_v1_ix, CompiledCohortExt as _, CompiledLeafExt as _, CompiledProofExt as _,
+    CompiledVaultExt as _,
 };
 use prism_protocol_testing::{deterministic_keypair, FixtureStage, FixtureState, TestFixture};
 use rust_decimal::prelude::ToPrimitive;
@@ -48,7 +49,7 @@ use std::collections::HashMap;
 /// **Expected behavior:** Mathematical calculation succeeds, SPL Token transfer fails gracefully
 #[tokio::test]
 async fn test_claim_amount_exceeds_vault_capacity() {
-    let state = FixtureState::new().await;
+    let state = FixtureState::rand().await;
     let mut test = TestFixture::new(state, LiteSVM::new())
         .await
         .expect("Failed to create test fixture");
@@ -84,7 +85,7 @@ async fn test_claim_amount_exceeds_vault_capacity() {
     // 3. Calculate normal claim amount and get vault info
     let amount_per_entitlement = early_adopters_cohort.amount_per_entitlement_token();
     let entitlements = leaf.entitlements();
-    
+
     let (vault_address, _) = test
         .state
         .address_finder()

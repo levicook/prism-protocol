@@ -3613,6 +3613,7 @@ dependencies = [
  "prism-protocol-entities",
  "prism-protocol-sdk",
  "prism_protocol",
+ "rand 0.8.5",
  "rust_decimal",
  "sha2 0.10.9",
  "solana-account",

@@ -5,6 +5,7 @@ use {
         compile_campaign, AddressFinder, CampaignCsvRow, ClaimTreeType, CohortsCsvRow,
         CompiledCampaignDatabase, CompiledCampaignExt as _,
     },
+    rand::Rng,
     rust_decimal::{dec, Decimal},
     solana_keypair::Keypair,
     solana_pubkey::Pubkey,
@@ -21,7 +22,33 @@ pub struct FixtureState {
 }
 
 impl FixtureState {
-    pub async fn new() -> Self {
+    /// Randomly chooses between V0 and V1 claim trees for maximum test coverage
+    ///
+    /// This method intentionally introduces chaos to catch compatibility issues
+    /// and ensure both code paths stay robust. If your test needs a specific
+    /// claim tree version, use `default_v0()` or `default_v1()` explicitly.
+    ///
+    /// A debug message will show which version was selected for reproducibility.
+    pub async fn rand() -> Self {
+        let use_v0 = rand::thread_rng().gen_bool(0.5);
+
+        if use_v0 {
+            println!("🎲 FixtureState::new() randomly selected V0 claim tree");
+            Self::default_v0().await
+        } else {
+            println!("🎲 FixtureState::new() randomly selected V1 claim tree");
+            Self::default_v1().await
+        }
+    }
+
+    /// Default fixture with multiple cohorts and realistic complexity
+    ///
+    /// This creates the full-featured fixture with:
+    /// - 4 cohorts (EarlyAdopters, Investors, PowerUsers, Team)
+    /// - Multiple claimants per cohort with varying entitlements
+    /// - 10 claimants per vault for realistic vault counts
+    /// - ClaimTreeType::V1 for modern claim handling
+    pub async fn default_v1() -> Self {
         let admin_keypair = default_admin_keypair();
         let mint_keypair = default_mint_keypair();
 
@@ -37,6 +64,116 @@ impl FixtureState {
         )
         .await
         .expect("Failed to compile default campaign");
+
+        Self {
+            admin_keypair,
+            mint_keypair,
+            ccdb: compiled_campaign,
+            stage: FixtureStage::default(),
+        }
+    }
+
+    /// Default fixture with V0 claim tree for legacy compatibility testing
+    pub async fn default_v0() -> Self {
+        let admin_keypair = default_admin_keypair();
+        let mint_keypair = default_mint_keypair();
+
+        let compiled_campaign = compile_campaign(
+            admin_keypair.pubkey(),
+            DEFAULT_BUDGET,
+            mint_keypair.pubkey(),
+            DEFAULT_MINT_DECIMALS,
+            &default_campaign_csv_rows(),
+            &default_cohorts_csv_rows(),
+            DEFAULT_CLAIMANTS_PER_VAULT,
+            ClaimTreeType::V0,
+        )
+        .await
+        .expect("Failed to compile default V0 campaign");
+
+        Self {
+            admin_keypair,
+            mint_keypair,
+            ccdb: compiled_campaign,
+            stage: FixtureStage::default(),
+        }
+    }
+
+    /// Simple fixture with just one cohort containing one vault (V1)
+    ///
+    /// This is ideal for focused testing scenarios where you want to avoid the complexity
+    /// of multiple vaults and focus on testing specific behaviors in isolation.
+    /// The resulting fixture will have:
+    /// - 1 cohort ("TestCohort") with 100% share
+    /// - 1 claimant with 1 entitlement (creates 1 vault with 1 claimant per vault)
+    /// - Small budget (10,000 tokens) for easier testing arithmetic
+    /// - ClaimTreeType::V1 for modern claim handling
+    pub async fn simple_v1() -> Self {
+        let admin_keypair = default_admin_keypair();
+        let mint_keypair = default_mint_keypair();
+
+        // Create minimal CSV data: one cohort, one claimant
+        let campaign_csv = vec![CampaignCsvRow {
+            cohort: "TestCohort".to_string(),
+            claimant: deterministic_pubkey("test_claimant"),
+            entitlements: 1,
+        }];
+
+        let cohorts_csv = vec![CohortsCsvRow {
+            cohort: "TestCohort".to_string(),
+            share_percentage: Decimal::from(100), // 100% to this single cohort
+        }];
+
+        let compiled_campaign = compile_campaign(
+            admin_keypair.pubkey(),
+            dec!(10_000), // Small budget for easier testing
+            mint_keypair.pubkey(),
+            DEFAULT_MINT_DECIMALS,
+            &campaign_csv,
+            &cohorts_csv,
+            1, // 1 claimant per vault - creates exactly 1 vault
+            ClaimTreeType::V1,
+        )
+        .await
+        .expect("Failed to compile simple V1 campaign");
+
+        Self {
+            admin_keypair,
+            mint_keypair,
+            ccdb: compiled_campaign,
+            stage: FixtureStage::default(),
+        }
+    }
+
+    /// Simple fixture with V0 claim tree for legacy compatibility testing
+    pub async fn simple_v0() -> Self {
+        let admin_keypair = default_admin_keypair();
+        let mint_keypair = default_mint_keypair();
+
+        // Create minimal CSV data: one cohort, one claimant
+        let campaign_csv = vec![CampaignCsvRow {
+            cohort: "TestCohort".to_string(),
+            claimant: deterministic_pubkey("test_claimant"),
+            entitlements: 1,
+        }];
+
+        let cohorts_csv = vec![CohortsCsvRow {
+            cohort: "TestCohort".to_string(),
+            share_percentage: Decimal::from(100), // 100% to this single cohort
+        }];
+
+        let compiled_campaign = compile_campaign(
+            admin_keypair.pubkey(),
+            dec!(10_000), // Small budget for easier testing
+            mint_keypair.pubkey(),
+            DEFAULT_MINT_DECIMALS,
+            &campaign_csv,
+            &cohorts_csv,
+            1, // 1 claimant per vault - creates exactly 1 vault
+            ClaimTreeType::V0,
+        )
+        .await
+        .expect("Failed to compile simple V0 campaign");
 
         Self {
             admin_keypair,

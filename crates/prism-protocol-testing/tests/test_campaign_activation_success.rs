@@ -9,7 +9,7 @@ use prism_protocol_testing::{FixtureStage, FixtureState, TestFixture};
 /// go_live_slot and final_db_ipfs_hash values set.
 #[tokio::test]
 async fn test_campaign_activation_success() {
-    let state = FixtureState::new().await;
+    let state = FixtureState::rand().await;
     let mut test = TestFixture::new(state, LiteSVM::new())
         .await
         .expect("Failed to create test fixture");
