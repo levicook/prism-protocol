@@ -7,6 +7,7 @@ use {
     },
     litesvm_token::spl_token::solana_program::native_token::LAMPORTS_PER_SOL,
     prism_protocol::{CampaignV0, ClaimReceiptV0, CohortV0},
+    prism_protocol_sdk::{build_activate_vault_v0_ix, CompiledCohortExt as _, CompiledVaultExt as _},
     solana_account::Account,
     solana_instruction::Instruction,
     solana_keypair::Keypair,
@@ -284,43 +285,38 @@ impl TestFixture {
     /// ```
     pub async fn try_fund_vaults_with_custom_amounts(
         &mut self,
-        _custom_amounts: HashMap<Pubkey, u64>,
+        custom_amounts: HashMap<Pubkey, u64>,
     ) -> Result<(), FailedTransactionMetadata> {
-        todo!("not implemented")
-        // let mut txs = Vec::new();
+        let mut txs = Vec::new();
 
-        // for cohort in &self.state.compiled_cohorts().await {
-        //     for vault in cohort.vaults.iter() {
-        //         // Use custom amount if specified, otherwise fall back to compiled campaign amount
-        //         let funding_amount =
-        //             custom_amounts
-        //                 .get(&vault.address)
-        //                 .copied()
-        //                 .unwrap_or_else(|| {
-        //                     vault
-        //                         .required_tokens_u64()
-        //                         .expect("Required tokens too large")
-        //                 });
+        // Use AddressFinder to get admin's associated token account
+        let admin_token_account = self.state.address_finder().find_admin_token_account();
 
-        //         let ix = spl_token::instruction::mint_to(
-        //             &self.state.address_finder.token_program_id,
-        //             &self.state.mint_pubkey(),
-        //             &vault.address,
-        //             &self.state.admin_address(),
-        //             &[&self.state.admin_keypair()],
-        //             funding_amount,
-        //         )
-        //         .expect("Failed to build mint_to ix");
+        for vault in self.state.ccdb.compiled_vaults().await {
+            // Use custom amount if specified, otherwise fall back to compiled campaign amount
+            let funding_amount = custom_amounts
+                .get(&vault.vault_address())
+                .copied()
+                .unwrap_or_else(|| vault.vault_budget_token() - vault.vault_dust_token());
 
-        //         txs.push(Transaction::new(
-        //             &[&self.state.admin_keypair()],
-        //             Message::new(&[ix], Some(&self.state.admin_address())),
-        //             self.latest_blockhash(),
-        //         ));
-        //     }
-        // }
+            let ix = spl_token::instruction::transfer(
+                &self.state.address_finder().token_program_id,
+                &admin_token_account,                // from: admin's ATA
+                &vault.vault_address(),              // to: vault token account
+                &self.state.admin_address(),         // authority: admin signs
+                &[&self.state.admin_address()],      // signers
+                funding_amount,                      // amount
+            )
+            .expect("Failed to build transfer ix");
 
-        // self.send_transactions(txs)
+            txs.push(Transaction::new(
+                &[&self.state.admin_keypair()],
+                Message::new(&[ix], Some(&self.state.admin_address())),
+                self.latest_blockhash(),
+            ));
+        }
+
+        self.send_transactions(txs)
     }
 
     pub async fn try_activate_vaults(&mut self) -> Result<(), FailedTransactionMetadata> {
@@ -378,40 +374,41 @@ impl TestFixture {
     /// ```
     pub async fn try_activate_vaults_with_custom_expected_balance(
         &mut self,
-        _custom_expected_balance: HashMap<Pubkey, u64>,
+        custom_expected_balance: HashMap<Pubkey, u64>,
     ) -> Result<(), FailedTransactionMetadata> {
-        todo!("not implemented")
-        // let mut txs = Vec::new();
+        let mut txs = Vec::new();
 
-        // for cohort in &self.state.compiled_cohorts().await {
-        //     for (vault_index, vault) in cohort.vaults.iter().enumerate() {
-        //         // Use custom expected balance if specified, otherwise fall back to compiled campaign amount
-        //         let expected_balance = custom_expected_balance
-        //             .get(&vault.address)
-        //             .copied()
-        //             .unwrap_or_else(|| {
-        //                 vault
-        //                     .required_tokens_u64()
-        //                     .expect("Required tokens too large")
-        //             });
+        for cohort in self.state.compiled_cohorts().await {
+            let vaults = self
+                .state
+                .ccdb
+                .compiled_vaults_by_cohort_address(cohort.address())
+                .await;
 
-        //         let (ix, _, _) = build_activate_vault_v0_ix(
-        //             &self.state.address_finder(),
-        //             cohort.merkle_root(),
-        //             vault_index.try_into().expect("Vault index too large"),
-        //             expected_balance,
-        //         )
-        //         .expect("Failed to build activate vault v0 ix");
+            for vault in vaults {
+                // Use custom expected balance if specified, otherwise fall back to compiled campaign amount
+                let expected_balance = custom_expected_balance
+                    .get(&vault.vault_address())
+                    .copied()
+                    .unwrap_or_else(|| vault.vault_budget_token() - vault.vault_dust_token());
 
-        //         txs.push(Transaction::new(
-        //             &[&self.state.admin_keypair()],
-        //             Message::new(&[ix], Some(&self.state.admin_address())),
-        //             self.latest_blockhash(),
-        //         ));
-        //     }
-        // }
+                let (ix, _, _) = build_activate_vault_v0_ix(
+                    &self.state.address_finder(),
+                    cohort.merkle_root(),
+                    vault.vault_index(),
+                    expected_balance,
+                )
+                .expect("Failed to build activate vault v0 ix");
 
-        // self.send_transactions(txs)
+                txs.push(Transaction::new(
+                    &[&self.state.admin_keypair()],
+                    Message::new(&[ix], Some(&self.state.admin_address())),
+                    self.latest_blockhash(),
+                ));
+            }
+        }
+
+        self.send_transactions(txs)
     }
 
     pub async fn try_activate_cohorts(&mut self) -> Result<(), FailedTransactionMetadata> {

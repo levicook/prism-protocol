@@ -1,5 +1,6 @@
+use litesvm::LiteSVM;
 use prism_protocol::error::ErrorCode as PrismError;
-use prism_protocol_testing::{demand_prism_error, FixtureStage, TestFixture};
+use prism_protocol_testing::{demand_prism_error, FixtureStage, FixtureState, TestFixture};
 
 /// Test vault activation before funding (wrong order) - should fail
 ///
@@ -8,13 +9,16 @@ use prism_protocol_testing::{demand_prism_error, FixtureStage, TestFixture};
 /// - Attempt to activate vaults WITHOUT funding them first
 /// - Verify operation fails (vault activation requires sufficient balance)
 /// - Ensure proper order dependencies are enforced
-#[test]
-fn test_vault_activation_before_funding() {
-    let mut test = TestFixture::default();
+#[tokio::test]
+async fn test_vault_activation_before_funding() {
+    let state = FixtureState::new().await;
+    let mut test = TestFixture::new(state, LiteSVM::new())
+        .await
+        .expect("Failed to create test fixture");
 
-    test.jump_to(FixtureStage::VaultsInitialized);
+    test.jump_to(FixtureStage::VaultsInitialized).await;
 
-    let result = test.try_activate_vaults();
+    let result = test.try_activate_vaults().await;
 
     // Vault activation without funding should fail with incorrect vault funding
     demand_prism_error(

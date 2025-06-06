@@ -1,5 +1,8 @@
-use prism_protocol_sdk::build_claim_tokens_v0_ix;
-use prism_protocol_testing::{deterministic_keypair, FixtureStage, TestFixture};
+use litesvm::LiteSVM;
+use prism_protocol_sdk::{
+    build_claim_tokens_v1_ix, CompiledCohortExt as _, CompiledLeafExt as _, CompiledProofExt as _, CompiledVaultExt as _,
+};
+use prism_protocol_testing::{deterministic_keypair, FixtureStage, FixtureState, TestFixture};
 use rust_decimal::prelude::ToPrimitive;
 use solana_message::Message;
 use solana_signer::Signer;
@@ -43,53 +46,52 @@ use std::collections::HashMap;
 /// 6. Verify proper error handling and no state corruption
 ///
 /// **Expected behavior:** Mathematical calculation succeeds, SPL Token transfer fails gracefully
-#[test]
-fn test_claim_amount_exceeds_vault_capacity() {
-    let mut test = TestFixture::default();
+#[tokio::test]
+async fn test_claim_amount_exceeds_vault_capacity() {
+    let state = FixtureState::new().await;
+    let mut test = TestFixture::new(state, LiteSVM::new())
+        .await
+        .expect("Failed to create test fixture");
 
     // 1. Set up campaign through vault initialization (but don't fund yet)
-    test.jump_to(FixtureStage::VaultsInitialized);
+    test.jump_to(FixtureStage::VaultsInitialized).await;
 
     // 2. Get claimant and extract claim data
     let claimant_keypair = deterministic_keypair("early_adopter_1");
     let claimant_pubkey = claimant_keypair.pubkey();
 
-    let mint = test.state.compiled_campaign.mint;
+    let mint = test.state.mint_address();
     let claimant_token_account = get_associated_token_address(&claimant_pubkey, &mint);
 
-    let (admin, fingerprint, merkle_root, assigned_vault_index) = {
-        let (cohort, leaf) = test
-            .state
-            .compiled_campaign
-            .find_claimant_in_cohort(&claimant_pubkey, "EarlyAdopters")
-            .expect("early_adopter_1 should be in EarlyAdopters cohort");
+    // Get cohort and leaf info using the working pattern
+    let cohorts = test.state.compiled_cohorts().await;
+    let early_adopters_cohort = cohorts
+        .iter()
+        .find(|c| c.cohort_csv_row_id == 0) // EarlyAdopters is first
+        .expect("EarlyAdopters cohort should exist");
 
-        (
-            test.state.compiled_campaign.admin,
-            test.state.compiled_campaign.fingerprint,
-            cohort.merkle_root,
-            leaf.assigned_vault_index,
-        )
-    };
+    let cohort_address = early_adopters_cohort.address();
+    let merkle_root = early_adopters_cohort.merkle_root();
+
+    let leaf = test
+        .state
+        .ccdb
+        .compiled_leaf_by_cohort_and_claimant(cohort_address, claimant_pubkey)
+        .await;
+
+    let assigned_vault_index = leaf.vault_index();
 
     // 3. Calculate normal claim amount and get vault info
-    let (amount_per_entitlement, vault_address, entitlements) = {
-        let (cohort, leaf) = test
-            .state
-            .compiled_campaign
-            .find_claimant_in_cohort(&claimant_pubkey, "EarlyAdopters")
-            .expect("early_adopter_1 should be in EarlyAdopters cohort");
-
-        (
-            cohort.amount_per_entitlement,
-            cohort.vaults[assigned_vault_index as usize].address,
-            leaf.entitlements,
-        )
-    };
+    let amount_per_entitlement = early_adopters_cohort.amount_per_entitlement_token();
+    let entitlements = leaf.entitlements();
+    
+    let (vault_address, _) = test
+        .state
+        .address_finder()
+        .find_vault_v0_address(&cohort_address, assigned_vault_index);
 
     let normal_claim_amount = amount_per_entitlement
-        .checked_mul(rust_decimal::Decimal::from(entitlements))
-        .and_then(|d| d.to_u64())
+        .checked_mul(entitlements)
         .expect("Normal claim amount calculation should not overflow");
 
     println!("💰 Normal claim amount: {} tokens", normal_claim_amount);
@@ -109,6 +111,7 @@ fn test_claim_amount_exceeds_vault_capacity() {
     let custom_funding = HashMap::from([(vault_address, tiny_vault_funding)]);
 
     test.try_fund_vaults_with_custom_amounts(custom_funding)
+        .await
         .expect("Custom vault funding should succeed");
 
     // 5. Activate vaults with custom expected balance
@@ -120,13 +123,16 @@ fn test_claim_amount_exceeds_vault_capacity() {
     );
 
     test.try_activate_vaults_with_custom_expected_balance(custom_expected_balance)
+        .await
         .expect("Custom vault activation should succeed");
 
     // 6. Continue with normal campaign activation
     test.try_activate_cohorts()
+        .await
         .expect("Cohort activation should succeed");
 
     test.try_activate_campaign()
+        .await
         .expect("Campaign activation should succeed");
 
     test.advance_slot_by(20); // Past go-live slot
@@ -162,16 +168,14 @@ fn test_claim_amount_exceeds_vault_capacity() {
     println!("  Capacity deficit: {}x", capacity_ratio);
 
     // 9. Generate proof for claim attempt
-    let proof = {
-        let (cohort, _) = test
-            .state
-            .compiled_campaign
-            .find_claimant_in_cohort(&claimant_pubkey, "EarlyAdopters")
-            .expect("early_adopter_1 should be in EarlyAdopters cohort");
-        cohort
-            .proof_for_claimant(&claimant_pubkey)
-            .expect("Should be able to generate proof")
-    };
+    let proof = test
+        .state
+        .ccdb
+        .compiled_proofs_by_claimant(claimant_pubkey)
+        .await
+        .into_iter()
+        .find(|p| p.cohort_address() == cohort_address)
+        .expect("early_adopter_1 should be in EarlyAdopters cohort");
 
     // 10. Attempt claim with normal entitlements against tiny vault → should fail
     println!(
@@ -179,15 +183,11 @@ fn test_claim_amount_exceeds_vault_capacity() {
         capacity_ratio
     );
 
-    let (claim_ix, _, _) = build_claim_tokens_v0_ix(
-        &test.state.address_finder,
-        admin,
+    let (claim_ix, _, _) = build_claim_tokens_v1_ix(
+        test.state.address_finder(),
         claimant_pubkey,
-        mint,
-        claimant_token_account,
-        fingerprint,
         merkle_root,
-        proof,
+        proof.merkle_proof_v1(),
         assigned_vault_index,
         entitlements, // Using normal entitlements (Merkle proof will work)
     )
@@ -238,14 +238,11 @@ fn test_claim_amount_exceeds_vault_capacity() {
     );
 
     // 13. Verify ClaimReceipt was NOT created
-    let (cohort_address, _) = test
-        .state
-        .address_finder
-        .find_cohort_v0_address(&test.state.compiled_campaign.address, &merkle_root);
+    let cohort_address = proof.cohort_address();
 
     let (claim_receipt_address, _) = test
         .state
-        .address_finder
+        .address_finder()
         .find_claim_receipt_v0_address(&cohort_address, &claimant_pubkey);
 
     assert!(

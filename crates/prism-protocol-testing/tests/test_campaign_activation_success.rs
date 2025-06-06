@@ -1,16 +1,20 @@
+use litesvm::LiteSVM;
 use prism_protocol::CampaignStatus;
-use prism_protocol_testing::{FixtureStage, TestFixture};
+use prism_protocol_testing::{FixtureStage, FixtureState, TestFixture};
 
 /// Test successful campaign activation
 ///
 /// Verifies that a campaign with all cohorts activated can be successfully
 /// activated and transitions from Inactive to Active status, with correct
 /// go_live_slot and final_db_ipfs_hash values set.
-#[test]
-fn test_campaign_activation_success() {
-    let mut test = TestFixture::default();
+#[tokio::test]
+async fn test_campaign_activation_success() {
+    let state = FixtureState::new().await;
+    let mut test = TestFixture::new(state, LiteSVM::new())
+        .await
+        .expect("Failed to create test fixture");
 
-    test.jump_to(FixtureStage::CohortsActivated);
+    test.jump_to(FixtureStage::CohortsActivated).await;
 
     // Record current slot for later verification
     let activation_slot = test.current_slot();
@@ -27,6 +31,7 @@ fn test_campaign_activation_success() {
 
     // Activate the campaign
     test.try_activate_campaign()
+        .await
         .expect("Campaign activation should succeed");
 
     // Verify campaign status and parameters are correctly set
