@@ -18,8 +18,9 @@ use crate::{claim_tree_constants, consistent_hash_vault_assignment, ClaimLeaf, C
 ///
 /// A ClaimTreeV1 object with optimized 256-ary tree structure
 pub fn create_claim_tree_v1(
+    campaign: Pubkey,
     claimant_entitlements: &[(Pubkey, u64)],
-    vault_count: usize,
+    vault_count: u8,
 ) -> Result<ClaimTreeV1> {
     require!(!claimant_entitlements.is_empty(), ErrorCode::EmptyTree);
     require!(vault_count > 0, ErrorCode::InvalidInput);
@@ -29,8 +30,9 @@ pub fn create_claim_tree_v1(
         .map(|(claimant, entitlements)| {
             let vault_index = consistent_hash_vault_assignment(claimant, vault_count);
             ClaimLeaf {
+                campaign,
                 claimant: *claimant,
-                assigned_vault_index: vault_index as u8,
+                vault_index: vault_index as u8,
                 entitlements: *entitlements,
             }
         })
@@ -66,7 +68,7 @@ pub struct ClaimTreeV1 {
     /// The root hash of the 256-ary tree
     root_hash: [u8; 32],
     /// Mapping from claimant pubkey to leaf index for fast lookups
-    pub claimant_to_index: HashMap<Pubkey, usize>,
+    pub claimant_leaf_index: HashMap<Pubkey, usize>,
     /// Original claim leaves for verification
     pub leaves: Vec<ClaimLeaf>,
     /// Leaf hashes in tree order
@@ -109,7 +111,7 @@ impl ClaimTreeV1 {
 
         Ok(Self {
             root_hash,
-            claimant_to_index,
+            claimant_leaf_index: claimant_to_index,
             leaves: claim_leaves,
             leaf_hashes,
         })
@@ -170,7 +172,7 @@ impl ClaimTreeV1 {
     /// hashes needed at that level of the tree to reconstruct the parent.
     pub fn proof_for_claimant(&self, claimant: &Pubkey) -> Result<Vec<Vec<[u8; 32]>>> {
         let index = self
-            .claimant_to_index
+            .claimant_leaf_index
             .get(claimant)
             .ok_or(ErrorCode::ClaimantNotFound)?;
 
@@ -246,7 +248,7 @@ impl ClaimTreeV1 {
     /// Get the leaf data for a specific claimant
     pub fn leaf_for_claimant(&self, claimant: &Pubkey) -> Result<&ClaimLeaf> {
         let index = self
-            .claimant_to_index
+            .claimant_leaf_index
             .get(claimant)
             .ok_or(ErrorCode::ClaimantNotFound)?;
 
@@ -319,17 +321,20 @@ mod tests {
     use super::*;
 
     fn create_test_leaf(claimant_seed: u8, entitlements: u64) -> ClaimLeaf {
+        let campaign = Pubkey::new_unique();
         let mut claimant_bytes = [0u8; 32];
         claimant_bytes[0] = claimant_seed;
         let claimant = Pubkey::new_from_array(claimant_bytes);
         ClaimLeaf {
+            campaign,
             claimant,
-            assigned_vault_index: 0,
             entitlements,
+            vault_index: 0,
         }
     }
 
     fn create_test_leaf_unique(index: usize, entitlements: u64) -> ClaimLeaf {
+        let campaign = Pubkey::new_unique();
         let mut claimant_bytes = [0u8; 32];
         // Use multiple bytes to avoid duplicates for large indices
         claimant_bytes[0] = (index & 0xFF) as u8;
@@ -338,9 +343,10 @@ mod tests {
         claimant_bytes[3] = ((index >> 24) & 0xFF) as u8;
         let claimant = Pubkey::new_from_array(claimant_bytes);
         ClaimLeaf {
+            campaign,
             claimant,
-            assigned_vault_index: 0,
             entitlements,
+            vault_index: 0,
         }
     }
 
@@ -447,19 +453,22 @@ mod tests {
 
     #[test]
     fn test_duplicate_claimant_error() {
+        let campaign = Pubkey::new_unique();
         let claimant_bytes = [1u8; 32];
         let claimant = Pubkey::new_from_array(claimant_bytes);
 
         let leaves = vec![
             ClaimLeaf {
+                campaign,
                 claimant,
-                assigned_vault_index: 0,
                 entitlements: 100,
+                vault_index: 0,
             },
             ClaimLeaf {
+                campaign,
                 claimant, // Duplicate!
-                assigned_vault_index: 1,
                 entitlements: 200,
+                vault_index: 1,
             },
         ];
 
@@ -479,6 +488,7 @@ mod tests {
 
     #[test]
     fn test_create_claim_tree_v1_function() {
+        let campaign = Pubkey::new_unique();
         let claimants = vec![
             Pubkey::new_unique(),
             Pubkey::new_unique(),
@@ -487,6 +497,7 @@ mod tests {
         let vault_count = 3;
 
         let tree = create_claim_tree_v1(
+            campaign,
             &claimants.iter().map(|&c| (c, 100)).collect::<Vec<_>>(),
             vault_count,
         )

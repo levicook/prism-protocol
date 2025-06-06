@@ -14,7 +14,7 @@ impl Default for CampaignStatus {
     }
 }
 
-#[account] // seed [CAMPAIGN_V0_SEED_PREFIX, fingerprint]
+#[account]
 #[derive(InitSpace)]
 pub struct CampaignV0 {
     /// The admin (authority) pubkey for this campaign.
@@ -22,10 +22,6 @@ pub struct CampaignV0 {
 
     /// The mint pubkey for the tokens being distributed in this campaign.
     pub mint: Pubkey,
-
-    /// A unique fingerprint for this campaign.
-    /// This is used in the Campaign PDA seeds.
-    pub fingerprint: [u8; 32],
 
     /// IPFS hash of the final campaign database (published during activation, final deployment record)
     pub campaign_db_ipfs_hash: [u8; 32],
@@ -92,7 +88,7 @@ pub struct ClaimReceiptV0 {
     pub assigned_vault: Pubkey,
 
     /// Timestamp of when the claim was successfully processed.
-    pub claimed_at_timestamp: i64,
+    pub claimed_at_timestamp: i64, // would slot be safer?
 
     /// Bump seed for the ClaimReceipt PDA.
     pub bump: u8,

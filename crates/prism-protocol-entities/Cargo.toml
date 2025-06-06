@@ -1,0 +1,15 @@
+[package]
+name = "prism-protocol-entities"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "prism_protocol_entities"
+path = "src/lib.rs"
+
+[dependencies]
+sea-orm = { workspace = true, features = [
+    "runtime-tokio-rustls",
+    "sqlx-sqlite",
+    "with-rust_decimal",
+] }

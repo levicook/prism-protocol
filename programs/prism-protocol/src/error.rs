@@ -19,8 +19,6 @@ pub enum ErrorCode {
     CampaignAdminMismatch,
 
     // Specific PDA/constraint validation errors
-    #[msg("Campaign fingerprint mismatch: the provided fingerprint does not match the campaign account.")]
-    CampaignFingerprintMismatch,
     #[msg("Cohort campaign mismatch: the cohort does not belong to the specified campaign.")]
     CohortCampaignMismatch,
     #[msg("Mint mismatch: the provided mint does not match the campaign's mint.")]

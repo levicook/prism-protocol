@@ -30,8 +30,9 @@ use crate::{consistent_hash_vault_assignment, ClaimHasherV0, ClaimLeaf};
 /// ## Returns
 /// A `ClaimMerkleTree` with leaves containing the assigned vault index for each claimant.
 pub fn create_claim_tree_v0(
+    campaign: Pubkey,
     claimant_entitlements: &[(Pubkey, u64)],
-    vault_count: usize,
+    vault_count: u8,
 ) -> Result<ClaimTreeV0> {
     require!(!claimant_entitlements.is_empty(), ErrorCode::InvalidInput);
     require!(vault_count > 0, ErrorCode::InvalidInput);
@@ -43,8 +44,9 @@ pub fn create_claim_tree_v0(
             let vault_index = consistent_hash_vault_assignment(claimant, vault_count);
 
             ClaimLeaf {
+                campaign,
                 claimant: *claimant,
-                assigned_vault_index: vault_index as u8,
+                vault_index,
                 entitlements: *entitlements,
             }
         })
@@ -59,7 +61,7 @@ pub struct ClaimTreeV0 {
     /// The underlying merkle tree
     pub tree: MerkleTree<ClaimHasherV0>,
     /// Mapping from claimant pubkey to their leaf index in the tree
-    pub claimant_to_index: HashMap<Pubkey, usize>,
+    pub claimant_leaf_index: HashMap<Pubkey, usize>,
     /// The original leaves used to build the tree
     pub leaves: Vec<ClaimLeaf>,
 }
@@ -85,7 +87,7 @@ impl ClaimTreeV0 {
 
         Ok(ClaimTreeV0 {
             tree,
-            claimant_to_index,
+            claimant_leaf_index: claimant_to_index,
             leaves,
         })
     }
@@ -98,7 +100,7 @@ impl ClaimTreeV0 {
     /// Generate a merkle proof for a specific claimant
     pub fn proof_for_claimant(&self, claimant: &Pubkey) -> Result<Vec<[u8; 32]>> {
         let index = self
-            .claimant_to_index
+            .claimant_leaf_index
             .get(claimant)
             .ok_or(ErrorCode::ClaimantNotFound)?;
 
@@ -126,7 +128,7 @@ impl ClaimTreeV0 {
     /// Get the leaf data for a specific claimant
     pub fn leaf_for_claimant(&self, claimant: &Pubkey) -> Result<&ClaimLeaf> {
         let index = self
-            .claimant_to_index
+            .claimant_leaf_index
             .get(claimant)
             .ok_or(ErrorCode::ClaimantNotFound)?;
 
@@ -139,7 +141,7 @@ impl ClaimTreeV0 {
     pub fn verify_proof(&self, claimant: &Pubkey, proof: &[[u8; 32]]) -> Result<bool> {
         let root = self.root().ok_or(ErrorCode::MissingMerkleRoot)?;
         let index = self
-            .claimant_to_index
+            .claimant_leaf_index
             .get(claimant)
             .ok_or(ErrorCode::ClaimantNotFound)?;
         let leaf = self.leaf_for_claimant(claimant)?;
@@ -172,6 +174,8 @@ mod tests {
 
     #[test]
     fn test_build_merkle_tree_from_leaves() {
+        let campaign = Pubkey::new_unique();
+
         let claimants = [
             Pubkey::new_unique(),
             Pubkey::new_unique(),
@@ -180,19 +184,22 @@ mod tests {
 
         let leaves = vec![
             ClaimLeaf {
+                campaign,
                 claimant: claimants[0],
-                assigned_vault_index: 0,
                 entitlements: 100,
+                vault_index: 0,
             },
             ClaimLeaf {
+                campaign,
                 claimant: claimants[1],
-                assigned_vault_index: 0,
                 entitlements: 200,
+                vault_index: 0,
             },
             ClaimLeaf {
+                campaign,
                 claimant: claimants[2],
-                assigned_vault_index: 1,
                 entitlements: 300,
+                vault_index: 1,
             },
         ];
 
@@ -203,7 +210,7 @@ mod tests {
 
         // Verify all claimants are mapped
         for (i, claimant) in claimants.iter().enumerate() {
-            assert_eq!(merkle_tree.claimant_to_index[claimant], i);
+            assert_eq!(merkle_tree.claimant_leaf_index[claimant], i);
         }
 
         // Verify leaves are stored correctly
@@ -212,18 +219,21 @@ mod tests {
 
     #[test]
     fn test_generate_and_verify_proof() {
+        let campaign = Pubkey::new_unique();
         let claimants = [Pubkey::new_unique(), Pubkey::new_unique()];
 
         let leaves = vec![
             ClaimLeaf {
+                campaign,
                 claimant: claimants[0],
-                assigned_vault_index: 0,
                 entitlements: 100,
+                vault_index: 0,
             },
             ClaimLeaf {
+                campaign,
                 claimant: claimants[1],
-                assigned_vault_index: 1,
                 entitlements: 200,
+                vault_index: 1,
             },
         ];
 
@@ -243,18 +253,21 @@ mod tests {
 
     #[test]
     fn test_duplicate_claimant_error() {
+        let campaign = Pubkey::new_unique();
         let claimant = Pubkey::new_unique();
 
         let leaves = vec![
             ClaimLeaf {
+                campaign,
                 claimant,
-                assigned_vault_index: 0,
                 entitlements: 100,
+                vault_index: 0,
             },
             ClaimLeaf {
+                campaign,
                 claimant, // Duplicate!
-                assigned_vault_index: 1,
                 entitlements: 200,
+                vault_index: 1,
             },
         ];
 
@@ -264,6 +277,7 @@ mod tests {
 
     #[test]
     fn test_create_merkle_tree_consistent_hashing() {
+        let campaign = Pubkey::new_unique();
         let claimants = [
             Pubkey::new_unique(),
             Pubkey::new_unique(),
@@ -280,7 +294,8 @@ mod tests {
             .map(|(i, &claimant)| (claimant, (i + 1) as u64 * 100))
             .collect();
 
-        let merkle_tree = create_claim_tree_v0(&claimant_entitlements, vault_count).unwrap();
+        let merkle_tree =
+            create_claim_tree_v0(campaign, &claimant_entitlements, vault_count).unwrap();
 
         // Verify tree was created successfully
         assert!(merkle_tree.root().is_some());
@@ -294,17 +309,15 @@ mod tests {
 
             // Verify consistent hashing: same claimant should always get same vault
             let vault_index = crate::consistent_hash_vault_assignment(claimant, vault_count);
-            assert_eq!(leaf.assigned_vault_index as usize, vault_index);
+            assert_eq!(leaf.vault_index, vault_index);
         }
 
         // Test determinism: creating the tree again should produce identical assignments
-        let merkle_tree2 = create_claim_tree_v0(&claimant_entitlements, vault_count).unwrap();
+        let merkle_tree2 =
+            create_claim_tree_v0(campaign, &claimant_entitlements, vault_count).unwrap();
         for (leaf1, leaf2) in merkle_tree.leaves.iter().zip(merkle_tree2.leaves.iter()) {
             assert_eq!(leaf1.claimant, leaf2.claimant);
-            assert_eq!(
-                leaf1.assigned_vault_index as usize,
-                leaf2.assigned_vault_index as usize
-            );
+            assert_eq!(leaf1.vault_index as usize, leaf2.vault_index as usize);
             assert_eq!(leaf1.entitlements, leaf2.entitlements);
         }
     }
@@ -333,8 +346,8 @@ mod tests {
 
         for i in 0..num_claimants {
             let claimant = Pubkey::new_from_array([i as u8; 32]);
-            let vault_index = crate::consistent_hash_vault_assignment(&claimant, vault_count);
-            vault_counts[vault_index] += 1;
+            let vault_index = crate::consistent_hash_vault_assignment(&claimant, vault_count as u8);
+            vault_counts[vault_index as usize] += 1;
         }
 
         // Each vault should get roughly 200 claimants (1000/5)
@@ -353,11 +366,13 @@ mod tests {
     #[test]
     fn test_claim_proof_v0_verify_single_leaf() {
         // Test: Single leaf tree (empty proof)
+        let campaign = Pubkey::new_unique();
         let claimant = Pubkey::new_unique();
         let leaf = ClaimLeaf {
+            campaign,
             claimant,
-            assigned_vault_index: 0,
             entitlements: 1000,
+            vault_index: 0,
         };
 
         let tree = ClaimTreeV0::from_leaves(vec![leaf.clone()]).unwrap();
@@ -382,15 +397,17 @@ mod tests {
     #[test]
     fn test_claim_proof_v0_verify_small_trees() {
         // Test: Various small tree sizes (binary trees)
+        let campaign = Pubkey::new_unique();
         for num_leaves in 2..=16 {
             let claimants: Vec<Pubkey> = (0..num_leaves).map(|_| Pubkey::new_unique()).collect();
             let leaves: Vec<ClaimLeaf> = claimants
                 .iter()
                 .enumerate()
                 .map(|(i, &claimant)| ClaimLeaf {
+                    campaign,
                     claimant,
-                    assigned_vault_index: (i % 3) as u8,
                     entitlements: (i + 1) as u64 * 100,
+                    vault_index: (i % 3) as u8,
                 })
                 .collect();
 
@@ -414,6 +431,7 @@ mod tests {
     #[test]
     fn test_claim_proof_v0_verify_boundary_conditions() {
         // Test: Power of 2 sizes (perfect binary trees)
+        let campaign = Pubkey::new_unique();
         let power_of_2_sizes = [2, 4, 8, 16, 32, 64, 128];
 
         for &size in &power_of_2_sizes {
@@ -422,8 +440,9 @@ mod tests {
                 .iter()
                 .enumerate()
                 .map(|(i, &claimant)| ClaimLeaf {
+                    campaign,
                     claimant,
-                    assigned_vault_index: (i % 5) as u8,
+                    vault_index: (i % 5) as u8,
                     entitlements: (i + 1) as u64 * 50,
                 })
                 .collect();
@@ -453,6 +472,7 @@ mod tests {
         }
 
         // Test: Non-power of 2 sizes (imperfect binary trees)
+        let campaign = Pubkey::new_unique();
         let irregular_sizes = [3, 5, 7, 15, 31, 63, 100];
 
         for &size in &irregular_sizes {
@@ -461,9 +481,10 @@ mod tests {
                 .iter()
                 .enumerate()
                 .map(|(i, &claimant)| ClaimLeaf {
+                    campaign,
                     claimant,
-                    assigned_vault_index: (i % 7) as u8,
                     entitlements: (i + 1) as u64 * 75,
+                    vault_index: (i % 7) as u8,
                 })
                 .collect();
 
@@ -490,14 +511,16 @@ mod tests {
     #[test]
     fn test_claim_proof_v0_verify_large_tree() {
         // Test: Large tree with 500 leaves
+        let campaign = Pubkey::new_unique();
         let claimants: Vec<Pubkey> = (0..500).map(|_| Pubkey::new_unique()).collect();
         let leaves: Vec<ClaimLeaf> = claimants
             .iter()
             .enumerate()
             .map(|(i, &claimant)| ClaimLeaf {
+                campaign,
                 claimant,
-                assigned_vault_index: (i % 10) as u8,
                 entitlements: (i + 1) as u64 * 20,
+                vault_index: (i % 10) as u8,
             })
             .collect();
 
@@ -524,13 +547,15 @@ mod tests {
     #[test]
     fn test_claim_proof_v0_verify_wrong_root() {
         // Test: Valid proof but wrong root should fail
+        let campaign = Pubkey::new_unique();
         let claimants: Vec<Pubkey> = (0..5).map(|_| Pubkey::new_unique()).collect();
         let leaves: Vec<ClaimLeaf> = claimants
             .iter()
             .enumerate()
             .map(|(i, &claimant)| ClaimLeaf {
+                campaign,
                 claimant,
-                assigned_vault_index: i as u8,
+                vault_index: i as u8,
                 entitlements: (i + 1) as u64 * 100,
             })
             .collect();
@@ -553,14 +578,16 @@ mod tests {
     #[test]
     fn test_claim_proof_v0_verify_wrong_leaf() {
         // Test: Valid proof and root but wrong leaf should fail
+        let campaign = Pubkey::new_unique();
         let claimants: Vec<Pubkey> = (0..5).map(|_| Pubkey::new_unique()).collect();
         let leaves: Vec<ClaimLeaf> = claimants
             .iter()
             .enumerate()
             .map(|(i, &claimant)| ClaimLeaf {
+                campaign,
                 claimant,
-                assigned_vault_index: i as u8,
                 entitlements: (i + 1) as u64 * 100,
+                vault_index: i as u8,
             })
             .collect();
 
@@ -569,9 +596,10 @@ mod tests {
 
         // Create a fake leaf not in the tree
         let fake_leaf = ClaimLeaf {
+            campaign,
             claimant: Pubkey::new_unique(),
-            assigned_vault_index: 99,
             entitlements: 999,
+            vault_index: 99,
         };
 
         for leaf in &leaves {
@@ -588,14 +616,16 @@ mod tests {
     #[test]
     fn test_claim_proof_v0_verify_corrupted_proof() {
         // Test: Corrupted proof data should fail verification
+        let campaign = Pubkey::new_unique();
         let claimants: Vec<Pubkey> = (0..4).map(|_| Pubkey::new_unique()).collect();
         let leaves: Vec<ClaimLeaf> = claimants
             .iter()
             .enumerate()
             .map(|(i, &claimant)| ClaimLeaf {
+                campaign,
                 claimant,
-                assigned_vault_index: i as u8,
                 entitlements: (i + 1) as u64 * 100,
+                vault_index: i as u8,
             })
             .collect();
 
@@ -621,11 +651,13 @@ mod tests {
     #[test]
     fn test_claim_proof_v0_verify_empty_proof_wrong_context() {
         // Test: Empty proof should only work when root == leaf.to_hash()
+        let campaign = Pubkey::new_unique();
         let claimant = Pubkey::new_unique();
         let leaf = ClaimLeaf {
+            campaign,
             claimant,
-            assigned_vault_index: 0,
             entitlements: 100,
+            vault_index: 0,
         };
         let empty_proof = crate::ClaimProofV0::new(vec![]);
 
@@ -647,14 +679,16 @@ mod tests {
     #[test]
     fn test_claim_proof_v0_verify_domain_separation() {
         // Test: Ensure domain separation is working (internal nodes vs leaves)
+        let campaign = Pubkey::new_unique();
         let claimants: Vec<Pubkey> = (0..4).map(|_| Pubkey::new_unique()).collect();
         let leaves: Vec<ClaimLeaf> = claimants
             .iter()
             .enumerate()
             .map(|(i, &claimant)| ClaimLeaf {
+                campaign,
                 claimant,
-                assigned_vault_index: i as u8,
                 entitlements: (i + 1) as u64 * 100,
+                vault_index: i as u8,
             })
             .collect();
 
@@ -685,6 +719,7 @@ mod tests {
     #[test]
     fn test_claim_proof_v0_verify_proof_size_analysis() {
         // Test: Analyze proof sizes for different tree sizes (binary trees)
+        let campaign = Pubkey::new_unique();
         let test_sizes = [1, 2, 3, 4, 7, 8, 15, 16, 31, 32, 63, 64, 127, 128, 255, 256];
 
         for &size in &test_sizes {
@@ -693,9 +728,10 @@ mod tests {
                 .iter()
                 .enumerate()
                 .map(|(i, &claimant)| ClaimLeaf {
+                    campaign,
                     claimant,
-                    assigned_vault_index: (i % 3) as u8,
                     entitlements: (i + 1) as u64 * 50,
+                    vault_index: (i % 3) as u8,
                 })
                 .collect();
 
@@ -753,6 +789,7 @@ mod tests {
     #[test]
     fn test_claim_proof_v0_verify_stress_test() {
         // Test: Stress test with various binary tree configurations
+        let campaign = Pubkey::new_unique();
         let configurations = [
             (10, "Small tree"),
             (15, "Irregular small"),
@@ -772,9 +809,10 @@ mod tests {
                 .iter()
                 .enumerate()
                 .map(|(i, &claimant)| ClaimLeaf {
+                    campaign,
                     claimant,
-                    assigned_vault_index: (i % 8) as u8,
                     entitlements: (i + 1) as u64 * 37, // Prime number for variety
+                    vault_index: (i % 8) as u8,
                 })
                 .collect();
 
@@ -807,14 +845,16 @@ mod tests {
     #[test]
     fn test_claim_proof_v0_verify_cross_tree_isolation() {
         // Test: Proofs from one tree should not verify against another tree's root
+        let campaign = Pubkey::new_unique();
         let claimants_a: Vec<Pubkey> = (0..4).map(|_| Pubkey::new_unique()).collect();
         let leaves_tree_a: Vec<ClaimLeaf> = claimants_a
             .iter()
             .enumerate()
             .map(|(i, &claimant)| ClaimLeaf {
+                campaign,
                 claimant,
-                assigned_vault_index: i as u8,
                 entitlements: (i + 1) as u64 * 100,
+                vault_index: i as u8,
             })
             .collect();
 
@@ -823,9 +863,10 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(i, &claimant)| ClaimLeaf {
+                campaign,
                 claimant,
-                assigned_vault_index: (i + 4) as u8,
                 entitlements: (i + 5) as u64 * 200,
+                vault_index: (i + 4) as u8,
             })
             .collect();
 
@@ -863,6 +904,7 @@ mod tests {
     #[test]
     fn test_claim_proof_v0_verify_real_world_simulation() {
         // Test: Simulate real-world usage with consistent hashing
+        let campaign = Pubkey::new_unique();
         let vault_count = 5;
         let num_claimants = 50;
 
@@ -876,7 +918,7 @@ mod tests {
             .collect();
 
         // Create tree using the production function
-        let tree = create_claim_tree_v0(&claimant_entitlements, vault_count).unwrap();
+        let tree = create_claim_tree_v0(campaign, &claimant_entitlements, vault_count).unwrap();
         let root = tree.root().unwrap();
 
         // Test that all claimants can generate valid proofs
@@ -886,7 +928,7 @@ mod tests {
             // Verify leaf data is correct
             assert_eq!(leaf.claimant, *claimant);
             assert_eq!(leaf.entitlements, *expected_entitlements);
-            assert!(leaf.assigned_vault_index < vault_count as u8);
+            assert!(leaf.vault_index < vault_count as u8);
 
             // Generate and verify proof
             let proof_data = tree.proof_for_claimant(claimant).unwrap();

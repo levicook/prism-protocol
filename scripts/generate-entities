@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(dirname "$0")/common.sh"
+cd "$PROJECT_ROOT"
+
+./scripts/migrate up
+
+OUTPUT_DIR="./crates/${PROJECT_NAME}-entities/src"
+
+find "${OUTPUT_DIR}" -type f -name '*.rs' -not -name 'lib.rs' -delete
+
+sea-orm-cli generate entity \
+    --database-url "${DATABASE_URL}" \
+    --date-time-crate time \
+    --lib \
+    --output-dir "${OUTPUT_DIR}"

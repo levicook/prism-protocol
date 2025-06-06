@@ -1,13 +1,12 @@
-use crate::constants::VAULT_SEED_PREFIX;
-use crate::error::ErrorCode;
-use crate::state::{CampaignStatus, CampaignV0, CohortV0};
-use crate::{CAMPAIGN_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX};
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
+use crate::{
+    CampaignStatus, CampaignV0, CohortV0, ErrorCode, COHORT_V0_SEED_PREFIX, VAULT_SEED_PREFIX,
+};
+
 #[derive(Accounts)]
 #[instruction(
-    campaign_fingerprint: [u8; 32],
     cohort_merkle_root: [u8; 32],
     vault_index: u8
 )]
@@ -16,14 +15,7 @@ pub struct InitializeVaultV0<'info> {
     pub admin: Signer<'info>,
 
     #[account(
-        seeds = [
-            CAMPAIGN_V0_SEED_PREFIX,
-            admin.key().as_ref(),
-            campaign_fingerprint.as_ref()
-        ],
-        bump = campaign.bump,
         has_one = admin @ ErrorCode::CampaignAdminMismatch,
-        constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::CampaignFingerprintMismatch,
         constraint = campaign.status == CampaignStatus::Inactive @ ErrorCode::CampaignIsActive,
     )]
     pub campaign: Account<'info, CampaignV0>,
@@ -68,8 +60,7 @@ pub struct InitializeVaultV0<'info> {
 
 pub fn handle_initialize_vault_v0(
     ctx: Context<InitializeVaultV0>,
-    _campaign_fingerprint: [u8; 32], // consumed in account constraints
-    _cohort_merkle_root: [u8; 32],   // consumed in account constraints
+    _cohort_merkle_root: [u8; 32], // consumed in account constraints
     vault_index: u8,
 ) -> Result<()> {
     let cohort = &mut ctx.accounts.cohort;

@@ -6,14 +6,14 @@ use crate::{claim_tree_constants, ClaimLeaf};
 /// Unified proof type that can hold either binary (V0) or 256-ary (V1) merkle proofs.
 /// This enables code reuse between claim_tokens_v0 and claim_tokens_v1 handlers.
 #[derive(Clone, Debug)]
-pub enum ClaimProofType {
+pub enum ClaimProof {
     /// Binary merkle tree proof (V0)
     V0(ClaimProofV0),
     /// 256-ary merkle tree proof (V1)
     V1(ClaimProofV1),
 }
 
-impl ClaimProofType {
+impl ClaimProof {
     /// Create a ProofType from a binary tree proof
     pub fn from_binary(proof: Vec<[u8; 32]>) -> Self {
         Self::V0(ClaimProofV0::new(proof))
@@ -27,24 +27,24 @@ impl ClaimProofType {
     /// Verify the proof against a root and leaf, regardless of proof type
     pub fn verify(&self, root: &[u8; 32], leaf: &ClaimLeaf) -> bool {
         match self {
-            ClaimProofType::V0(proof) => proof.verify(root, leaf),
-            ClaimProofType::V1(proof) => proof.verify(root, leaf),
+            ClaimProof::V0(proof) => proof.verify(root, leaf),
+            ClaimProof::V1(proof) => proof.verify(root, leaf),
         }
     }
 
     /// Get a descriptive name for logging
     pub fn description(&self) -> &'static str {
         match self {
-            ClaimProofType::V0(_) => "Binary merkle proof",
-            ClaimProofType::V1(_) => "256-ary merkle proof",
+            ClaimProof::V0(_) => "Binary merkle proof",
+            ClaimProof::V1(_) => "256-ary merkle proof",
         }
     }
 
     /// Get the proof version for metrics/logging
     pub fn version(&self) -> u8 {
         match self {
-            ClaimProofType::V0(_) => 0,
-            ClaimProofType::V1(_) => 1,
+            ClaimProof::V0(_) => 0,
+            ClaimProof::V1(_) => 1,
         }
     }
 }
@@ -229,8 +229,9 @@ mod tests {
 
     fn create_test_leaf() -> ClaimLeaf {
         ClaimLeaf {
+            campaign: Pubkey::new_unique(),
             claimant: Pubkey::new_unique(),
-            assigned_vault_index: 0,
+            vault_index: 0,
             entitlements: 100,
         }
     }

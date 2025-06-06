@@ -5,5 +5,7 @@ git_root() {
     }
 }
 
+export DATABASE_URL="${DATABASE_URL:-sqlite://target/dev.db?mode=rwc}"
+
 export PROJECT_NAME="prism-protocol"
 export PROJECT_ROOT="$(git_root)"

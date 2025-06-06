@@ -1,11 +1,9 @@
-use crate::error::ErrorCode;
-use crate::state::{CampaignStatus, CampaignV0, CohortV0};
-use crate::{CAMPAIGN_V0_SEED_PREFIX, COHORT_V0_SEED_PREFIX};
 use anchor_lang::prelude::*;
+
+use crate::{CampaignStatus, CampaignV0, CohortV0, ErrorCode, COHORT_V0_SEED_PREFIX};
 
 #[derive(Accounts)]
 #[instruction(
-    campaign_fingerprint: [u8; 32],
     cohort_merkle_root: [u8; 32]
 )]
 pub struct ActivateCohortV0<'info> {
@@ -13,14 +11,7 @@ pub struct ActivateCohortV0<'info> {
 
     #[account(
         mut,
-        seeds = [
-            CAMPAIGN_V0_SEED_PREFIX,
-            admin.key().as_ref(),
-            campaign_fingerprint.as_ref()
-        ],
-        bump = campaign.bump,
         has_one = admin @ ErrorCode::CampaignAdminMismatch,
-        constraint = campaign.fingerprint == campaign_fingerprint @ ErrorCode::CampaignFingerprintMismatch,
     )]
     pub campaign: Account<'info, CampaignV0>,
 
@@ -39,8 +30,7 @@ pub struct ActivateCohortV0<'info> {
 
 pub fn handle_activate_cohort_v0(
     ctx: Context<ActivateCohortV0>,
-    _campaign_fingerprint: [u8; 32], // consumed in account constraints
-    _cohort_merkle_root: [u8; 32],   // consumed in account constraints
+    _cohort_merkle_root: [u8; 32], // consumed in account constraints
 ) -> Result<()> {
     let cohort = &ctx.accounts.cohort;
     let campaign = &mut ctx.accounts.campaign;

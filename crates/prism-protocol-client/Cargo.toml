@@ -9,10 +9,11 @@ name = "prism_protocol_client"
 path = "src/lib.rs"
 
 [dependencies]
+prism-protocol-sdk = { path = "../prism-protocol-sdk" }
+
 anchor-lang = { workspace = true }
 anchor-spl = { workspace = true }
 hex = { workspace = true }
-prism-protocol-sdk = { path = "../prism-protocol-sdk" }
 solana-client = { workspace = true }
 solana-sdk = { workspace = true }
 spl-associated-token-account = { workspace = true }
