@@ -121,7 +121,7 @@ fn test_claim_receipt_timestamp_edge_cases() {
 
             // Verify ClaimReceipt was created and timestamp is reasonable
             let claim_receipt = test
-                .fetch_claim_receipt(&claim_receipt_address)
+                .fetch_claim_receipt_account(&claim_receipt_address)
                 .expect("ClaimReceipt should exist after successful claim");
 
             println!(

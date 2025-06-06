@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
-use prism_protocol::CampaignStatus;
+use prism_protocol_sdk::{CampaignStatus, CompiledVaultExt as _};
 use solana_pubkey::Pubkey;
+use spl_associated_token_account::get_associated_token_address;
 
 use crate::TestFixture;
 
@@ -21,7 +22,7 @@ use crate::TestFixture;
 #[derive(Clone, PartialEq)]
 pub struct CampaignSnapshot {
     /// All vault balances by cohort name and vault index
-    pub vault_balances: HashMap<String, Vec<u64>>,
+    pub vault_balances: HashMap<Pubkey, Vec<u64>>,
     /// Admin's token account balance
     pub admin_balance: u64,
     /// Campaign status and metadata
@@ -55,24 +56,25 @@ impl std::fmt::Debug for CampaignSnapshot {
 
 impl CampaignSnapshot {
     /// Capture comprehensive campaign state
-    pub fn capture_all(test: &TestFixture) -> Self {
-        let mut vault_balances = HashMap::new();
+    pub async fn capture_all(test: &TestFixture) -> Self {
+        let mut vault_balances: HashMap<Pubkey, Vec<u64>> = HashMap::new();
 
-        // Capture all vault balances by cohort
-        for cohort in &test.state.compiled_campaign.cohorts {
-            let cohort_vault_balances: Vec<u64> = cohort
-                .vaults
-                .iter()
-                .map(|vault| test.get_token_account_balance(&vault.address).unwrap_or(0))
-                .collect();
-            vault_balances.insert(cohort.name.clone(), cohort_vault_balances);
+        let vaults = test.state.ccdb.compiled_vaults().await;
+        for vault in vaults {
+            let balance = test
+                .get_token_account_balance(&vault.vault_address())
+                .unwrap_or(0);
+
+            vault_balances
+                .entry(vault.cohort_address())
+                .or_insert(Vec::new())
+                .push(balance);
         }
 
         // Get admin token account balance
-        let admin_token_account = spl_associated_token_account::get_associated_token_address(
-            &test.state.compiled_campaign.admin,
-            &test.state.compiled_campaign.mint,
-        );
+        let admin_token_account =
+            get_associated_token_address(&test.state.admin_address(), &test.state.mint_address());
+
         let admin_balance = test
             .get_token_account_balance(&admin_token_account)
             .unwrap_or(0);
@@ -95,17 +97,17 @@ impl CampaignSnapshot {
     }
 
     /// Capture state for specific claimants
-    pub fn capture_with_claimants(test: &TestFixture, claimants: &[Pubkey]) -> Self {
-        let mut snapshot = Self::capture_all(test);
+    pub async fn capture_with_claimants(test: &TestFixture, claimants: &[Pubkey]) -> Self {
+        let mut snapshot = Self::capture_all(test).await;
 
         for claimant in claimants {
-            let claimant_token_account = spl_associated_token_account::get_associated_token_address(
-                claimant,
-                &test.state.compiled_campaign.mint,
-            );
+            let claimant_token_account =
+                get_associated_token_address(claimant, &test.state.mint_address());
+
             let balance = test
                 .get_token_account_balance(&claimant_token_account)
                 .unwrap_or(0);
+
             snapshot.tracked_claimants.insert(*claimant, balance);
         }
 
@@ -121,9 +123,9 @@ impl CampaignSnapshot {
     }
 
     /// Get balance for a specific vault
-    pub fn get_vault_balance(&self, cohort_name: &str, vault_index: usize) -> Option<u64> {
+    pub fn get_vault_balance(&self, cohort_address: &Pubkey, vault_index: usize) -> Option<u64> {
         self.vault_balances
-            .get(cohort_name)
+            .get(cohort_address)
             .and_then(|vaults| vaults.get(vault_index))
             .copied()
     }
@@ -135,17 +137,21 @@ impl CampaignSnapshot {
         for change in expected_changes {
             match change {
                 AccountChange::Vault {
-                    cohort,
+                    cohort_address,
                     vault_index,
                     delta,
                 } => {
-                    let before = self.get_vault_balance(cohort, *vault_index).unwrap_or(0);
-                    let after = other.get_vault_balance(cohort, *vault_index).unwrap_or(0);
+                    let before = self
+                        .get_vault_balance(cohort_address, *vault_index)
+                        .unwrap_or(0);
+                    let after = other
+                        .get_vault_balance(cohort_address, *vault_index)
+                        .unwrap_or(0);
                     let actual_delta = after as i64 - before as i64;
                     assert_eq!(
                         actual_delta, *delta,
                         "Vault {}/{} delta mismatch",
-                        cohort, vault_index
+                        cohort_address, vault_index
                     );
                 }
                 AccountChange::Claimant { pubkey, delta } => {
@@ -167,7 +173,7 @@ impl CampaignSnapshot {
 #[derive(Clone)]
 pub enum AccountChange {
     Vault {
-        cohort: String,
+        cohort_address: Pubkey,
         vault_index: usize,
         delta: i64,
     },

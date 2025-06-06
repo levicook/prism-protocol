@@ -1,7 +1,9 @@
 use {
     crate::{deterministic_keypair, deterministic_pubkey, FixtureStage},
+    prism_protocol_entities::compiled_cohorts,
     prism_protocol_sdk::{
-        compile_campaign, AddressFinder, CampaignCsvRow, CohortsCsvRow, CompiledCampaign,
+        compile_campaign, AddressFinder, CampaignCsvRow, ClaimTreeType, CohortsCsvRow,
+        CompiledCampaignDatabase, CompiledCampaignExt as _,
     },
     rust_decimal::Decimal,
     solana_keypair::Keypair,
@@ -10,41 +12,86 @@ use {
 };
 
 pub struct FixtureState {
-    pub address_finder: AddressFinder,
+    admin_keypair: Keypair,
+    mint_keypair: Keypair,
 
-    pub admin_keypair: Keypair,
-    pub mint_keypair: Keypair,
+    pub ccdb: CompiledCampaignDatabase,
 
-    pub compiled_campaign: CompiledCampaign,
     pub stage: FixtureStage,
 }
 
-impl Default for FixtureState {
-    fn default() -> Self {
-        let address_finder = AddressFinder::default();
-
+impl FixtureState {
+    pub async fn new() -> Self {
         let admin_keypair = default_admin_keypair();
         let mint_keypair = default_mint_keypair();
 
-        let campaign = compile_campaign(
-            address_finder.clone(),
-            &default_campaign_csv_rows(),
-            &default_cohorts_csv_rows(),
+        let compiled_campaign = compile_campaign(
+            admin_keypair.pubkey(),
             DEFAULT_BUDGET,
             mint_keypair.pubkey(),
             DEFAULT_MINT_DECIMALS,
-            admin_keypair.pubkey(),
+            &default_campaign_csv_rows(),
+            &default_cohorts_csv_rows(),
             DEFAULT_CLAIMANTS_PER_VAULT,
+            ClaimTreeType::V1,
         )
+        .await
         .expect("Failed to compile default campaign");
 
         Self {
-            address_finder,
             admin_keypair,
             mint_keypair,
-            compiled_campaign: campaign,
+            ccdb: compiled_campaign,
             stage: FixtureStage::default(),
         }
+    }
+
+    pub fn address_finder(&self) -> &AddressFinder {
+        &self.ccdb.address_finder
+    }
+
+    pub fn admin_address(&self) -> Pubkey {
+        self.admin_keypair.pubkey()
+    }
+
+    pub fn admin_keypair(&self) -> &Keypair {
+        &self.admin_keypair
+    }
+
+    pub fn campaign_address(&self) -> Pubkey {
+        self.ccdb.address_finder.campaign
+    }
+
+    pub async fn campaign_budget(&self) -> u64 {
+        self.ccdb.compiled_campaign().await.campaign_budget()
+    }
+
+    pub fn mint_address(&self) -> Pubkey {
+        self.mint_keypair.pubkey()
+    }
+
+    pub async fn compiled_cohort_count(&self) -> u8 {
+        self.ccdb.compiled_cohort_count().await
+    }
+
+    pub async fn compiled_cohorts(&self) -> Vec<compiled_cohorts::Model> {
+        self.ccdb.compiled_cohorts().await
+    }
+
+    pub async fn mint_decimals(&self) -> u8 {
+        let campaign = self.ccdb.compiled_campaign().await;
+        campaign
+            .mint_decimals
+            .try_into()
+            .expect("Mint decimals out of range")
+    }
+
+    pub fn mint_keypair(&self) -> &Keypair {
+        &self.mint_keypair
+    }
+
+    pub fn prism_program_id(&self) -> Pubkey {
+        self.ccdb.address_finder.prism_program_id
     }
 }
 

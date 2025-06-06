@@ -144,9 +144,9 @@ pub mod prism_protocol {
     // admin
     pub fn reclaim_tokens_v0(
         ctx: Context<ReclaimTokensV0>,
-        cohort_merkle_root_arg: [u8; 32],
+        cohort_merkle_root: [u8; 32],
         vault_index: u8,
     ) -> Result<()> {
-        instructions::handle_reclaim_tokens_v0(ctx, cohort_merkle_root_arg, vault_index)
+        instructions::handle_reclaim_tokens_v0(ctx, cohort_merkle_root, vault_index)
     }
 }

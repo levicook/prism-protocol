@@ -380,34 +380,28 @@ mod tests {
         let allocator = BudgetAllocator::new(dec!(1000), 9).unwrap();
 
         // Invalid percentage
-        assert!(
-            allocator
-                .calculate_cohort_allocation(
-                    dec!(150), // > 100%
-                    dec!(100)
-                )
-                .is_err()
-        );
+        assert!(allocator
+            .calculate_cohort_allocation(
+                dec!(150), // > 100%
+                dec!(100)
+            )
+            .is_err());
 
         // Zero entitlements
-        assert!(
-            allocator
-                .calculate_cohort_allocation(
-                    dec!(50),
-                    dec!(0) // Zero entitlements
-                )
-                .is_err()
-        );
+        assert!(allocator
+            .calculate_cohort_allocation(
+                dec!(50),
+                dec!(0) // Zero entitlements
+            )
+            .is_err());
 
         // Fractional entitlements
-        assert!(
-            allocator
-                .calculate_cohort_allocation(
-                    dec!(50),
-                    dec!(2.5) // Fractional entitlements - invalid
-                )
-                .is_err()
-        );
+        assert!(allocator
+            .calculate_cohort_allocation(
+                dec!(50),
+                dec!(2.5) // Fractional entitlements - invalid
+            )
+            .is_err());
 
         // Invalid decimals (>28 due to rust_decimal limitation)
         assert!(BudgetAllocator::new(dec!(1000), 30).is_err());

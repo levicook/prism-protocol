@@ -3,7 +3,8 @@ use std::{collections::HashMap, str::FromStr as _};
 use anchor_lang::AnchorSerialize as _;
 use prism_protocol::ClaimProof;
 use prism_protocol_entities::{
-    campaign_csv_rows, campaigns, claim_leaves, claim_proofs, cohorts, cohorts_csv_rows, vaults,
+    campaign_csv_rows, cohorts_csv_rows, compiled_campaigns, compiled_cohorts, compiled_leaves,
+    compiled_proofs, compiled_vaults,
 };
 use rust_decimal::Decimal;
 use sea_orm::{
@@ -13,9 +14,9 @@ use sea_orm::{
 use solana_sdk::pubkey::Pubkey;
 
 use crate::{
-    AddressFinder, BudgetAllocator, VaultAllocation,
     budget_allocation::CohortAllocation,
     campaign_compiler::{CompilerError, CompilerResult},
+    AddressFinder, BudgetAllocator, VaultAllocation,
 };
 
 use super::{ClaimTree, ClaimTreeType};
@@ -24,8 +25,8 @@ pub(super) async fn import_cohorts(
     address_finder: &AddressFinder,
     db: &DatabaseConnection,
 ) -> CompilerResult<()> {
-    let Some(campaign) = campaigns::Entity::find()
-        .filter(campaigns::Column::Address.eq(address_finder.campaign.to_string()))
+    let Some(campaign) = compiled_campaigns::Entity::find()
+        .filter(compiled_campaigns::Column::Address.eq(address_finder.campaign.to_string()))
         .one(db)
         .await?
     else {
@@ -45,12 +46,12 @@ pub(super) async fn import_cohorts(
     let mut cohorts_csv_rows_pager = cohorts_csv_rows::Entity::find().paginate(db, 100);
     while let Some(cohorts_csv_rows) = cohorts_csv_rows_pager.fetch_and_next().await? {
         let mut cohorts = Vec::new();
-        let mut claim_leaves = Vec::new();
-        let mut claim_proofs = Vec::new();
+        let mut leaves = Vec::new();
+        let mut proofs = Vec::new();
         let mut vaults = Vec::new();
 
         for cohort_csv_row in cohorts_csv_rows {
-            let (cohort, cohort_metadata) = build_cohort_with_metadata(
+            let (compiled_cohort, cohort_metadata) = build_compiled_cohort_and_metadata(
                 &address_finder,
                 db,
                 &cohort_csv_row,
@@ -76,14 +77,14 @@ pub(super) async fn import_cohorts(
                     ClaimProof::V1(proof) => hex::encode(proof.try_to_vec()?),
                 };
 
-                claim_leaves.push(claim_leaves::ActiveModel {
+                leaves.push(compiled_leaves::ActiveModel {
                     cohort_address: Set(cohort_metadata.cohort_address.to_string()),
                     claimant: Set(claimant.to_string()),
                     entitlements: Set(entitlements.to_string()),
-                    vault_index: Set(claim_leaf.vault_index.to_string()),
+                    vault_index: Set(claim_leaf.vault_index.into()),
                 });
 
-                claim_proofs.push(claim_proofs::ActiveModel {
+                proofs.push(compiled_proofs::ActiveModel {
                     cohort_address: Set(cohort_metadata.cohort_address.to_string()),
                     claimant: Set(claimant.to_string()),
                     merkle_proof: Set(merkle_proof),
@@ -108,7 +109,7 @@ pub(super) async fn import_cohorts(
                 )?;
 
                 vaults.push(
-                    build_vault(
+                    build_compiled_vault(
                         &address_finder,
                         &cohort_metadata,
                         vault_index,
@@ -121,20 +122,24 @@ pub(super) async fn import_cohorts(
                 );
             }
 
-            cohorts.push(cohort);
+            cohorts.push(compiled_cohort);
         }
 
-        cohorts::Entity::insert_many(cohorts).exec(db).await?;
-
-        claim_leaves::Entity::insert_many(claim_leaves)
+        compiled_cohorts::Entity::insert_many(cohorts)
             .exec(db)
             .await?;
 
-        claim_proofs::Entity::insert_many(claim_proofs)
+        compiled_leaves::Entity::insert_many(leaves)
             .exec(db)
             .await?;
 
-        vaults::Entity::insert_many(vaults).exec(db).await?;
+        compiled_proofs::Entity::insert_many(proofs)
+            .exec(db)
+            .await?;
+
+        compiled_vaults::Entity::insert_many(vaults)
+            .exec(db)
+            .await?;
     }
 
     Ok(())
@@ -149,14 +154,14 @@ struct CohortMetadata {
     vault_count: u8,
 }
 
-async fn build_cohort_with_metadata(
+async fn build_compiled_cohort_and_metadata(
     address_finder: &AddressFinder,
     db: &DatabaseConnection,
     cohort_csv_row: &cohorts_csv_rows::Model,
     budget_allocator: &BudgetAllocator,
     claimants_per_vault: Decimal,
     claim_tree_type: &ClaimTreeType,
-) -> CompilerResult<(cohorts::ActiveModel, CohortMetadata)> {
+) -> CompilerResult<(compiled_cohorts::ActiveModel, CohortMetadata)> {
     let claimant_entitlements: Vec<(Pubkey, u64)> = campaign_csv_rows::Entity::find()
         .filter(campaign_csv_rows::Column::Cohort.eq(&cohort_csv_row.cohort))
         .all(db)
@@ -204,7 +209,7 @@ async fn build_cohort_with_metadata(
         total_entitlements,
     )?;
 
-    let cohort = cohorts::ActiveModel {
+    let cohort = compiled_cohorts::ActiveModel {
         address: Set(cohort_address.to_string()),
         cohort_csv_row_id: Set(cohort_csv_row.id),
         merkle_root: Set(hex::encode(merkle_root)),
@@ -227,7 +232,7 @@ async fn build_cohort_with_metadata(
     Ok((cohort, metadata))
 }
 
-async fn build_vault(
+async fn build_compiled_vault(
     address_finder: &AddressFinder,
     cohort_metadata: &CohortMetadata,
     vault_index: u8,
@@ -235,7 +240,7 @@ async fn build_vault(
     vault_dust: Decimal,
     amount_per_entitlement: Decimal,
     total_entitlements: Decimal,
-) -> CompilerResult<vaults::ActiveModel> {
+) -> CompilerResult<compiled_vaults::ActiveModel> {
     debug_assert!(total_entitlements > Decimal::ZERO);
 
     let (vault_address, _) = address_finder.find_vault_v0_address(
@@ -243,10 +248,10 @@ async fn build_vault(
         vault_index,
     );
 
-    Ok(vaults::ActiveModel {
+    Ok(compiled_vaults::ActiveModel {
         vault_address: Set(vault_address.to_string()),
         cohort_address: Set(cohort_metadata.cohort_address.to_string()),
-        vault_index: Set(vault_index.to_string()),
+        vault_index: Set(vault_index.into()),
         vault_budget: Set(vault_budget.to_string()),
         vault_dust: Set(vault_dust.to_string()),
         amount_per_entitlement: Set(amount_per_entitlement.to_string()),

@@ -1,20 +1,12 @@
 use {
-    crate::{create_mint, load_prism_protocol, FixtureStage, FixtureState},
+    crate::{create_mint, load_prism_protocol, mint_to, FixtureStage, FixtureState},
     anchor_lang::AccountDeserialize,
     litesvm::{
         types::{FailedTransactionMetadata, TransactionResult},
         LiteSVM,
     },
     litesvm_token::spl_token::solana_program::native_token::LAMPORTS_PER_SOL,
-    prism_protocol::{CampaignV0, ClaimLeaf, ClaimReceiptV0, CohortV0},
-    prism_protocol_sdk::{
-        build_activate_campaign_v0_ix, build_activate_cohort_v0_ix, build_activate_vault_v0_ix,
-        build_claim_tokens_v0_ix, build_initialize_campaign_v0_ix, build_initialize_cohort_v0_ix,
-        build_initialize_vault_v0_ix, build_make_campaign_unstoppable_v0_ix,
-        build_pause_campaign_v0_ix, build_permanently_halt_campaign_v0_ix,
-        build_reclaim_tokens_v0_ix, build_resume_campaign_v0_ix, CompiledCohort,
-    },
-    rust_decimal::prelude::ToPrimitive,
+    prism_protocol::{CampaignV0, ClaimReceiptV0, CohortV0},
     solana_account::Account,
     solana_instruction::Instruction,
     solana_keypair::Keypair,
@@ -23,7 +15,6 @@ use {
     solana_signer::Signer as _,
     solana_sysvar::clock::Clock,
     solana_transaction::Transaction,
-    spl_associated_token_account::get_associated_token_address,
     std::collections::HashMap,
 };
 
@@ -35,17 +26,28 @@ pub struct TestFixture {
 }
 
 impl TestFixture {
-    pub fn new(state: FixtureState, mut svm: LiteSVM) -> Result<Self, FailedTransactionMetadata> {
-        load_prism_protocol(&mut svm, state.address_finder.program_id);
+    pub async fn new(
+        state: FixtureState,
+        mut svm: LiteSVM,
+    ) -> Result<Self, FailedTransactionMetadata> {
+        load_prism_protocol(&mut svm, state.prism_program_id());
 
-        svm.airdrop(&state.compiled_campaign.admin, LAMPORTS_PER_SOL * 100)?;
+        svm.airdrop(&state.admin_address(), LAMPORTS_PER_SOL * 100)?;
 
         create_mint(
             &mut svm,
-            &state.admin_keypair,
-            &state.mint_keypair,
-            state.compiled_campaign.mint_decimals,
+            &state.admin_keypair(),
+            &state.mint_keypair(),
+            state.mint_decimals().await,
             None,
+        )?;
+
+        mint_to(
+            &mut svm,
+            &state.admin_keypair(),
+            &state.mint_address(),
+            &state.admin_address(),
+            state.campaign_budget().await,
         )?;
 
         Ok(Self {
@@ -87,7 +89,7 @@ impl TestFixture {
     }
 
     pub fn send_instructions(&mut self, instructions: &[Instruction]) -> TransactionResult {
-        let fee_payer = &self.state.admin_keypair;
+        let fee_payer = &self.state.admin_keypair();
 
         let tx = Transaction::new(
             &[fee_payer],
@@ -135,7 +137,7 @@ impl TestFixture {
         Ok(())
     }
 
-    pub fn jump_to(&mut self, target_stage: FixtureStage) {
+    pub async fn jump_to(&mut self, target_stage: FixtureStage) {
         // step all stages:
         // - greater than campaign compiled (initial state)
         // - greater than current stage
@@ -154,44 +156,37 @@ impl TestFixture {
         stages_to_step.sort_by(|a, b| a.cmp(b));
 
         for stage in stages_to_step {
-            self.step_to(stage);
+            self.step_to(stage).await;
         }
     }
 
-    pub fn step_to(&mut self, stage: FixtureStage) {
+    pub async fn step_to(&mut self, stage: FixtureStage) {
         match stage {
             FixtureStage::CampaignCompiled => return,
-            FixtureStage::CampaignInitialized => self.try_initialize_campaign(),
-            FixtureStage::CohortsInitialized => self.try_initialize_cohorts(),
-            FixtureStage::VaultsInitialized => self.try_initialize_vaults(),
-            FixtureStage::VaultsFunded => self.try_fund_vaults(),
-            FixtureStage::VaultsActivated => self.try_activate_vaults(),
-            FixtureStage::CohortsActivated => self.try_activate_cohorts(),
-            FixtureStage::CampaignActivated => self.try_activate_campaign(),
+            FixtureStage::CampaignInitialized => self.try_initialize_campaign().await,
+            FixtureStage::CohortsInitialized => self.try_initialize_cohorts().await,
+            FixtureStage::VaultsInitialized => self.try_initialize_vaults().await,
+            FixtureStage::VaultsFunded => self.try_fund_vaults().await,
+            FixtureStage::VaultsActivated => self.try_activate_vaults().await,
+            FixtureStage::CohortsActivated => self.try_activate_cohorts().await,
+            FixtureStage::CampaignActivated => self.try_activate_campaign().await,
         }
         .unwrap_or_else(|e| panic!("Failed to advance to {:?}: {:?}", stage, e));
 
         self.state.stage = stage;
     }
 
-    pub fn try_initialize_campaign(&mut self) -> Result<(), FailedTransactionMetadata> {
-        let (ix, _, _) = build_initialize_campaign_v0_ix(
-            &self.state.address_finder,
-            self.state.compiled_campaign.admin,
-            self.state.compiled_campaign.fingerprint,
-            self.state.compiled_campaign.mint,
-            self.state
-                .compiled_campaign
-                .cohorts
-                .len()
-                .try_into()
-                .expect("Cohort count too large"),
-        )
-        .expect("Failed to build initialize campaign v0 ix");
+    pub async fn try_initialize_campaign(&mut self) -> Result<(), FailedTransactionMetadata> {
+        let ix = self
+            .state
+            .ccdb
+            .build_initialize_campaign_ix()
+            .await
+            .expect("Failed to build initialize campaign v0 ix");
 
         let tx = Transaction::new(
-            &[&self.state.admin_keypair],
-            Message::new(&[ix], Some(&self.state.compiled_campaign.admin)),
+            &[&self.state.admin_keypair()],
+            Message::new(&[ix], Some(&self.state.admin_address())),
             self.latest_blockhash(),
         );
 
@@ -200,95 +195,61 @@ impl TestFixture {
         Ok(())
     }
 
-    pub fn try_initialize_cohorts(&mut self) -> Result<(), FailedTransactionMetadata> {
-        let mut txs = Vec::new();
-
-        for cohort in &self.state.compiled_campaign.cohorts {
-            let amount_per_entitlement = cohort
-                .amount_per_entitlement
-                .floor()
-                .to_u64()
-                .expect("Amount too large");
-
-            let expected_vault_count = cohort
-                .vault_count
-                .try_into()
-                .expect("Vault count too large");
-
-            let (ix, _, _) = build_initialize_cohort_v0_ix(
-                &self.state.address_finder,
-                self.state.compiled_campaign.admin,
-                self.state.compiled_campaign.fingerprint,
-                cohort.merkle_root,
-                amount_per_entitlement,
-                expected_vault_count,
-            )
-            .expect("Failed to build initialize cohort v0 ix");
-
-            txs.push(Transaction::new(
-                &[&self.state.admin_keypair],
-                Message::new(&[ix], Some(&self.state.compiled_campaign.admin)),
-                self.latest_blockhash(),
-            ));
-        }
-
-        self.send_transactions(txs)
+    pub async fn try_initialize_cohorts(&mut self) -> Result<(), FailedTransactionMetadata> {
+        self.send_transactions(
+            self.state
+                .ccdb
+                .build_initialize_vault_ixs()
+                .await
+                .expect("Failed to build initialize cohort v0 ix")
+                .into_iter()
+                .map(|ix| {
+                    Transaction::new(
+                        &[&self.state.admin_keypair()],
+                        Message::new(&[ix], Some(&self.state.admin_address())),
+                        self.latest_blockhash(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+        )
     }
 
-    pub fn try_initialize_vaults(&mut self) -> Result<(), FailedTransactionMetadata> {
-        let mut txs = Vec::new();
-
-        for cohort in &self.state.compiled_campaign.cohorts {
-            for (vault_index, _) in cohort.vaults.iter().enumerate() {
-                let (ix, _, _) = build_initialize_vault_v0_ix(
-                    &self.state.address_finder,
-                    self.state.compiled_campaign.admin,
-                    self.state.compiled_campaign.fingerprint,
-                    cohort.merkle_root,
-                    self.state.compiled_campaign.mint,
-                    vault_index.try_into().expect("Vault index too large"),
-                )
-                .expect("Failed to build initialize vault v0 ix");
-
-                txs.push(Transaction::new(
-                    &[&self.state.admin_keypair],
-                    Message::new(&[ix], Some(&self.state.compiled_campaign.admin)),
-                    self.latest_blockhash(),
-                ));
-            }
-        }
-
-        self.send_transactions(txs)
+    pub async fn try_initialize_vaults(&mut self) -> Result<(), FailedTransactionMetadata> {
+        self.send_transactions(
+            self.state
+                .ccdb
+                .build_initialize_vault_ixs()
+                .await
+                .expect("Failed to build initialize vault v0 ix")
+                .into_iter()
+                .map(|ix| {
+                    Transaction::new(
+                        &[&self.state.admin_keypair()],
+                        Message::new(&[ix], Some(&self.state.admin_address())),
+                        self.latest_blockhash(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+        )
     }
 
-    pub fn try_fund_vaults(&mut self) -> Result<(), FailedTransactionMetadata> {
-        let mut txs = Vec::new();
-
-        for cohort in &self.state.compiled_campaign.cohorts {
-            for vault in cohort.vaults.iter() {
-                let expected_balance = vault
-                    .required_tokens_u64()
-                    .expect("Required tokens too large");
-
-                let ix = spl_token::instruction::mint_to(
-                    &self.state.address_finder.token_program_id,
-                    &self.state.compiled_campaign.mint,
-                    &vault.address,
-                    &self.state.admin_keypair.pubkey(),
-                    &[&self.state.admin_keypair.pubkey()],
-                    expected_balance,
-                )
-                .expect("Failed to build mint_to ix");
-
-                txs.push(Transaction::new(
-                    &[&self.state.admin_keypair],
-                    Message::new(&[ix], Some(&self.state.compiled_campaign.admin)),
-                    self.latest_blockhash(),
-                ));
-            }
-        }
-
-        self.send_transactions(txs)
+    pub async fn try_fund_vaults(&mut self) -> Result<(), FailedTransactionMetadata> {
+        self.send_transactions(
+            self.state
+                .ccdb
+                .build_fund_vault_ixs()
+                .await
+                .expect("Failed to build fund vault v0 ix")
+                .into_iter()
+                .map(|ix| {
+                    Transaction::new(
+                        &[&self.state.admin_keypair()],
+                        Message::new(&[ix], Some(&self.state.admin_address())),
+                        self.latest_blockhash(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+        )
     }
 
     /// Fund vaults with custom amounts, falling back to compiled campaign amounts for unspecified vaults
@@ -321,74 +282,64 @@ impl TestFixture {
     /// test_fixture.try_fund_vaults_with_custom_amounts(custom_funding)?;
     /// # Ok::<(), FailedTransactionMetadata>(())
     /// ```
-    pub fn try_fund_vaults_with_custom_amounts(
+    pub async fn try_fund_vaults_with_custom_amounts(
         &mut self,
-        custom_amounts: HashMap<Pubkey, u64>,
+        _custom_amounts: HashMap<Pubkey, u64>,
     ) -> Result<(), FailedTransactionMetadata> {
-        let mut txs = Vec::new();
+        todo!("not implemented")
+        // let mut txs = Vec::new();
 
-        for cohort in &self.state.compiled_campaign.cohorts {
-            for vault in cohort.vaults.iter() {
-                // Use custom amount if specified, otherwise fall back to compiled campaign amount
-                let funding_amount =
-                    custom_amounts
-                        .get(&vault.address)
-                        .copied()
-                        .unwrap_or_else(|| {
-                            vault
-                                .required_tokens_u64()
-                                .expect("Required tokens too large")
-                        });
+        // for cohort in &self.state.compiled_cohorts().await {
+        //     for vault in cohort.vaults.iter() {
+        //         // Use custom amount if specified, otherwise fall back to compiled campaign amount
+        //         let funding_amount =
+        //             custom_amounts
+        //                 .get(&vault.address)
+        //                 .copied()
+        //                 .unwrap_or_else(|| {
+        //                     vault
+        //                         .required_tokens_u64()
+        //                         .expect("Required tokens too large")
+        //                 });
 
-                let ix = spl_token::instruction::mint_to(
-                    &self.state.address_finder.token_program_id,
-                    &self.state.compiled_campaign.mint,
-                    &vault.address,
-                    &self.state.admin_keypair.pubkey(),
-                    &[&self.state.admin_keypair.pubkey()],
-                    funding_amount,
-                )
-                .expect("Failed to build mint_to ix");
+        //         let ix = spl_token::instruction::mint_to(
+        //             &self.state.address_finder.token_program_id,
+        //             &self.state.mint_pubkey(),
+        //             &vault.address,
+        //             &self.state.admin_address(),
+        //             &[&self.state.admin_keypair()],
+        //             funding_amount,
+        //         )
+        //         .expect("Failed to build mint_to ix");
 
-                txs.push(Transaction::new(
-                    &[&self.state.admin_keypair],
-                    Message::new(&[ix], Some(&self.state.compiled_campaign.admin)),
-                    self.latest_blockhash(),
-                ));
-            }
-        }
+        //         txs.push(Transaction::new(
+        //             &[&self.state.admin_keypair()],
+        //             Message::new(&[ix], Some(&self.state.admin_address())),
+        //             self.latest_blockhash(),
+        //         ));
+        //     }
+        // }
 
-        self.send_transactions(txs)
+        // self.send_transactions(txs)
     }
 
-    pub fn try_activate_vaults(&mut self) -> Result<(), FailedTransactionMetadata> {
-        let mut txs = Vec::new();
-
-        for cohort in &self.state.compiled_campaign.cohorts {
-            for (vault_index, vault) in cohort.vaults.iter().enumerate() {
-                let expected_balance = vault
-                    .required_tokens_u64()
-                    .expect("Required tokens too large");
-
-                let (ix, _, _) = build_activate_vault_v0_ix(
-                    &self.state.address_finder,
-                    self.state.compiled_campaign.admin,
-                    self.state.compiled_campaign.fingerprint,
-                    cohort.merkle_root,
-                    vault_index.try_into().expect("Vault index too large"),
-                    expected_balance,
-                )
-                .expect("Failed to build activate vault v0 ix");
-
-                txs.push(Transaction::new(
-                    &[&self.state.admin_keypair],
-                    Message::new(&[ix], Some(&self.state.compiled_campaign.admin)),
-                    self.latest_blockhash(),
-                ));
-            }
-        }
-
-        self.send_transactions(txs)
+    pub async fn try_activate_vaults(&mut self) -> Result<(), FailedTransactionMetadata> {
+        self.send_transactions(
+            self.state
+                .ccdb
+                .build_activate_vault_ixs()
+                .await
+                .expect("Failed to build activate vault v0 ix")
+                .into_iter()
+                .map(|ix| {
+                    Transaction::new(
+                        &[&self.state.admin_keypair()],
+                        Message::new(&[ix], Some(&self.state.admin_address())),
+                        self.latest_blockhash(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+        )
     }
 
     /// Activate vaults with custom expected balance validation, falling back to compiled campaign amounts
@@ -425,75 +376,72 @@ impl TestFixture {
     /// // Now vault is activated but has insufficient balance for larger claims!
     /// # Ok::<(), FailedTransactionMetadata>(())
     /// ```
-    pub fn try_activate_vaults_with_custom_expected_balance(
+    pub async fn try_activate_vaults_with_custom_expected_balance(
         &mut self,
-        custom_expected_balance: HashMap<Pubkey, u64>,
+        _custom_expected_balance: HashMap<Pubkey, u64>,
     ) -> Result<(), FailedTransactionMetadata> {
-        let mut txs = Vec::new();
+        todo!("not implemented")
+        // let mut txs = Vec::new();
 
-        for cohort in &self.state.compiled_campaign.cohorts {
-            for (vault_index, vault) in cohort.vaults.iter().enumerate() {
-                // Use custom expected balance if specified, otherwise fall back to compiled campaign amount
-                let expected_balance = custom_expected_balance
-                    .get(&vault.address)
-                    .copied()
-                    .unwrap_or_else(|| {
-                        vault
-                            .required_tokens_u64()
-                            .expect("Required tokens too large")
-                    });
+        // for cohort in &self.state.compiled_cohorts().await {
+        //     for (vault_index, vault) in cohort.vaults.iter().enumerate() {
+        //         // Use custom expected balance if specified, otherwise fall back to compiled campaign amount
+        //         let expected_balance = custom_expected_balance
+        //             .get(&vault.address)
+        //             .copied()
+        //             .unwrap_or_else(|| {
+        //                 vault
+        //                     .required_tokens_u64()
+        //                     .expect("Required tokens too large")
+        //             });
 
-                let (ix, _, _) = build_activate_vault_v0_ix(
-                    &self.state.address_finder,
-                    self.state.compiled_campaign.admin,
-                    self.state.compiled_campaign.fingerprint,
-                    cohort.merkle_root,
-                    vault_index.try_into().expect("Vault index too large"),
-                    expected_balance,
-                )
-                .expect("Failed to build activate vault v0 ix");
+        //         let (ix, _, _) = build_activate_vault_v0_ix(
+        //             &self.state.address_finder(),
+        //             cohort.merkle_root(),
+        //             vault_index.try_into().expect("Vault index too large"),
+        //             expected_balance,
+        //         )
+        //         .expect("Failed to build activate vault v0 ix");
 
-                txs.push(Transaction::new(
-                    &[&self.state.admin_keypair],
-                    Message::new(&[ix], Some(&self.state.compiled_campaign.admin)),
-                    self.latest_blockhash(),
-                ));
-            }
-        }
+        //         txs.push(Transaction::new(
+        //             &[&self.state.admin_keypair()],
+        //             Message::new(&[ix], Some(&self.state.admin_address())),
+        //             self.latest_blockhash(),
+        //         ));
+        //     }
+        // }
 
-        self.send_transactions(txs)
+        // self.send_transactions(txs)
     }
 
-    pub fn try_activate_cohorts(&mut self) -> Result<(), FailedTransactionMetadata> {
-        let mut txs = Vec::new();
-
-        for cohort in &self.state.compiled_campaign.cohorts {
-            let (ix, _, _) = build_activate_cohort_v0_ix(
-                &self.state.address_finder,
-                self.state.compiled_campaign.admin,
-                self.state.compiled_campaign.fingerprint,
-                cohort.merkle_root,
-            )
-            .expect("Failed to build activate cohort v0 ix");
-
-            txs.push(Transaction::new(
-                &[&self.state.admin_keypair],
-                Message::new(&[ix], Some(&self.state.compiled_campaign.admin)),
-                self.latest_blockhash(),
-            ));
-        }
-
-        self.send_transactions(txs)
+    pub async fn try_activate_cohorts(&mut self) -> Result<(), FailedTransactionMetadata> {
+        self.send_transactions(
+            self.state
+                .ccdb
+                .build_activate_cohort_ixs()
+                .await
+                .expect("Failed to build activate cohort v0 ix")
+                .into_iter()
+                .map(|ix| {
+                    Transaction::new(
+                        &[&self.state.admin_keypair()],
+                        Message::new(&[ix], Some(&self.state.admin_address())),
+                        self.latest_blockhash(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+        )
     }
 
-    pub fn try_activate_campaign(&mut self) -> Result<(), FailedTransactionMetadata> {
+    pub async fn try_activate_campaign(&mut self) -> Result<(), FailedTransactionMetadata> {
         // For test fixtures, we can use placeholder values
         let final_db_ipfs_hash = [1u8; 32]; // Placeholder IPFS hash
         let go_live_slot = self.current_slot() + 10; // Go live in 10 slots
         self.try_activate_campaign_with_args(Some(final_db_ipfs_hash), Some(go_live_slot))
+            .await
     }
 
-    pub fn try_activate_campaign_with_args(
+    pub async fn try_activate_campaign_with_args(
         &mut self,
         final_db_ipfs_hash: Option<[u8; 32]>,
         go_live_slot: Option<u64>,
@@ -502,18 +450,16 @@ impl TestFixture {
         let final_db_ipfs_hash = final_db_ipfs_hash.unwrap_or([1u8; 32]); // Placeholder IPFS hash
         let go_live_slot = go_live_slot.unwrap_or(self.current_slot() + 10); // Go live in 10 slots
 
-        let (ix, _, _) = build_activate_campaign_v0_ix(
-            &self.state.address_finder,
-            self.state.compiled_campaign.admin,
-            self.state.compiled_campaign.fingerprint,
-            final_db_ipfs_hash,
-            go_live_slot,
-        )
-        .expect("Failed to build activate campaign v0 ix");
+        let ix = self
+            .state
+            .ccdb
+            .build_activate_campaign_ix(final_db_ipfs_hash, go_live_slot)
+            .await
+            .expect("Failed to build activate campaign v0 ix");
 
         let tx = Transaction::new(
-            &[&self.state.admin_keypair],
-            Message::new(&[ix], Some(&self.state.compiled_campaign.admin)),
+            &[&self.state.admin_keypair()],
+            Message::new(&[ix], Some(&self.state.admin_address())),
             self.latest_blockhash(),
         );
 
@@ -522,17 +468,17 @@ impl TestFixture {
         Ok(())
     }
 
-    pub fn try_make_campaign_unstoppable(&mut self) -> Result<(), FailedTransactionMetadata> {
-        let (ix, _, _) = build_make_campaign_unstoppable_v0_ix(
-            &self.state.address_finder,
-            self.state.compiled_campaign.admin,
-            self.state.compiled_campaign.fingerprint,
-        )
-        .expect("Failed to build make campaign unstoppable v0 ix");
+    pub async fn try_make_campaign_unstoppable(&mut self) -> Result<(), FailedTransactionMetadata> {
+        let ix = self
+            .state
+            .ccdb
+            .build_make_campaign_unstoppable_ix()
+            .await
+            .expect("Failed to build make campaign unstoppable v0 ix");
 
         let tx = Transaction::new(
-            &[&self.state.admin_keypair],
-            Message::new(&[ix], Some(&self.state.compiled_campaign.admin)),
+            &[&self.state.admin_keypair()],
+            Message::new(&[ix], Some(&self.state.admin_address())),
             self.latest_blockhash(),
         );
 
@@ -541,17 +487,17 @@ impl TestFixture {
         Ok(())
     }
 
-    pub fn try_pause_campaign(&mut self) -> Result<(), FailedTransactionMetadata> {
-        let (ix, _, _) = build_pause_campaign_v0_ix(
-            &self.state.address_finder,
-            self.state.compiled_campaign.admin,
-            self.state.compiled_campaign.fingerprint,
-        )
-        .expect("Failed to build pause campaign v0 ix");
+    pub async fn try_pause_campaign(&mut self) -> Result<(), FailedTransactionMetadata> {
+        let ix = self
+            .state
+            .ccdb
+            .build_pause_campaign_ix()
+            .await
+            .expect("Failed to build pause campaign v0 ix");
 
         let tx = Transaction::new(
-            &[&self.state.admin_keypair],
-            Message::new(&[ix], Some(&self.state.compiled_campaign.admin)),
+            &[&self.state.admin_keypair()],
+            Message::new(&[ix], Some(&self.state.admin_address())),
             self.latest_blockhash(),
         );
 
@@ -560,17 +506,17 @@ impl TestFixture {
         Ok(())
     }
 
-    pub fn try_resume_campaign(&mut self) -> Result<(), FailedTransactionMetadata> {
-        let (ix, _, _) = build_resume_campaign_v0_ix(
-            &self.state.address_finder,
-            self.state.compiled_campaign.admin,
-            self.state.compiled_campaign.fingerprint,
-        )
-        .expect("Failed to build resume campaign v0 ix");
+    pub async fn try_resume_campaign(&mut self) -> Result<(), FailedTransactionMetadata> {
+        let ix = self
+            .state
+            .ccdb
+            .build_resume_campaign_ix()
+            .await
+            .expect("Failed to build resume campaign v0 ix");
 
         let tx = Transaction::new(
-            &[&self.state.admin_keypair],
-            Message::new(&[ix], Some(&self.state.compiled_campaign.admin)),
+            &[&self.state.admin_keypair()],
+            Message::new(&[ix], Some(&self.state.admin_address())),
             self.latest_blockhash(),
         );
 
@@ -579,17 +525,17 @@ impl TestFixture {
         Ok(())
     }
 
-    pub fn try_permanently_halt_campaign(&mut self) -> Result<(), FailedTransactionMetadata> {
-        let (ix, _, _) = build_permanently_halt_campaign_v0_ix(
-            &self.state.address_finder,
-            self.state.compiled_campaign.admin,
-            self.state.compiled_campaign.fingerprint,
-        )
-        .expect("Failed to build permanently halt campaign v0 ix");
+    pub async fn try_permanently_halt_campaign(&mut self) -> Result<(), FailedTransactionMetadata> {
+        let ix = self
+            .state
+            .ccdb
+            .build_permanently_halt_campaign_ix()
+            .await
+            .expect("Failed to build permanently halt campaign v0 ix");
 
         let tx = Transaction::new(
-            &[&self.state.admin_keypair],
-            Message::new(&[ix], Some(&self.state.compiled_campaign.admin)),
+            &[&self.state.admin_keypair()],
+            Message::new(&[ix], Some(&self.state.admin_address())),
             self.latest_blockhash(),
         );
 
@@ -598,92 +544,45 @@ impl TestFixture {
         Ok(())
     }
 
-    pub fn try_claim_tokens(
+    pub async fn try_claim_tokens(
         &mut self,
         claimant: &Keypair,
     ) -> Result<(), FailedTransactionMetadata> {
-        let mut txs = Vec::new();
-
-        let claimant_token_account = get_associated_token_address(
-            &claimant.pubkey(), //
-            &self.state.mint_keypair.pubkey(),
-        );
-
-        let cohorts: Vec<(CompiledCohort, ClaimLeaf)> = self
-            .state
-            .compiled_campaign
-            .find_claimant_in_all_cohorts(&claimant.pubkey());
-
-        // let mut vault_balances_before = HashMap::new();
-
-        for (cohort, leaf) in cohorts {
-            let merkle_proof = cohort
-                .proof_for_claimant(&claimant.pubkey())
-                .expect("Should be able to generate proof");
-
-            let (ix, _, _) = build_claim_tokens_v0_ix(
-                &self.state.address_finder,
-                self.state.compiled_campaign.admin,
-                claimant.pubkey(),
-                self.state.compiled_campaign.mint,
-                claimant_token_account,
-                self.state.compiled_campaign.fingerprint,
-                cohort.merkle_root,
-                merkle_proof,
-                leaf.assigned_vault_index,
-                leaf.entitlements,
-            )
-            .expect("Failed to build claim tokens v0 ix");
-
-            // vault_balances_before.insert(
-            //     cohort.vaults[leaf.assigned_vault_index as usize].address,
-            //     self.get_token_account_balance(&cohort.vaults[leaf.assigned_vault_index as usize].address)
-            //         .expect("Should be able to read vault balance"),
-            // );
-
-            txs.push(Transaction::new(
-                &[&claimant],
-                Message::new(&[ix], Some(&claimant.pubkey())),
-                self.latest_blockhash(),
-            ));
-        }
-
-        self.send_transactions(txs)?;
-
-        Ok(())
+        self.send_transactions(
+            self.state
+                .ccdb
+                .build_claim_tokens_ixs(claimant.pubkey())
+                .await
+                .expect("Failed to build claim tokens v0 ix")
+                .into_iter()
+                .map(|ix| {
+                    Transaction::new(
+                        &[&self.state.admin_keypair()],
+                        Message::new(&[ix], Some(&self.state.admin_address())),
+                        self.latest_blockhash(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+        )
     }
 
-    pub fn try_reclaim_tokens(&mut self) -> Result<(), FailedTransactionMetadata> {
-        let mut txs = Vec::new();
-
-        let admin_token_account = get_associated_token_address(
-            &self.state.admin_keypair.pubkey(), //
-            &self.state.mint_keypair.pubkey(),
-        );
-
-        for cohort in &self.state.compiled_campaign.cohorts {
-            for (vault_index, _) in cohort.vaults.iter().enumerate() {
-                let (ix, _, _) = build_reclaim_tokens_v0_ix(
-                    &self.state.address_finder,
-                    self.state.compiled_campaign.admin,
-                    admin_token_account,
-                    self.state.compiled_campaign.fingerprint,
-                    cohort.merkle_root,
-                    vault_index.try_into().expect("Vault index too large"),
-                )
-                .expect("Failed to build reclaim tokens v0 ix");
-
-                txs.push(Transaction::new(
-                    &[&self.state.admin_keypair],
-                    Message::new(&[ix], Some(&self.state.compiled_campaign.admin)),
-                    self.latest_blockhash(),
-                ));
-            }
-        }
-
-        self.send_transactions(txs)?;
-
-        Ok(())
+    pub async fn try_reclaim_tokens(&mut self) -> Result<(), FailedTransactionMetadata> {
+        self.send_transactions(
+            self.state
+                .ccdb
+                .build_reclaim_tokens_ixs()
+                .await
+                .expect("Failed to build reclaim tokens v0 ix")
+                .into_iter()
+                .map(|ix| {
+                    Transaction::new(
+                        &[&self.state.admin_keypair()],
+                        Message::new(&[ix], Some(&self.state.admin_address())),
+                        self.latest_blockhash(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+        )
     }
 
     pub fn fetch_account(&self, address: &Pubkey) -> Option<Account> {
@@ -691,16 +590,19 @@ impl TestFixture {
     }
 
     pub fn fetch_campaign_account(&self) -> Option<CampaignV0> {
-        self.fetch_account(&self.state.compiled_campaign.address)
+        self.fetch_account(&self.state.campaign_address())
             .and_then(|a| CampaignV0::try_deserialize(&mut &a.data[..]).ok())
     }
 
-    pub fn fetch_claim_receipt(&self, claim_receipt_address: &Pubkey) -> Option<ClaimReceiptV0> {
+    pub fn fetch_claim_receipt_account(
+        &self,
+        claim_receipt_address: &Pubkey,
+    ) -> Option<ClaimReceiptV0> {
         self.fetch_account(&claim_receipt_address)
             .and_then(|a| ClaimReceiptV0::try_deserialize(&mut &a.data[..]).ok())
     }
 
-    pub fn fetch_cohort(&self, cohort: &Pubkey) -> Option<CohortV0> {
+    pub fn fetch_cohort_account(&self, cohort: &Pubkey) -> Option<CohortV0> {
         self.fetch_account(cohort)
             .and_then(|a| CohortV0::try_deserialize(&mut &a.data[..]).ok())
     }
@@ -718,7 +620,7 @@ impl TestFixture {
     ) -> Result<(), FailedTransactionMetadata> {
         create_mint(
             &mut self.svm,
-            &self.state.admin_keypair,
+            &self.state.admin_keypair(),
             mint_keypair,
             decimals,
             None,
@@ -745,12 +647,5 @@ impl TestFixture {
             }
             None => Ok(0), // Account doesn't exist = 0 balance
         }
-    }
-}
-
-impl Default for TestFixture {
-    fn default() -> Self {
-        Self::new(FixtureState::default(), LiteSVM::new())
-            .expect("Failed to create default test fixture")
     }
 }

@@ -4,16 +4,21 @@ version = "0.1.0"
 edition = "2021"
 build = "build.rs"
 
-[dependencies]
-prism-protocol-sdk = { path = "../../crates/prism-protocol-sdk" }
-prism_protocol = { path = "../../programs/prism-protocol", features = [
-    "no-entrypoint",
-] }
+[lib]
+name = "prism_protocol_testing"
+path = "src/lib.rs"
 
+[dependencies.prism_protocol]
+features = ["no-entrypoint"]
+path = "../../programs/prism-protocol"
+
+[dependencies]
 anchor-lang = { workspace = true }
 bincode = { workspace = true }
 litesvm = { workspace = true, features = [] }
 litesvm-token = { workspace = true }
+prism-protocol-entities = { path = "../../crates/prism-protocol-entities" }
+prism-protocol-sdk = { path = "../../crates/prism-protocol-sdk" }
 rust_decimal = { workspace = true, features = ["macros"] }
 sha2 = { workspace = true }
 solana-account = { workspace = true }

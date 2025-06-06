@@ -3,13 +3,16 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "claim_proofs")]
+#[sea_orm(table_name = "compiled_vaults")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
+    pub vault_address: String,
     pub cohort_address: String,
-    #[sea_orm(primary_key, auto_increment = false)]
-    pub claimant: String,
-    pub merkle_proof: String,
+    pub vault_index: i16,
+    pub vault_budget: String,
+    pub vault_dust: String,
+    pub amount_per_entitlement: String,
+    pub total_entitlements: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

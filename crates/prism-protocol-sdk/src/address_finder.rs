@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_lang::solana_program::{
     system_program::ID as SYSTEM_PROGRAM_ID, sysvar::rent::ID as RENT_ID,
 };
+use anchor_spl::associated_token::get_associated_token_address;
 use anchor_spl::{
     associated_token::ID as ASSOCIATED_TOKEN_PROGRAM_ID, token::ID as TOKEN_PROGRAM_ID,
 };
@@ -89,5 +90,9 @@ impl AddressFinder {
             ],
             &self.prism_program_id,
         )
+    }
+
+    pub fn find_claimant_token_account(&self, claimant: &Pubkey) -> Pubkey {
+        get_associated_token_address(claimant, &self.mint)
     }
 }

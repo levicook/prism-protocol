@@ -1,11 +1,11 @@
 [package]
-name = "prism-protocol-db"
+name = "legacy-prism-protocol-db"
 version = "0.1.0"
 edition = "2021"
 description = "Database management for Prism Protocol campaigns"
 
 [lib]
-name = "prism_protocol_db"
+name = "legacy_prism_protocol_db"
 path = "src/lib.rs"
 
 [dependencies]

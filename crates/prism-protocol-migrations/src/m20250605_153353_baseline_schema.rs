@@ -40,15 +40,15 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(Campaigns::Table)
+                    .table(CompiledCampaigns::Table)
                     .if_not_exists()
-                    .col(string(Campaigns::Address).primary_key())
-                    .col(string(Campaigns::CampaignAdmin))
-                    .col(string(Campaigns::CampaignMint))
-                    .col(string(Campaigns::CampaignBudget))
-                    .col(small_unsigned(Campaigns::MintDecimals))
-                    .col(unsigned(Campaigns::ClaimantsPerVault))
-                    .col(string(Campaigns::ClaimTreeType))
+                    .col(string(CompiledCampaigns::Address).primary_key())
+                    .col(string(CompiledCampaigns::CampaignAdmin))
+                    .col(string(CompiledCampaigns::CampaignMint))
+                    .col(string(CompiledCampaigns::CampaignBudget))
+                    .col(small_unsigned(CompiledCampaigns::MintDecimals))
+                    .col(unsigned(CompiledCampaigns::ClaimantsPerVault))
+                    .col(string(CompiledCampaigns::ClaimTreeType))
                     .to_owned(),
             )
             .await?;
@@ -56,16 +56,16 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(Cohorts::Table)
+                    .table(CompiledCohorts::Table)
                     .if_not_exists()
-                    .col(string(Cohorts::Address).primary_key())
-                    .col(integer(Cohorts::CohortCsvRowId))
-                    .col(string(Cohorts::MerkleRoot))
-                    .col(string(Cohorts::VaultCount))
-                    .col(string(Cohorts::TotalEntitlements))
-                    .col(string(Cohorts::CohortBudget))
-                    .col(string(Cohorts::AmountPerEntitlement))
-                    .col(string(Cohorts::DustAmount))
+                    .col(string(CompiledCohorts::Address).primary_key())
+                    .col(integer(CompiledCohorts::CohortCsvRowId))
+                    .col(string(CompiledCohorts::MerkleRoot))
+                    .col(string(CompiledCohorts::VaultCount))
+                    .col(string(CompiledCohorts::TotalEntitlements))
+                    .col(string(CompiledCohorts::CohortBudget))
+                    .col(string(CompiledCohorts::AmountPerEntitlement))
+                    .col(string(CompiledCohorts::DustAmount))
                     .to_owned(),
             )
             .await?;
@@ -73,15 +73,15 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(Vaults::Table)
+                    .table(CompiledVaults::Table)
                     .if_not_exists()
-                    .col(string(Vaults::VaultAddress).primary_key())
-                    .col(string(Vaults::CohortAddress))
-                    .col(string(Vaults::VaultIndex))
-                    .col(string(Vaults::VaultBudget))
-                    .col(string(Vaults::VaultDust))
-                    .col(string(Vaults::AmountPerEntitlement))
-                    .col(string(Vaults::TotalEntitlements))
+                    .col(string(CompiledVaults::VaultAddress).primary_key())
+                    .col(string(CompiledVaults::CohortAddress))
+                    .col(small_unsigned(CompiledVaults::VaultIndex))
+                    .col(string(CompiledVaults::VaultBudget))
+                    .col(string(CompiledVaults::VaultDust))
+                    .col(string(CompiledVaults::AmountPerEntitlement))
+                    .col(string(CompiledVaults::TotalEntitlements))
                     .to_owned(),
             )
             .await?;
@@ -89,16 +89,16 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(ClaimLeaves::Table)
+                    .table(CompiledLeaves::Table)
                     .if_not_exists()
-                    .col(string(ClaimLeaves::CohortAddress))
-                    .col(string(ClaimLeaves::Claimant))
-                    .col(string(ClaimLeaves::Entitlements))
-                    .col(string(ClaimLeaves::VaultIndex))
+                    .col(string(CompiledLeaves::CohortAddress))
+                    .col(string(CompiledLeaves::Claimant))
+                    .col(string(CompiledLeaves::Entitlements))
+                    .col(small_unsigned(CompiledLeaves::VaultIndex))
                     .index(
                         Index::create()
-                            .col(ClaimLeaves::CohortAddress)
-                            .col(ClaimLeaves::Claimant)
+                            .col(CompiledLeaves::CohortAddress)
+                            .col(CompiledLeaves::Claimant)
                             .primary(),
                     )
                     .to_owned(),
@@ -108,15 +108,15 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(ClaimProofs::Table)
+                    .table(CompiledProofs::Table)
                     .if_not_exists()
-                    .col(string(ClaimProofs::CohortAddress))
-                    .col(string(ClaimProofs::Claimant))
-                    .col(string(ClaimProofs::MerkleProof))
+                    .col(string(CompiledProofs::CohortAddress))
+                    .col(string(CompiledProofs::Claimant))
+                    .col(string(CompiledProofs::MerkleProof))
                     .index(
                         Index::create()
-                            .col(ClaimProofs::CohortAddress)
-                            .col(ClaimProofs::Claimant)
+                            .col(CompiledProofs::CohortAddress)
+                            .col(CompiledProofs::Claimant)
                             .primary(),
                     )
                     .to_owned(),
@@ -128,19 +128,19 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table(ClaimProofs::Table).to_owned())
+            .drop_table(Table::drop().table(CompiledProofs::Table).to_owned())
             .await?;
         manager
-            .drop_table(Table::drop().table(ClaimLeaves::Table).to_owned())
+            .drop_table(Table::drop().table(CompiledLeaves::Table).to_owned())
             .await?;
         manager
-            .drop_table(Table::drop().table(Vaults::Table).to_owned())
+            .drop_table(Table::drop().table(CompiledVaults::Table).to_owned())
             .await?;
         manager
-            .drop_table(Table::drop().table(Cohorts::Table).to_owned())
+            .drop_table(Table::drop().table(CompiledCohorts::Table).to_owned())
             .await?;
         manager
-            .drop_table(Table::drop().table(Campaigns::Table).to_owned())
+            .drop_table(Table::drop().table(CompiledCampaigns::Table).to_owned())
             .await?;
         manager
             .drop_table(Table::drop().table(CohortsCsvRows::Table).to_owned())
@@ -170,7 +170,7 @@ enum CohortsCsvRows {
 }
 
 #[derive(DeriveIden)]
-enum Campaigns {
+enum CompiledCampaigns {
     Table,
     Address,
     CampaignAdmin,
@@ -182,7 +182,7 @@ enum Campaigns {
 }
 
 #[derive(DeriveIden)]
-enum Cohorts {
+enum CompiledCohorts {
     Table,
     Address,
     CohortCsvRowId,
@@ -197,7 +197,7 @@ enum Cohorts {
 }
 
 #[derive(DeriveIden)]
-enum Vaults {
+enum CompiledVaults {
     Table,
     CohortAddress,        // foreign key to cohorts.address
     VaultAddress,         // pubkey of the vault
@@ -209,7 +209,7 @@ enum Vaults {
 }
 
 #[derive(DeriveIden)]
-enum ClaimLeaves {
+enum CompiledLeaves {
     Table,
 
     CohortAddress, // foreign key to cohorts.address
@@ -221,7 +221,7 @@ enum ClaimLeaves {
 }
 
 #[derive(DeriveIden)]
-enum ClaimProofs {
+enum CompiledProofs {
     Table,
 
     CohortAddress, // foreign key to cohorts.address

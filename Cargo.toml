@@ -8,8 +8,7 @@ members = [
     "crates/prism-protocol-merkle",
     "crates/prism-protocol-migrations",
     "crates/prism-protocol-sdk",
-    # "crates/prism-protocol-testing",
-    # "crates/prism-protocol-db",
+    "crates/prism-protocol-testing",
     # "crates/*",
     "programs/*",
 ]

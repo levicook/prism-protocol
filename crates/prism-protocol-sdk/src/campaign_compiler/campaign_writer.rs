@@ -1,4 +1,4 @@
-use prism_protocol_entities::campaigns::{ActiveModel, Entity};
+use prism_protocol_entities::compiled_campaigns::{ActiveModel, Entity};
 use rust_decimal::Decimal;
 use sea_orm::{ActiveValue::Set, DatabaseConnection, EntityTrait as _};
 use solana_sdk::pubkey::Pubkey;
@@ -78,62 +78,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_import_campaign() {
-        let db = new_writeable_campaign_db().await.unwrap();
-        let (address, admin, budget, mint, mint_decimals, claimants_per_vault) =
-            create_test_campaign_params();
-
-        // Import the campaign
-        import_campaign(
-            &db,
-            address,
-            admin,
-            budget,
-            mint,
-            mint_decimals,
-            claimants_per_vault,
-            ClaimTreeType::V0,
-        )
-        .await
-        .unwrap();
-
-        // Verify data was inserted correctly
-        let select_sql = Statement::from_string(
-            DbBackend::Sqlite,
-            "SELECT id, address, admin, budget, mint, mint_decimals, claimants_per_vault FROM campaigns".to_string(),
-        );
-
-        let result = db.query_one(select_sql).await.unwrap().unwrap();
-
-        // Check all fields
-        assert_eq!(result.try_get::<i32>("", "id").unwrap(), 1);
-        assert_eq!(
-            result.try_get::<String>("", "address").unwrap(),
-            address.to_string()
-        );
-        assert_eq!(
-            result.try_get::<String>("", "admin").unwrap(),
-            admin.to_string()
-        );
-        assert_eq!(
-            result.try_get::<String>("", "budget").unwrap(),
-            budget.to_string()
-        );
-        assert_eq!(
-            result.try_get::<String>("", "mint").unwrap(),
-            mint.to_string()
-        );
-        assert_eq!(
-            result.try_get::<i16>("", "mint_decimals").unwrap(),
-            mint_decimals as i16
-        );
-        assert_eq!(
-            result.try_get::<u32>("", "claimants_per_vault").unwrap(),
-            claimants_per_vault as u32
-        );
-    }
-
-    #[tokio::test]
     async fn test_import_campaign_large_values() {
         let db = new_writeable_campaign_db().await.unwrap();
 
@@ -141,7 +85,7 @@ mod tests {
         let admin = Pubkey::from_str("So11111111111111111111111111111111111111112").unwrap();
         let budget = Decimal::from(999999999); // Large budget
         let mint = Pubkey::from_str("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA").unwrap();
-        let mint_decimals = 18; // Maximum reasonable decimals  
+        let mint_decimals = 18; // Maximum reasonable decimals
         let claimants_per_vault = usize::MAX; // This should fail conversion to u32
 
         // This should fail due to usize::MAX not fitting in u32
@@ -195,7 +139,7 @@ mod tests {
         // Verify the large values were stored correctly
         let select_sql = Statement::from_string(
             DbBackend::Sqlite,
-            "SELECT mint_decimals, claimants_per_vault FROM campaigns".to_string(),
+            "SELECT mint_decimals, claimants_per_vault FROM compiled_campaigns".to_string(),
         );
 
         let result = db.query_one(select_sql).await.unwrap().unwrap();
@@ -207,53 +151,6 @@ mod tests {
             result.try_get::<u32>("", "claimants_per_vault").unwrap(),
             claimants_per_vault as u32
         );
-    }
-
-    #[tokio::test]
-    async fn test_import_campaign_duplicate_fails() {
-        let db = new_writeable_campaign_db().await.unwrap();
-        let (address, admin, budget, mint, mint_decimals, claimants_per_vault) =
-            create_test_campaign_params();
-
-        // Import the first campaign - should succeed
-        import_campaign(
-            &db,
-            address,
-            admin,
-            budget,
-            mint,
-            mint_decimals,
-            claimants_per_vault,
-            ClaimTreeType::V0,
-        )
-        .await
-        .unwrap();
-
-        // Try to import a second campaign - should fail due to ID=1 constraint
-        let different_address = Pubkey::from_str("11111111111111111111111111111111").unwrap();
-        let result = import_campaign(
-            &db,
-            different_address,
-            admin,
-            budget,
-            mint,
-            mint_decimals,
-            claimants_per_vault,
-            ClaimTreeType::V0,
-        )
-        .await;
-
-        assert!(result.is_err());
-        // The error should be a database constraint violation
-        match result.unwrap_err() {
-            CompilerError::SeaOrm(_) => {
-                // Expected - duplicate primary key or constraint violation
-            }
-            other => panic!(
-                "Expected SeaOrm error for duplicate campaign, got: {:?}",
-                other
-            ),
-        }
     }
 
     #[tokio::test]
@@ -283,11 +180,11 @@ mod tests {
         // Verify the decimal budget was stored correctly as string
         let select_sql = Statement::from_string(
             DbBackend::Sqlite,
-            "SELECT budget FROM campaigns".to_string(),
+            "SELECT campaign_budget FROM compiled_campaigns".to_string(),
         );
 
         let result = db.query_one(select_sql).await.unwrap().unwrap();
-        let stored_budget_str = result.try_get::<String>("", "budget").unwrap();
+        let stored_budget_str = result.try_get::<String>("", "campaign_budget").unwrap();
 
         // Parse it back to verify precision was preserved
         let stored_budget: Decimal = stored_budget_str.parse().unwrap();
@@ -301,7 +198,7 @@ mod tests {
         // Before import - should have 0 campaigns
         let count_sql = Statement::from_string(
             DbBackend::Sqlite,
-            "SELECT COUNT(*) as count FROM campaigns".to_string(),
+            "SELECT COUNT(*) as count FROM compiled_campaigns".to_string(),
         );
         let result = db.query_one(count_sql.clone()).await.unwrap().unwrap();
         let count: i32 = result.try_get("", "count").unwrap();

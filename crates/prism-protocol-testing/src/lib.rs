@@ -25,6 +25,7 @@ use {
 pub use campaign_snapshot::{AccountChange, CampaignSnapshot};
 pub use fixture_stage::FixtureStage;
 pub use fixture_state::FixtureState;
+use litesvm_token::MintTo;
 pub use test_fixture::TestFixture;
 
 /// Assert that a transaction failed with a specific custom error code
@@ -153,4 +154,14 @@ pub fn create_mint(
     );
 
     svm.send_transaction(tx)
+}
+
+pub fn mint_to(
+    svm: &mut LiteSVM,
+    fee_payer: &Keypair,
+    mint: &Pubkey,
+    destination: &Pubkey,
+    amount: u64,
+) -> Result<(), FailedTransactionMetadata> {
+    MintTo::new(svm, fee_payer, mint, destination, amount).send()
 }

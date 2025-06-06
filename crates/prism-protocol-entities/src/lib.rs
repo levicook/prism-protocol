@@ -3,9 +3,9 @@
 pub mod prelude;
 
 pub mod campaign_csv_rows;
-pub mod campaigns;
-pub mod claim_leaves;
-pub mod claim_proofs;
-pub mod cohorts;
 pub mod cohorts_csv_rows;
-pub mod vaults;
+pub mod compiled_campaigns;
+pub mod compiled_cohorts;
+pub mod compiled_leaves;
+pub mod compiled_proofs;
+pub mod compiled_vaults;

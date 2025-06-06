@@ -28,7 +28,7 @@ fn test_non_admin_cannot_initialize_vault() {
     test.airdrop(&attacker.pubkey(), 1_000_000_000);
 
     let campaign_fingerprint = test.state.compiled_campaign.fingerprint;
-    let first_cohort = &test.state.compiled_campaign.cohorts[0];
+    let first_cohort = &test.state.compiled_campaign.compiled_cohorts[0];
     let cohort_merkle_root = first_cohort.merkle_root;
     let mint = test.state.compiled_campaign.mint;
     let vault_index = 0u8;

@@ -29,7 +29,7 @@ fn test_non_admin_cannot_initialize_cohort() {
     test.airdrop(&attacker.pubkey(), 1_000_000_000);
 
     let campaign_fingerprint = test.state.compiled_campaign.fingerprint;
-    let first_cohort = &test.state.compiled_campaign.cohorts[0];
+    let first_cohort = &test.state.compiled_campaign.compiled_cohorts[0];
     let cohort_merkle_root = first_cohort.merkle_root;
     let amount_per_entitlement = first_cohort
         .amount_per_entitlement

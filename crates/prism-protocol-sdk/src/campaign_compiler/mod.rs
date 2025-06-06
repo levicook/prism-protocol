@@ -3,22 +3,21 @@ mod campaign_writer;
 mod claim_tree;
 mod cohort_writer;
 mod cohorts_csv_writer;
+mod compiled_campaign_database;
+mod compiler_error;
 
-use prism_protocol_csvs::{CampaignCsvRow, CohortsCsvRow, validate_csv_consistency};
-use rust_decimal::Decimal;
-use sea_orm::DatabaseConnection;
-use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signature::Keypair;
-use solana_sdk::signer::Signer as _;
+use {
+    crate::{new_writeable_campaign_db, AddressFinder},
+    prism_protocol_csvs::{validate_csv_consistency, CampaignCsvRow, CohortsCsvRow},
+    rust_decimal::Decimal,
+    solana_sdk::{pubkey::Pubkey, signature::Keypair, signer::Signer as _},
+};
 
-use crate::AddressFinder;
-use crate::campaign_compiler::campaign_csv_writer::import_campaign_csv_rows;
-use crate::campaign_compiler::campaign_writer::import_campaign;
-use crate::campaign_compiler::cohort_writer::import_cohorts;
-use crate::campaign_compiler::cohorts_csv_writer::import_cohorts_csv_rows;
-use crate::campaign_database::new_writeable_campaign_db;
-
-pub use claim_tree::{ClaimTree, ClaimTreeType};
+pub use {
+    claim_tree::{ClaimTree, ClaimTreeType},
+    compiled_campaign_database::*,
+    compiler_error::{CompilerError, CompilerResult},
+};
 
 pub async fn compile_campaign(
     campaign_admin: Pubkey,   // campaign admin
@@ -29,7 +28,7 @@ pub async fn compile_campaign(
     cohorts_csv_rows: &[CohortsCsvRow],
     claimants_per_vault: usize, // ratio that determines rent -vs- claim contention
     claim_tree_type: ClaimTreeType,
-) -> CompilerResult<(Keypair, DatabaseConnection)> {
+) -> CompilerResult<CompiledCampaignDatabase> {
     validate_csv_consistency(campaign_csv_rows, cohorts_csv_rows)?; // fail fast if the csvs are invalid
 
     let campaign_keypair = Keypair::new();
@@ -38,10 +37,10 @@ pub async fn compile_campaign(
 
     let db = new_writeable_campaign_db().await?;
 
-    import_campaign_csv_rows(&db, campaign_csv_rows).await?;
-    import_cohorts_csv_rows(&db, cohorts_csv_rows).await?;
+    campaign_csv_writer::import_campaign_csv_rows(&db, campaign_csv_rows).await?;
+    cohorts_csv_writer::import_cohorts_csv_rows(&db, cohorts_csv_rows).await?;
 
-    import_campaign(
+    campaign_writer::import_campaign(
         &db,
         campaign_address,
         campaign_admin,
@@ -53,57 +52,11 @@ pub async fn compile_campaign(
     )
     .await?;
 
-    import_cohorts(&address_finder, &db).await?;
+    cohort_writer::import_cohorts(&address_finder, &db).await?;
 
-    Ok((campaign_keypair, db))
+    Ok(CompiledCampaignDatabase::new_with_keypair(
+        address_finder,
+        db,
+        campaign_keypair,
+    ))
 }
-
-#[derive(Debug, thiserror::Error)]
-pub enum CompilerError {
-    #[error(transparent)]
-    Allocation(#[from] crate::budget_allocation::AllocationError),
-
-    #[error(transparent)]
-    ClaimTree(#[from] anchor_lang::prelude::Error), // THIS IS A HACK (merkle create didn't encapsulate errors well)
-
-    #[error("Campaign not found")]
-    CampaignNotFound,
-
-    #[error(transparent)]
-    CampaignDatabase(#[from] crate::campaign_database::Error),
-
-    #[error(transparent)]
-    Csv(#[from] prism_protocol_csvs::CsvError),
-
-    #[error(transparent)]
-    Decimal(#[from] rust_decimal::Error),
-
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
-
-    #[error("Invalid claim tree type: {0}")]
-    InvalidClaimTreeType(String),
-
-    #[error("Merkle root is required")]
-    MerkleRootIsRequired,
-
-    #[error(transparent)]
-    ParsePubkey(#[from] solana_sdk::pubkey::ParsePubkeyError),
-
-    #[error(transparent)]
-    SeaOrm(#[from] sea_orm::DbErr),
-
-    #[error(transparent)]
-    TryFromInt(#[from] std::num::TryFromIntError),
-
-    #[error(
-        "Vault limit exceeded: {claimant_count} claimants ÷ {claimants_per_vault} per vault requires {vault_count} vaults (max 255)"
-    )]
-    VaultLimitExceeded {
-        claimant_count: Decimal,
-        claimants_per_vault: Decimal,
-        vault_count: Decimal,
-    },
-}
-
-pub type CompilerResult<T> = std::result::Result<T, CompilerError>;

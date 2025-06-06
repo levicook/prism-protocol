@@ -25,12 +25,11 @@ pub use address_finder::AddressFinder;
 pub use budget_allocation::{
     AllocationError, AllocationResult, BudgetAllocator, CohortAllocation, VaultAllocation,
 };
-pub use campaign_compiler::{CompilerError, CompilerResult, compile_campaign};
+pub use campaign_compiler::*;
+pub use campaign_database::*;
 pub use instruction_builders::*;
-pub use prism_protocol::ClaimLeaf;
 pub use prism_protocol::state::*;
-
-// pub use prism_protocol_merkle::ClaimTreeV0;
+pub use prism_protocol::ClaimLeaf;
 
 // Re-export csv types
 pub use prism_protocol_csvs::{CampaignCsvRow, CohortsCsvRow};

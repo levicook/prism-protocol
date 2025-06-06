@@ -3,17 +3,16 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "cohorts")]
+#[sea_orm(table_name = "compiled_campaigns")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub address: String,
-    pub cohort_csv_row_id: i32,
-    pub merkle_root: String,
-    pub vault_count: String,
-    pub total_entitlements: String,
-    pub cohort_budget: String,
-    pub amount_per_entitlement: String,
-    pub dust_amount: String,
+    pub campaign_admin: String,
+    pub campaign_mint: String,
+    pub campaign_budget: String,
+    pub mint_decimals: i16,
+    pub claimants_per_vault: i32,
+    pub claim_tree_type: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

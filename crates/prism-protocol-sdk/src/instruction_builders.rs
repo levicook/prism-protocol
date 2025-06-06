@@ -1,6 +1,7 @@
 use crate::AddressFinder;
 use anchor_lang::solana_program::instruction::Instruction;
-use anchor_lang::{InstructionData as _, prelude::*};
+use anchor_lang::{prelude::*, InstructionData as _};
+use anchor_spl::associated_token::get_associated_token_address;
 
 pub fn build_initialize_campaign_v0_ix(
     address_finder: &AddressFinder,
@@ -214,7 +215,6 @@ pub fn build_activate_cohort_v0_ix(
 pub fn build_initialize_vault_v0_ix(
     address_finder: &AddressFinder,
     cohort_merkle_root: [u8; 32],
-    mint: Pubkey,
     vault_index: u8,
 ) -> Result<(
     Instruction,
@@ -288,7 +288,6 @@ pub fn build_activate_vault_v0_ix(
 pub fn build_claim_tokens_v0_ix(
     address_finder: &AddressFinder,
     claimant: Pubkey,
-    claimant_token_account: Pubkey,
     cohort_merkle_root: [u8; 32],
     merkle_proof: Vec<[u8; 32]>,
     assigned_vault_index: u8,
@@ -298,6 +297,8 @@ pub fn build_claim_tokens_v0_ix(
     prism_protocol::accounts::ClaimTokensV0,
     prism_protocol::instruction::ClaimTokensV0,
 )> {
+    let claimant_token_account = address_finder.find_claimant_token_account(&claimant);
+
     let (cohort, _) = address_finder.find_cohort_v0_address(&cohort_merkle_root);
 
     let (vault, _) = address_finder.find_vault_v0_address(&cohort, assigned_vault_index);
@@ -335,17 +336,72 @@ pub fn build_claim_tokens_v0_ix(
     Ok((ix, ix_accounts, ix_data))
 }
 
+pub fn build_claim_tokens_v1_ix(
+    address_finder: &AddressFinder,
+    claimant: Pubkey,
+    cohort_merkle_root: [u8; 32],
+    merkle_proof: Vec<Vec<[u8; 32]>>,
+    assigned_vault_index: u8,
+    entitlements: u64,
+) -> Result<(
+    Instruction,
+    prism_protocol::accounts::ClaimTokensV1,
+    prism_protocol::instruction::ClaimTokensV1,
+)> {
+    let claimant_token_account = address_finder.find_claimant_token_account(&claimant);
+
+    let (cohort, _) = address_finder.find_cohort_v0_address(&cohort_merkle_root);
+
+    let (vault, _) = address_finder.find_vault_v0_address(&cohort, assigned_vault_index);
+
+    let (claim_receipt, _) = address_finder.find_claim_receipt_v0_address(&cohort, &claimant);
+
+    let ix_accounts = prism_protocol::accounts::ClaimTokensV1 {
+        admin: address_finder.admin,
+        claimant,
+        campaign: address_finder.campaign,
+        cohort,
+        vault,
+        mint: address_finder.mint,
+        claimant_token_account,
+        claim_receipt,
+        token_program: address_finder.token_program_id,
+        associated_token_program: address_finder.associated_token_program_id,
+        system_program: address_finder.system_program_id,
+        rent: address_finder.rent_id,
+    };
+
+    let ix_data = prism_protocol::instruction::ClaimTokensV1 {
+        cohort_merkle_root,
+        merkle_proof,
+        assigned_vault_index,
+        entitlements,
+    };
+
+    let ix = Instruction {
+        program_id: address_finder.prism_program_id,
+        accounts: ix_accounts.to_account_metas(None),
+        data: ix_data.data(),
+    };
+
+    Ok((ix, ix_accounts, ix_data))
+}
+
 pub fn build_reclaim_tokens_v0_ix(
     address_finder: &AddressFinder,
-    destination_token_account: Pubkey,
-    cohort_merkle_root_arg: [u8; 32],
+    cohort_merkle_root: [u8; 32],
     vault_index: u8,
 ) -> Result<(
     Instruction,
     prism_protocol::accounts::ReclaimTokensV0,
     prism_protocol::instruction::ReclaimTokensV0,
 )> {
-    let (cohort, _) = address_finder.find_cohort_v0_address(&cohort_merkle_root_arg);
+    let destination_token_account = get_associated_token_address(
+        &address_finder.admin, //
+        &address_finder.mint,
+    );
+
+    let (cohort, _) = address_finder.find_cohort_v0_address(&cohort_merkle_root);
 
     let (vault, _) = address_finder.find_vault_v0_address(&cohort, vault_index);
 
@@ -359,7 +415,7 @@ pub fn build_reclaim_tokens_v0_ix(
     };
 
     let ix_data = prism_protocol::instruction::ReclaimTokensV0 {
-        cohort_merkle_root_arg,
+        cohort_merkle_root,
         vault_index,
     };
 

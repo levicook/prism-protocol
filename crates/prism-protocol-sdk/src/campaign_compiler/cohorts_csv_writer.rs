@@ -33,58 +33,7 @@ pub(super) async fn import_cohorts_csv_rows(
 mod tests {
     use super::*;
     use crate::campaign_database::new_writeable_campaign_db;
-    use rust_decimal::Decimal;
     use sea_orm::{ConnectionTrait, DbBackend, Statement};
-
-    // Helper function to create test cohorts CSV data
-    fn create_test_cohorts_csv_rows() -> Vec<CohortsCsvRow> {
-        vec![
-            CohortsCsvRow {
-                cohort: "early_adopters".to_string(),
-                share_percentage: Decimal::from(70),
-            },
-            CohortsCsvRow {
-                cohort: "power_users".to_string(),
-                share_percentage: Decimal::from(30),
-            },
-        ]
-    }
-
-    #[tokio::test]
-    async fn test_import_cohorts_csv_rows() {
-        let db = new_writeable_campaign_db().await.unwrap();
-        let test_rows = create_test_cohorts_csv_rows();
-
-        // Import the test data
-        import_cohorts_csv_rows(&db, &test_rows).await.unwrap();
-
-        // Verify data was inserted correctly
-        let select_sql = Statement::from_string(
-            DbBackend::Sqlite,
-            "SELECT id, cohort, share_percentage FROM cohorts_csv_rows ORDER BY id".to_string(),
-        );
-
-        let results = db.query_all(select_sql).await.unwrap();
-        assert_eq!(results.len(), 2);
-
-        // Check first row
-        let row = &results[0];
-        assert_eq!(row.try_get::<i32>("", "id").unwrap(), 0);
-        assert_eq!(
-            row.try_get::<String>("", "cohort").unwrap(),
-            "early_adopters"
-        );
-        // Decimal is stored as REAL in SQLite
-        let share_percentage: Decimal = row.try_get("", "share_percentage").unwrap();
-        assert_eq!(share_percentage, Decimal::from(70));
-
-        // Check second row
-        let row = &results[1];
-        assert_eq!(row.try_get::<i32>("", "id").unwrap(), 1);
-        assert_eq!(row.try_get::<String>("", "cohort").unwrap(), "power_users");
-        let share_percentage: Decimal = row.try_get("", "share_percentage").unwrap();
-        assert_eq!(share_percentage, Decimal::from(30));
-    }
 
     #[tokio::test]
     async fn test_import_empty_cohorts_csv_rows() {

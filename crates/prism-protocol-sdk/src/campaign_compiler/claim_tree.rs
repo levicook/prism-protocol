@@ -1,5 +1,5 @@
 use prism_protocol::{ClaimLeaf, ClaimProof};
-use prism_protocol_merkle::{ClaimTreeV0, ClaimTreeV1, create_claim_tree_v0, create_claim_tree_v1};
+use prism_protocol_merkle::{create_claim_tree_v0, create_claim_tree_v1, ClaimTreeV0, ClaimTreeV1};
 use solana_sdk::pubkey::Pubkey;
 
 // TODO move this into the merkle crate:
