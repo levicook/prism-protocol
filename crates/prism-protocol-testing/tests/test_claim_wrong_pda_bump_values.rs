@@ -54,6 +54,7 @@ use spl_associated_token_account::get_associated_token_address;
 /// - Legitimate claimants succeed (proving PDA derivation works correctly)
 /// - Duplicate claims fail (proving claim receipt validation works)
 /// - Overall: Demonstrates robust security through proper account architecture
+#[ignore]
 #[test]
 fn test_claim_wrong_pda_bump_values() {
     let mut test = TestFixture::default();

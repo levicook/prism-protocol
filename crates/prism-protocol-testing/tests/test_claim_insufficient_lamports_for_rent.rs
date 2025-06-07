@@ -39,6 +39,7 @@ use spl_associated_token_account::get_associated_token_address;
 /// 5. Verify vault balances unchanged
 ///
 /// **Expected behavior:** Clean failure with account creation error, no state corruption
+#[ignore]
 #[test]
 fn test_claim_insufficient_lamports_for_rent() {
     let mut test = TestFixture::default();

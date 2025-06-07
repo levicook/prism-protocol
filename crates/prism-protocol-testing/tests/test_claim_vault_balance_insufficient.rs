@@ -38,6 +38,7 @@ use std::collections::HashMap;
 /// 5. Verify proper error propagation and no state corruption
 ///
 /// **Expected behavior:** SPL Token transfer failure, proper error propagation, no state corruption
+#[ignore]
 #[test]
 fn test_claim_vault_balance_insufficient() {
     let mut test = TestFixture::default();

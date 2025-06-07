@@ -1,4 +1,4 @@
-use prism_protocol_testing::TestFixture;
+// use prism_protocol_testing::TestFixture;
 
 /// Test campaign fingerprint consistency across operations
 ///
@@ -12,7 +12,7 @@ use prism_protocol_testing::TestFixture;
 #[test]
 #[ignore = "TODO: Not implemented - requires bypassing TestFixture to create fingerprint mismatches"]
 fn test_campaign_fingerprint_consistency() {
-    let mut _test = TestFixture::default();
+    // let mut _test = TestFixture::default();
 
     // This test would require direct instruction building to test fingerprint mismatches
     // Since TestFixture manages consistency, we'd need to bypass it for negative testing

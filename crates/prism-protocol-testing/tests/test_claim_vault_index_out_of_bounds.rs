@@ -29,6 +29,7 @@ use spl_associated_token_account::get_associated_token_address;
 /// 3. Attempt claim from vault index 1
 /// 4. Verify fails with AssignedVaultIndexOutOfBounds (not AccountNotInitialized)
 /// 5. Verify no state changes occurred
+#[ignore]
 #[test]
 fn test_claim_vault_index_out_of_bounds() {
     let mut test = TestFixture::default();

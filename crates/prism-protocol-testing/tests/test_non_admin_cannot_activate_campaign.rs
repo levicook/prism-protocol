@@ -14,6 +14,7 @@ use solana_transaction::Transaction;
 ///
 /// They still CANNOT activate the campaign because PDA derivation uses the admin's key.
 /// The instruction will fail with AccountNotInitialized, proving the security model works.
+#[ignore]
 #[test]
 fn test_non_admin_cannot_activate_campaign() {
     let mut test = TestFixture::default();

@@ -1,4 +1,4 @@
-use prism_protocol_testing::TestFixture;
+// use prism_protocol_testing::TestFixture;
 
 /// Test campaign activation when already activated → CampaignAlreadyActivated
 ///
@@ -10,7 +10,7 @@ use prism_protocol_testing::TestFixture;
 #[test]
 #[ignore]
 fn test_campaign_activation_already_activated() {
-    let mut _test = TestFixture::default();
+    // let mut _test = TestFixture::default();
 
     todo!("Implement double campaign activation test - should fail with CampaignAlreadyActivated");
 }

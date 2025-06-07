@@ -586,8 +586,8 @@ impl TestFixture {
                 .into_iter()
                 .map(|ix| {
                     Transaction::new(
-                        &[&self.state.admin_keypair()],
-                        Message::new(&[ix], Some(&self.state.admin_address())),
+                        &[claimant],
+                        Message::new(&[ix], Some(&claimant.pubkey())),
                         self.latest_blockhash(),
                     )
                 })

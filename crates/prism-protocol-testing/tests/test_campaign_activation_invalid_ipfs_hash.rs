@@ -1,4 +1,4 @@
-use prism_protocol_testing::TestFixture;
+// use prism_protocol_testing::TestFixture;
 
 /// Test campaign activation with invalid IPFS hash → InvalidIpfsHash
 ///
@@ -10,7 +10,7 @@ use prism_protocol_testing::TestFixture;
 #[test]
 #[ignore]
 fn test_campaign_activation_invalid_ipfs_hash() {
-    let mut _test = TestFixture::default();
+    // let mut _test = TestFixture::default();
 
     todo!("Implement campaign activation with invalid IPFS hash test - should fail with InvalidIpfsHash");
 }

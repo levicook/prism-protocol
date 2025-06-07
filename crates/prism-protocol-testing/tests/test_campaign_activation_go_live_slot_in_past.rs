@@ -1,4 +1,4 @@
-use prism_protocol_testing::TestFixture;
+// use prism_protocol_testing::TestFixture;
 
 /// Test campaign activation with go_live_slot in past → GoLiveSlotInPast
 ///
@@ -10,7 +10,7 @@ use prism_protocol_testing::TestFixture;
 #[test]
 #[ignore]
 fn test_campaign_activation_go_live_slot_in_past() {
-    let mut _test = TestFixture::default();
+    // let mut _test = TestFixture::default();
 
     todo!("Implement campaign activation with past go_live_slot test - should fail with GoLiveSlotInPast");
 }

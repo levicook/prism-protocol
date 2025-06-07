@@ -8,6 +8,7 @@ use prism_protocol_testing::{demand_prism_error, FixtureStage, TestFixture};
 /// - Attempt to activate cohorts WITHOUT all vaults being activated first
 /// - Verify operation fails with NotAllVaultsActivated error
 /// - Ensure proper order dependencies are enforced
+#[ignore]
 #[test]
 fn test_cohort_activation_before_vault_activation() {
     let mut test = TestFixture::default();

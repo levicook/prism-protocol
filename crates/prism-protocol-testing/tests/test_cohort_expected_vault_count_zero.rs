@@ -7,6 +7,7 @@ use prism_protocol_testing::TestFixture;
 /// - Attempt to initialize cohort with expected_vault_count = 0
 /// - Verify fails with NoVaultsExpected error
 /// - Ensure cohorts must expect at least one vault
+#[ignore]
 #[test]
 #[ignore]
 fn test_cohort_expected_vault_count_zero() {

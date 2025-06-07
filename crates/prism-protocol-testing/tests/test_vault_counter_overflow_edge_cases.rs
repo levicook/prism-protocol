@@ -26,6 +26,7 @@ use prism_protocol_testing::TestFixture;
 /// - Race conditions in counter increments
 /// - Boundary validation: off-by-one errors (>= vs >)
 /// - Counter rollback on partial transaction failures
+#[ignore]
 #[test]
 #[ignore = "Phase 5 - High-risk edge case testing for bug hunting"]
 fn test_vault_counter_overflow_edge_cases() {

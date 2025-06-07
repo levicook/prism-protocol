@@ -1,6 +1,8 @@
+use litesvm::LiteSVM;
 use prism_protocol::error::ErrorCode as PrismError;
 use prism_protocol_testing::{
-    demand_prism_error, deterministic_keypair, CampaignSnapshot, FixtureStage, TestFixture,
+    demand_prism_error, deterministic_keypair, CampaignSnapshot, FixtureStage, FixtureState,
+    TestFixture,
 };
 use solana_signer::Signer as _;
 
@@ -12,18 +14,21 @@ use solana_signer::Signer as _;
 /// - Confirms no state changes occur during blocked claims
 ///
 /// **Scenario**: Campaign was active, then admin paused it (status = Paused)
-#[test]
-fn test_claim_paused_campaign() {
+#[tokio::test]
+async fn test_claim_paused_campaign() {
     println!("🧪 Testing claim from paused campaign...");
 
-    let mut test = TestFixture::default();
+    let mut test = TestFixture::new(FixtureState::rand().await, LiteSVM::new())
+        .await
+        .unwrap();
 
     // 1. Fully activate campaign first
-    test.jump_to(FixtureStage::CampaignActivated);
+    test.jump_to(FixtureStage::CampaignActivated).await;
     test.advance_slot_by(20); // Past go-live
 
     // 2. Pause the campaign
     test.try_pause_campaign()
+        .await
         .expect("Should be able to pause active campaign");
 
     // 3. Get claimant and capture state
@@ -31,10 +36,10 @@ fn test_claim_paused_campaign() {
     let claimant_pubkey = claimant_keypair.pubkey();
     test.airdrop(&claimant_pubkey, 1_000_000_000);
 
-    let state_before = CampaignSnapshot::capture_with_claimants(&test, &[claimant_pubkey]);
+    let state_before = CampaignSnapshot::capture_with_claimants(&test, &[claimant_pubkey]).await;
 
     // 4. Attempt claim on paused campaign (should fail)
-    let result = test.try_claim_tokens(&claimant_keypair);
+    let result = test.try_claim_tokens(&claimant_keypair).await;
 
     // 5. Verify fails with CampaignNotActive error
     demand_prism_error(
@@ -44,7 +49,7 @@ fn test_claim_paused_campaign() {
     );
 
     // 6. Verify no state changes occurred
-    let state_after = CampaignSnapshot::capture_with_claimants(&test, &[claimant_pubkey]);
+    let state_after = CampaignSnapshot::capture_with_claimants(&test, &[claimant_pubkey]).await;
     assert_eq!(
         state_before, state_after,
         "No state should change during blocked claim"

@@ -241,7 +241,7 @@ impl CompiledCampaignDatabase {
             });
         }
 
-        todo!()
+        Ok(ix_vec)
     }
 
     pub async fn build_reclaim_tokens_ixs(&self) -> anchor_lang::Result<Vec<Instruction>> {

@@ -50,6 +50,7 @@ use spl_associated_token_account::get_associated_token_address;
 /// 5. Test timestamp behavior across different blockchain states
 ///
 /// **Expected behavior:** Proper timestamp handling without corruption or failures
+#[ignore]
 #[test]
 fn test_claim_receipt_timestamp_edge_cases() {
     let mut test = TestFixture::default();

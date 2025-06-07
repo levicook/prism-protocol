@@ -10,6 +10,7 @@ use prism_protocol_testing::TestFixture;
 /// - Attempt activate_cohort_v0 again → should succeed
 /// - Verify cohort status and campaign cohort counters updated
 /// - Test edge case: cohort with 1 vault, activate successfully
+#[ignore]
 #[test]
 #[ignore]
 fn test_cohort_activation_requirements() {

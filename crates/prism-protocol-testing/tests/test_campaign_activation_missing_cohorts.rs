@@ -1,4 +1,4 @@
-use prism_protocol_testing::TestFixture;
+// use prism_protocol_testing::TestFixture;
 
 /// Test campaign activation with missing cohorts → NotAllCohortsActivated
 ///
@@ -10,7 +10,7 @@ use prism_protocol_testing::TestFixture;
 #[test]
 #[ignore]
 fn test_campaign_activation_missing_cohorts() {
-    let mut _test = TestFixture::default();
+    // let mut _test = TestFixture::default();
 
     todo!("Implement campaign activation with missing cohorts test - should fail with NotAllCohortsActivated");
 }

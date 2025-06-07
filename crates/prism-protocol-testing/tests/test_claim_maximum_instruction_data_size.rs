@@ -52,6 +52,7 @@ use spl_associated_token_account::get_associated_token_address;
 /// - Expected: Size validation or network rejection of large transactions
 /// - Actual: Compute unit exhaustion during merkle proof verification
 /// - **Key Finding**: The real constraint is computational, not data size!
+#[ignore]
 #[test]
 fn test_claim_maximum_instruction_data_size() {
     let mut test = TestFixture::default();

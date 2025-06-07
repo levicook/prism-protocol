@@ -14,6 +14,7 @@ use prism_protocol_testing::TestFixture;
 /// - Attempt to initialize vault with wrong mint
 /// - Verify fails with MintMismatch error code
 /// - Verify proper error handling and no state corruption
+#[ignore]
 #[test]
 #[ignore] // TODO: Implement this test
 fn test_mint_mismatch() {

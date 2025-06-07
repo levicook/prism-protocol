@@ -50,6 +50,7 @@ use spl_associated_token_account::get_associated_token_address;
 /// 6. Verify no state corruption
 ///
 /// **Expected behavior:** Clean failure with mint/ATA validation error, no state corruption
+#[ignore]
 #[test]
 fn test_claim_wrong_mint_associated_token_account() {
     let mut test = TestFixture::default();

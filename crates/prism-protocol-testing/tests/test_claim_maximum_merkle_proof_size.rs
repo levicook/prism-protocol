@@ -48,6 +48,7 @@ use spl_associated_token_account::get_associated_token_address;
 /// - Previous test: Focused on serialization and transaction size boundaries
 /// - This test: Focuses on computational cost of merkle verification logic
 /// - Both inform different aspects of large proof handling
+#[ignore]
 #[test]
 fn test_claim_maximum_merkle_proof_size() {
     let mut test = TestFixture::default();

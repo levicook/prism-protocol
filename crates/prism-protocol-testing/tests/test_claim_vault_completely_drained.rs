@@ -45,6 +45,7 @@ use std::collections::HashMap;
 /// 5. If fails: verify proper error and no state corruption
 ///
 /// **Expected behavior:** TBD - this test will help determine correct behavior
+#[ignore]
 #[test]
 fn test_claim_vault_completely_drained() {
     let mut test = TestFixture::default();

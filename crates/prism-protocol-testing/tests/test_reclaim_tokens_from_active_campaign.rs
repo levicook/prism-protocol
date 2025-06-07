@@ -1,16 +1,34 @@
-use prism_protocol_testing::TestFixture;
+use litesvm::LiteSVM;
+use prism_protocol::error::ErrorCode as PrismError;
+use prism_protocol_testing::{demand_prism_error, FixtureStage, FixtureState, TestFixture};
 
-/// Test reclaim tokens from active campaign → CampaignNotPermanentlyHalted
+/// Test token reclamation from active campaign → CampaignNotPermanentlyHalted
 ///
 /// Should test:
-/// - Set up active campaign with funded vaults
-/// - Attempt to reclaim tokens from active campaign
+/// - Set up active campaign (not halted)
+/// - Attempt to reclaim tokens while campaign is still active
 /// - Verify fails with CampaignNotPermanentlyHalted error
-/// - Ensure only permanently halted campaigns allow reclamation
-#[test]
-#[ignore]
-fn test_reclaim_tokens_from_active_campaign() {
-    let mut _test = TestFixture::default();
+/// - Ensure token reclamation only works on permanently halted campaigns
+#[tokio::test]
+async fn test_reclaim_tokens_from_active_campaign() {
+    let mut test = TestFixture::new(FixtureState::rand().await, LiteSVM::new())
+        .await
+        .unwrap();
 
-    todo!("Implement reclaim from active campaign test - should fail with CampaignNotPermanentlyHalted");
+    // 1. Set up active campaign (not halted)
+    test.jump_to(FixtureStage::CampaignActivated).await;
+
+    // 2. Attempt to reclaim tokens while campaign is still active (should fail)
+    let result = test.try_reclaim_tokens().await;
+
+    // 3. Verify fails with CampaignNotPermanentlyHalted error
+    demand_prism_error(
+        result,
+        PrismError::CampaignNotPermanentlyHalted as u32,
+        "CampaignNotPermanentlyHalted",
+    );
+
+    println!(
+        "✅ Active campaign correctly rejected token reclamation with CampaignNotPermanentlyHalted"
+    );
 }
