@@ -262,7 +262,6 @@ async fn build_compiled_cohort_and_metadata(
         merkle_root: Set(hex::encode(merkle_root)),
         vault_count: Set(vault_count.to_string()),
         total_entitlements: Set(total_entitlements.to_string()),
-        // Store both human and token amounts
         cohort_budget_human: Set(cohort_budget_human.to_string()),
         cohort_budget_token: Set(cohort_budget_token.to_string()),
         amount_per_entitlement_human: Set(amount_per_entitlement_human.to_string()),
@@ -295,7 +294,8 @@ async fn build_compiled_vault(
     amount_per_entitlement_token: u64,
     total_entitlements: Decimal,
 ) -> CompilerResult<compiled_vaults::ActiveModel> {
-    debug_assert!(total_entitlements > Decimal::ZERO);
+    // Allow zero entitlements due to consistent hashing collisions
+    debug_assert!(total_entitlements >= Decimal::ZERO);
 
     let (vault_address, _) = address_finder.find_vault_v0_address(
         &cohort_metadata.cohort_address, //

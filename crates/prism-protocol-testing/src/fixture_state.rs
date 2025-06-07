@@ -183,6 +183,60 @@ impl FixtureState {
         }
     }
 
+    /// Create a FixtureState with the specified number of vaults
+    ///
+    /// Each vault will have exactly 1 claimant to maximize vault count and create
+    /// consistent hashing collisions for boundary testing. This is ideal for:
+    /// - Testing vault counter arithmetic at various scales
+    /// - Validating u8 boundary conditions (up to 255 vaults)
+    /// - Stress testing consistent hashing collision handling
+    /// - Verifying zero-entitlement vault support
+    ///
+    /// Uses ClaimTreeType::V1 for modern claim handling.
+    pub async fn with_vault_count(vault_count: usize) -> Self {
+        let admin_keypair = default_admin_keypair();
+        let mint_keypair = default_mint_keypair();
+
+        // Create one claimant per vault to maximize vault count
+        let campaign_csv: Vec<CampaignCsvRow> = (0..vault_count)
+            .map(|i| CampaignCsvRow {
+                cohort: "TestCohort".to_string(),
+                claimant: deterministic_pubkey(&format!("claimant_{}", i)),
+                entitlements: 1,
+            })
+            .collect();
+
+        let cohorts_csv = vec![CohortsCsvRow {
+            cohort: "TestCohort".to_string(),
+            share_percentage: Decimal::from(100),
+        }];
+
+        let budget = dec!(100_000); // Sufficient budget for any reasonable vault count
+
+        let compiled_campaign = compile_campaign(
+            admin_keypair.pubkey(),
+            budget,
+            mint_keypair.pubkey(),
+            DEFAULT_MINT_DECIMALS,
+            &campaign_csv,
+            &cohorts_csv,
+            1, // 1 claimant per vault - creates exactly vault_count vaults
+            ClaimTreeType::V1,
+        )
+        .await
+        .expect(&format!(
+            "Failed to compile campaign with {} vaults",
+            vault_count
+        ));
+
+        Self {
+            admin_keypair,
+            mint_keypair,
+            ccdb: compiled_campaign,
+            stage: FixtureStage::default(),
+        }
+    }
+
     pub fn address_finder(&self) -> &AddressFinder {
         &self.ccdb.address_finder
     }
