@@ -4,7 +4,8 @@
 // use solana_instruction::error::InstructionError;
 // use solana_transaction_error::TransactionError;
 
-use prism_protocol_testing::TestFixture;
+use litesvm::LiteSVM;
+use prism_protocol_testing::{FixtureState, TestFixture};
 
 /// Test vault initialization with wrong mint → MintMismatch error
 ///
@@ -14,13 +15,10 @@ use prism_protocol_testing::TestFixture;
 /// - Attempt to initialize vault with wrong mint
 /// - Verify fails with MintMismatch error code
 /// - Verify proper error handling and no state corruption
-#[ignore]
-#[test]
-#[ignore] // TODO: Implement this test
-fn test_mint_mismatch() {
-    let mut _test = TestFixture::default();
-
-    todo!("Implement this test");
+#[tokio::test]
+async fn test_mint_mismatch() {
+    let state = FixtureState::rand().await;
+    let mut test = TestFixture::new(state, LiteSVM::new()).await.unwrap();
 
     // // Set up campaign and cohort with the original mint
     // let state = test

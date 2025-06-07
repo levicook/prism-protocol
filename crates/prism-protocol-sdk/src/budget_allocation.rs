@@ -696,7 +696,7 @@ mod tests {
         // Should succeed and return zero allocation for empty vault
         assert!(result.is_ok());
         let allocation = result.unwrap();
-        
+
         // All allocations should be zero for empty vault
         assert_eq!(allocation.vault_budget_human, dec!(0));
         assert_eq!(allocation.vault_budget_tokens, 0);
@@ -710,40 +710,46 @@ mod tests {
     fn test_vault_allocation_consistent_hashing_collision_scenario() {
         // Test scenario that mirrors consistent hashing collisions where some vaults get no claimants
         let allocator = BudgetAllocator::new(dec!(10000), 9).unwrap(); // 10K SOL
-        
+
         let cohort_budget = dec!(1000); // 1K SOL for this cohort
         let total_entitlements = dec!(100); // 100 total entitlements across all vaults
-        
+
         // Simulate 3 vaults where consistent hashing distributed claimants unevenly:
         // Vault 0: 50 entitlements (collision - got most claimants)
-        // Vault 1: 50 entitlements (got remaining claimants)  
+        // Vault 1: 50 entitlements (got remaining claimants)
         // Vault 2: 0 entitlements (collision - got no claimants)
-        
+
         // Test vault with normal allocation
-        let vault_0_allocation = allocator.calculate_vault_allocation(
-            cohort_budget,
-            dec!(50), // 50 entitlements
-            total_entitlements,
-        ).unwrap();
-        
+        let vault_0_allocation = allocator
+            .calculate_vault_allocation(
+                cohort_budget,
+                dec!(50), // 50 entitlements
+                total_entitlements,
+            )
+            .unwrap();
+
         // Test vault with normal allocation
-        let vault_1_allocation = allocator.calculate_vault_allocation(
-            cohort_budget,
-            dec!(50), // 50 entitlements  
-            total_entitlements,
-        ).unwrap();
-        
+        let vault_1_allocation = allocator
+            .calculate_vault_allocation(
+                cohort_budget,
+                dec!(50), // 50 entitlements
+                total_entitlements,
+            )
+            .unwrap();
+
         // Test empty vault due to hash collision (this should now work)
-        let vault_2_allocation = allocator.calculate_vault_allocation(
-            cohort_budget,
-            dec!(0), // 0 entitlements due to hash collision
-            total_entitlements,
-        ).unwrap();
-        
+        let vault_2_allocation = allocator
+            .calculate_vault_allocation(
+                cohort_budget,
+                dec!(0), // 0 entitlements due to hash collision
+                total_entitlements,
+            )
+            .unwrap();
+
         // Verify non-empty vaults get proper allocations
         assert_eq!(vault_0_allocation.vault_budget_human, dec!(500)); // 50% of 1000
         assert_eq!(vault_1_allocation.vault_budget_human, dec!(500)); // 50% of 1000
-        
+
         // Verify empty vault gets zero allocation
         assert_eq!(vault_2_allocation.vault_budget_human, dec!(0));
         assert_eq!(vault_2_allocation.vault_budget_tokens, 0);
@@ -751,17 +757,26 @@ mod tests {
         assert_eq!(vault_2_allocation.amount_per_entitlement_tokens, 0);
         assert_eq!(vault_2_allocation.dust_amount_human, dec!(0));
         assert_eq!(vault_2_allocation.dust_amount_tokens, 0);
-        
+
         // Verify total budget conservation (non-empty vaults should sum to cohort budget)
-        let total_allocated = vault_0_allocation.vault_budget_human + 
-                            vault_1_allocation.vault_budget_human + 
-                            vault_2_allocation.vault_budget_human;
+        let total_allocated = vault_0_allocation.vault_budget_human
+            + vault_1_allocation.vault_budget_human
+            + vault_2_allocation.vault_budget_human;
         assert_eq!(total_allocated, cohort_budget);
-        
+
         println!("🎯 Consistent Hashing Collision Test Results:");
-        println!("  Vault 0 (50 entitlements): {} SOL", vault_0_allocation.vault_budget_human);
-        println!("  Vault 1 (50 entitlements): {} SOL", vault_1_allocation.vault_budget_human);
-        println!("  Vault 2 (0 entitlements): {} SOL", vault_2_allocation.vault_budget_human);
+        println!(
+            "  Vault 0 (50 entitlements): {} SOL",
+            vault_0_allocation.vault_budget_human
+        );
+        println!(
+            "  Vault 1 (50 entitlements): {} SOL",
+            vault_1_allocation.vault_budget_human
+        );
+        println!(
+            "  Vault 2 (0 entitlements): {} SOL",
+            vault_2_allocation.vault_budget_human
+        );
         println!("  Total allocated: {} SOL", total_allocated);
         println!("  ✅ Empty vaults now handled gracefully!");
     }
